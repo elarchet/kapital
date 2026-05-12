@@ -43,6 +43,22 @@ ignore = [
     "PLR0913", # Allow functions with 5+ parameters
     "RET504",  # Allow unnecessary return statements (readability over conciseness)
 ]
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "S101",    # Allow assert in tests
+    "ANN",     # Allow missing type annotations in tests
+    "ARG002",  # Allow unused fixture arguments (common in pytest)
+    "RUF012",  # Allow mutable class-var defaults (test data)
+    "C408",    # Allow dict() calls
+    "PLR2004", # Allow magic values in assertions
+    "PT006",   # Allow string-style parametrize args
+]
+"src/models/*.py" = [
+    "I002",  # No forced `from __future__ import annotations` — breaks SQLModel Relationship()
+    "UP037", # Keep quoted forward-ref annotations — needed for deferred SQLModel resolution
+    "TC001", # Allow app imports outside TYPE_CHECKING — SQLModel needs them at runtime
+    "TC003", # Allow stdlib imports outside TYPE_CHECKING — SQLAlchemy Mapped[] needs Decimal
+]
 
 [tool.ruff.lint.isort]
 required-imports = [
