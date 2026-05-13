@@ -23,15 +23,12 @@ from src.models import (
     BuyOperation,
     DividendOperation,
     FeeOperation,
-    FinancialAccount,
     FxRateChangeOperation,
     Institution,
     InterestOperation,
     LimitBuyOperation,
     LimitSellOperation,
     Operation,
-    Portfolio,
-    Position,
     SABase,
     SellOperation,
     StockSplitOperation,
@@ -39,6 +36,26 @@ from src.models import (
     TransferInOperation,
     TransferOutOperation,
     User,
+)
+from tests.factories import (
+    BuyOperationFactory,
+    DividendOperationFactory,
+    FeeOperationFactory,
+    FinancialAccountFactory,
+    FxRateChangeOperationFactory,
+    InstitutionFactory,
+    InterestOperationFactory,
+    LimitBuyOperationFactory,
+    LimitSellOperationFactory,
+    PortfolioFactory,
+    PositionFactory,
+    SellOperationFactory,
+    StockSplitOperationFactory,
+    TaxOperationFactory,
+    TransferInOperationFactory,
+    TransferOutOperationFactory,
+    UserFactory,
+    set_factory_session,
 )
 
 # ---------------------------------------------------------------------------
@@ -59,7 +76,9 @@ def fixture_engine():
 def fixture_session(engine):
     """Yield a fresh session per test."""
     with Session(engine) as s:
+        set_factory_session(s)
         yield s
+        set_factory_session(None)
 
 
 @pytest.fixture(name="seed")
@@ -68,42 +87,17 @@ def fixture_seed(session):
 
     Creates: User → Portfolio → Position + Institution → FinancialAccount.
     """
-    user = User(email="seed@example.com", username="seed", hashed_password="")
-    user.set_password("SeedP@ss1!")
-    session.add(user)
+    user = UserFactory()
+    portfolio = PortfolioFactory(user=user)
+    institution = InstitutionFactory()
+    account = FinancialAccountFactory(institution=institution)
+    position = PositionFactory(portfolio=portfolio)
     session.commit()
+
     session.refresh(user)
-
-    portfolio = Portfolio(name="Seed Portfolio", user_id=user.id)  # type: ignore[arg-type]
-    session.add(portfolio)
-    session.commit()
     session.refresh(portfolio)
-
-    institution = Institution(name="SeedBroker", country="FR")
-    session.add(institution)
-    session.commit()
     session.refresh(institution)
-
-    account = FinancialAccount(
-        name="Seed Account",
-        institution_id=institution.id,  # type: ignore[arg-type]
-        currency="EUR",
-    )
-    session.add(account)
-    session.commit()
     session.refresh(account)
-
-    position = Position(
-        asset_type=AssetType.ETF,
-        ticker="VWCE",
-        name="Vanguard FTSE All-World",
-        isin="IE00BK5BQT80",
-        quantity=Decimal("10.00000000"),
-        currency="EUR",
-        portfolio_id=portfolio.id,  # type: ignore[arg-type]
-    )
-    session.add(position)
-    session.commit()
     session.refresh(position)
 
     return {
@@ -135,9 +129,7 @@ class TestTableCreation:
     def test_all_tables_exist(self, engine):
         inspector = inspect(engine)
         tables = set(inspector.get_table_names())
-        assert self.EXPECTED_TABLES.issubset(tables), (
-            f"Missing tables: {self.EXPECTED_TABLES - tables}"
-        )
+        assert self.EXPECTED_TABLES.issubset(tables), f"Missing tables: {self.EXPECTED_TABLES - tables}"
 
     @pytest.mark.parametrize("table_name", sorted(EXPECTED_TABLES))
     def test_individual_table(self, engine, table_name):
@@ -154,13 +146,7 @@ class TestUser:
     """User CRUD and argon2id password lifecycle."""
 
     def test_create_and_persist(self, session):
-        user = User(
-            email="alice@example.com",
-            username="alice",
-            hashed_password="",
-        )
-        user.set_password("S3cureP@ss!")
-        session.add(user)
+        user: User = UserFactory()  # type: ignore[assignment]
         session.commit()
         session.refresh(user)
 
@@ -168,40 +154,19 @@ class TestUser:
         assert user.public_id is not None
 
     def test_password_hash_format(self, session):
-        user = User(
-            email="hash@example.com",
-            username="hash_user",
-            hashed_password="",
-        )
-        user.set_password("S3cureP@ss!")
+        user: User = UserFactory()  # type: ignore[assignment]
         assert user.hashed_password.startswith("$argon2")
 
     def test_password_verify_correct(self, session):
-        user = User(
-            email="verify@example.com",
-            username="verifier",
-            hashed_password="",
-        )
-        user.set_password("S3cureP@ss!")
-        assert user.verify_password("S3cureP@ss!") is True
+        user: User = UserFactory(password="KnownP@ss1!")  # type: ignore[assignment]
+        assert user.verify_password("KnownP@ss1!") is True
 
     def test_password_verify_wrong(self, session):
-        user = User(
-            email="wrong@example.com",
-            username="wronger",
-            hashed_password="",
-        )
-        user.set_password("S3cureP@ss!")
+        user: User = UserFactory(password="KnownP@ss1!")  # type: ignore[assignment]
         assert user.verify_password("wrong") is False
 
     def test_defaults(self, session):
-        user = User(
-            email="defaults@example.com",
-            username="defaults",
-            hashed_password="",
-        )
-        user.set_password("Defaults1!")
-        session.add(user)
+        user: User = UserFactory()  # type: ignore[assignment]
         session.commit()
         session.refresh(user)
 
@@ -225,16 +190,12 @@ class TestRelationships:
         assert seed["position"].portfolio_id == seed["portfolio"].id
 
     def test_operation_position_fk(self, session, seed):
-        buy = BuyOperation(
+        buy: BuyOperation = BuyOperationFactory(  # type: ignore[assignment]
+            position=seed["position"],
+            financial_account=seed["account"],
             quantity=Decimal(10),
             unit_price=Decimal("95.50"),
-            total_amount=Decimal("955.00"),
-            currency="EUR",
-            executed_at=datetime.now(UTC),
-            position_id=seed["position"].id,
-            financial_account_id=seed["account"].id,
         )
-        session.add(buy)
         session.commit()
         session.refresh(buy)
 
@@ -244,19 +205,15 @@ class TestRelationships:
     def test_navigate_portfolio_positions(self, session, seed):
         session.refresh(seed["portfolio"])
         assert len(seed["portfolio"].positions) == 1
-        assert seed["portfolio"].positions[0].ticker == "VWCE"
+        assert seed["portfolio"].positions[0].ticker == seed["position"].ticker
 
     def test_navigate_position_operations(self, session, seed):
-        buy = BuyOperation(
+        BuyOperationFactory(
+            position=seed["position"],
+            financial_account=seed["account"],
             quantity=Decimal(5),
             unit_price=Decimal(100),
-            total_amount=Decimal(500),
-            currency="EUR",
-            executed_at=datetime.now(UTC),
-            position_id=seed["position"].id,
-            financial_account_id=seed["account"].id,
         )
-        session.add(buy)
         session.commit()
 
         session.refresh(seed["position"])
@@ -298,45 +255,26 @@ class TestPolymorphicDispatch:
     @pytest.fixture(name="ops_map")
     def fixture_ops_map(self, session, seed):
         """Insert all 12 operation types and return a {class_name: instance} map."""
-        now = datetime.now(UTC)
         common = dict(
+            position=seed["position"],
+            financial_account=seed["account"],
             total_amount=Decimal(100),
-            currency="EUR",
-            executed_at=now,
-            position_id=seed["position"].id,
-            financial_account_id=seed["account"].id,
         )
 
-        ops = [
-            BuyOperation(quantity=Decimal(1), unit_price=Decimal(100), **common),
-            SellOperation(quantity=Decimal(1), unit_price=Decimal(100), **common),
-            DividendOperation(dividend_per_share=Decimal("0.82"), **common),
-            FeeOperation(fee_category="custody", **common),
-            TaxOperation(tax_category="withholding", **common),
-            InterestOperation(**common),
-            TransferInOperation(source_reference="BANK-REF-001", **common),
-            TransferOutOperation(destination_reference="EXT-REF-002", **common),
-            StockSplitOperation(split_ratio=Decimal("4.0"), **common),
-            FxRateChangeOperation(
-                source_currency="USD",
-                target_currency="EUR",
-                exchange_rate=Decimal("0.9200000000"),
-                **common,
-            ),
-            LimitBuyOperation(
-                quantity=Decimal(5),
-                unit_price=Decimal(90),
-                limit_price=Decimal("89.50"),
-                **common,
-            ),
-            LimitSellOperation(
-                quantity=Decimal(5),
-                unit_price=Decimal(110),
-                limit_price=Decimal("111.00"),
-                **common,
-            ),
+        [
+            BuyOperationFactory(**common),
+            SellOperationFactory(**common),
+            DividendOperationFactory(**common),
+            FeeOperationFactory(**common),
+            TaxOperationFactory(**common),
+            InterestOperationFactory(**common),
+            TransferInOperationFactory(**common),
+            TransferOutOperationFactory(**common),
+            StockSplitOperationFactory(**common),
+            FxRateChangeOperationFactory(**common),
+            LimitBuyOperationFactory(**common),
+            LimitSellOperationFactory(**common),
         ]
-        session.add_all(ops)
         session.commit()
 
         # NOTE: Use execute().scalars() — Operation is a pure SQLAlchemy
@@ -397,15 +335,13 @@ class TestTimestampMixin:
     """TimestampMixin auto-populates created_at and updated_at."""
 
     def test_created_at_set(self, session):
-        inst = Institution(name="TSMixin1")
-        session.add(inst)
+        inst: Institution = InstitutionFactory(name="TSMixin1")  # type: ignore[assignment]
         session.commit()
         session.refresh(inst)
         assert inst.created_at is not None
 
     def test_updated_at_set(self, session):
-        inst = Institution(name="TSMixin2")
-        session.add(inst)
+        inst: Institution = InstitutionFactory(name="TSMixin2")  # type: ignore[assignment]
         session.commit()
         session.refresh(inst)
         assert inst.updated_at is not None
@@ -415,16 +351,14 @@ class TestSoftDeleteMixin:
     """SoftDeleteMixin defaults and soft-delete behaviour."""
 
     def test_defaults(self, session):
-        inst = Institution(name="SDMixin1")
-        session.add(inst)
+        inst: Institution = InstitutionFactory(name="SDMixin1")  # type: ignore[assignment]
         session.commit()
         session.refresh(inst)
         assert inst.is_active is True
         assert inst.deleted_at is None
 
     def test_soft_delete(self, session):
-        inst = Institution(name="SDMixin2")
-        session.add(inst)
+        inst: Institution = InstitutionFactory(name="SDMixin2")  # type: ignore[assignment]
         session.commit()
         session.refresh(inst)
 
