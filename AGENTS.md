@@ -23,7 +23,7 @@
 ## Quality Control (Prek Workflow)
 - **Hooks**: Use `prek`
 - **Required**: `ruff` (lint/format), `ty` (strict typing), `gitleaks` (secret scanning)
-- **Testing**: `pytest` with `pytest-asyncio`. 100% coverage required for financial calculation modules.
+- **Testing**: `pytest` with `pytest-asyncio`. 100% coverage required for financial calculation modules. Use `factory_boy` (with `factory.Faker`) to maximize randomness for test dummy data; avoid manual dummy instantiations unless fixed values are strictly required by the test.
 
 ## Architectural Rules
 - **Structure**: `src/` layout.

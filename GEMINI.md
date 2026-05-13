@@ -8,22 +8,24 @@
 
 ## Git & Automation
 - **Execution Protocol**:
-  - You **MUST** use the custom alias `git agent-cz` for all commits.
+  - You **MUST** use the custom alias `git agent-commit` for all commits.
   - This alias automatically applies the identity `Antigravity Agent`.
-  - **Arg Passing**: If you need to pass extra Git flags (e.g., `--allow-empty`), append them normally: `git agent-cz --allow-empty`.
+  - **Arg Passing**: If you need to pass extra Git flags (e.g., `--allow-empty`), append them normally: `git agent-commit --allow-empty`.
 
 - **Atomic Commits**:
   - **Constraint**: One logical change = One commit. Do not bundle unrelated refactors, fixes, or features.
   - **Workflow**: 
     1. Stage only the specific hunks or files for a single logical change (use `git add -p` logic).
     2. Verify the **"Green"** state (Lint + Tests) for *that specific change only*.
-    3. Commit immediately using the alias before moving to the next logical unit.
+    3. Once verified, ask the user for explicit approval to commit. Do not execute the commit until permission is granted.
 
-- **Commit Format**: Use the interactive `git agent-cz` (Conventional Commits). If running in a non-interactive shell, use `git agent-cz -m "type(scope): message"`.
+- **Commit Format**: As an agent, you must format the message as a **strict Conventional Commit** yourself to ensure it passes the `commitizen check` pre-commit hook defined in `prek.toml`. Use the non-interactive alias `git agent-commit -m "type(scope): message"`. Do not use `cz` interactively.
 
 - **Self-Correction**: If a test fails, analyze the logs and fix the code before asking the user for help. Do not commit "Broken" states.
 
 ## Permissions
+- **Committing**: Do not execute `git commit` (or `git agent-commit`) without asking for and receiving explicit approval from the user first. Always present the changes you intend to commit.
+- **Pushing**: `git push` (in any form, including `--force` or `--force-with-lease`) is strictly forbidden. Only the user may push to the remote.
 - **Infrastructure**: You may generate Alembic migrations, but never run `alembic upgrade head` without a manual "Go" from the user.
 - **Deletions**: Strictly forbidden without explicit confirmation.
 
