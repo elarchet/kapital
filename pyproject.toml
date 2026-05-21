@@ -50,6 +50,9 @@ ignore = [
     "E731",    # Allow lambda expressions (readability over function definitions)
     "PLR0913", # Allow functions with 5+ parameters
     "RET504",  # Allow unnecessary return statements (readability over conciseness)
+    "TRY003",  # Allow specifying long messages outside the exception class
+    "EM101",   # Allow exception string literals (simplifies standard ValueError usage)
+    "EM102",   # Allow exception f-string literals (simplifies dynamic validation messages)
 ]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
@@ -67,6 +70,12 @@ ignore = [
     "UP037", # Keep quoted forward-ref annotations — needed for deferred SQLModel resolution
     "TC001", # Allow app imports outside TYPE_CHECKING — SQLModel needs them at runtime
     "TC003", # Allow stdlib imports outside TYPE_CHECKING — SQLAlchemy Mapped[] needs Decimal
+]
+"src/schemas/*.py" = [
+    "TC001",   # Allow app imports outside TYPE_CHECKING — Pydantic needs them at runtime
+    "TC003",   # Allow stdlib imports outside TYPE_CHECKING — Pydantic needs them at runtime
+    "C901",    # Allow complex polymorphic validation dispatches (required for STI)
+    "PLR0912", # Allow many branches for polymorphic validation (required for STI)
 ]
 
 [tool.ruff.lint.isort]
