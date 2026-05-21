@@ -82,6 +82,11 @@ ignore = [
     "ANN401",  # Allow 'Any' types (required for generic primary key arguments)
     "TC003",   # Allow stdlib imports outside TYPE_CHECKING (required for runtime UUID/Any resolution)
 ]
+"src/routers/*.py" = [
+    "TC001",   # Allow app imports outside TYPE_CHECKING — FastAPI needs them at runtime
+    "TC002",   # Allow third-party imports outside TYPE_CHECKING — FastAPI needs them at runtime
+    "TC003",   # Allow stdlib imports outside TYPE_CHECKING — FastAPI needs them at runtime
+]
 
 [tool.ruff.lint.isort]
 required-imports = [
