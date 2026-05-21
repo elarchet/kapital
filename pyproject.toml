@@ -77,6 +77,11 @@ ignore = [
     "C901",    # Allow complex polymorphic validation dispatches (required for STI)
     "PLR0912", # Allow many branches for polymorphic validation (required for STI)
 ]
+"src/crud/*.py" = [
+    "A002",    # Allow shadowing 'id' builtin (required for generic PK fetching signatures)
+    "ANN401",  # Allow 'Any' types (required for generic primary key arguments)
+    "TC003",   # Allow stdlib imports outside TYPE_CHECKING (required for runtime UUID/Any resolution)
+]
 
 [tool.ruff.lint.isort]
 required-imports = [
