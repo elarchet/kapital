@@ -63,7 +63,9 @@ ignore = [
     "C408",    # Allow dict() calls
     "PLR2004", # Allow magic values in assertions
     "PT006",   # Allow string-style parametrize args
+    "S105",    # Allow password-like tokens in tests
     "S106",    # Allow hardcoded passwords in test factories
+    "S107",    # Allow hardcoded passwords in test function defaults
 ]
 "src/models/*.py" = [
     "I002",  # No forced `from __future__ import annotations` — breaks SQLModel Relationship()
