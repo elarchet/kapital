@@ -33,21 +33,31 @@ Kapital is a scalable financial SaaS platform for wealth management and analysis
 git clone <repo-url>
 cd kapital
 
-# Install dependencies
-uv sync
+# Install backend dependencies
+uv sync --directory backend
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
 ```
 
 ### Running the API Server
+You can run the FastAPI backend from the root using:
 ```bash
+uv run --directory backend uvicorn src.main:app --reload
+```
+Or navigate into `backend` and run:
+```bash
+cd backend
 uv run uvicorn src.main:app --reload
 ```
 
 ## 🧑‍💻 Maintainer Setup
 
+To configure the pre-commit and quality hooks on the backend:
 ```bash
-uv sync --all-groups
-uv run prek install
-uv run prek install --hook-type commit-msg
+uv sync --all-groups --directory backend
+uv run --directory backend prek install
+uv run --directory backend prek install --hook-type commit-msg
 ```
 
 ## ⚖️ License

@@ -2,7 +2,7 @@
 name = "kapital"
 version = "0.1.0"
 description = "Wealth management and analysis."
-readme = "README.md"
+readme = "../README.md"
 license = "MIT"
 requires-python = ">=3.14"
 dependencies = [

@@ -7,7 +7,7 @@
 
 ## Frontend Strategy
 - **Framework**: Decoupled Vue.js frontend + FastAPI REST API.
-- **Rule**: All financial logic (PnL, aggregations) must live in `src/services/` or `src/logic/`. The frontend must only interact with this logic via the REST API endpoints, ensuring clean decoupling.
+- **Rule**: All financial logic (PnL, aggregations) must live in `backend/src/services/` or `backend/src/logic/`. The frontend must only interact with this logic via the REST API endpoints, ensuring clean decoupling.
 
 ## Tech Stack (2026 Standard)
 - **Frontend**: Vue.js (Modern SPA framework)
@@ -25,4 +25,4 @@
 - **Testing**: `pytest` with `pytest-asyncio`. 100% coverage required for financial calculation modules. Use `factory_boy` (with `factory.Faker`) to maximize randomness for test dummy data; avoid manual dummy instantiations unless fixed values are strictly required by the test.
 
 ## Architectural Rules
-- **Structure**: `src/` layout.
+- **Structure**: Symmetric decoupled layout (`backend/` with `backend/src/` and `frontend/` with `frontend/src/`).

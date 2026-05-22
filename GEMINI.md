@@ -29,6 +29,10 @@
 - **Infrastructure**: You may generate Alembic migrations, but never run `alembic upgrade head` without a manual "Go" from the user.
 - **Deletions**: Strictly forbidden without explicit confirmation.
 
+## Repository Structure
+- **Symmetric Layout**: All Python backend source code lives in `backend/src/` and tests live in `backend/tests/`. All frontend code lives in `frontend/`.
+- **Command Execution**: Always execute Python/backend commands (like prek, pytest, uvicorn) using the `--directory backend` flag or by navigating into the `backend/` directory first.
+
 ## Frontend Guidelines
 - **Clean Decoupling**: Keep frontend code fully decoupled from the backend REST API. Ensure API endpoints are structured, documented, and fully type-safe.
 
