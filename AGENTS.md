@@ -5,13 +5,12 @@
 - **Logic**: All financial calculations (PnL, Optimization) must follow standard accounting principles. Use `Decimal` for all currency math; never use floats.
 - **Compliance**: Adhere to "Security by Design." Ensure PII (Personally Identifiable Information) and financial tokens are always encrypted or environment-gated.
 
-## Frontend Transition Strategy
-- **Phase 1 (Prototyping)**: Use Marimo for rapid dashboarding and UI feedback.
-- **Phase 2 (Scalability)**: Transition to a decoupled Vue.js frontend + FastAPI REST API.
-- **Rule**: All financial logic (PnL, aggregations) must live in `src/services/` or `src/logic/`. Marimo cells should only *call* these functions, never define them. This ensures Phase 2 is just a UI swap.
+## Frontend Strategy
+- **Framework**: Decoupled Vue.js frontend + FastAPI REST API.
+- **Rule**: All financial logic (PnL, aggregations) must live in `src/services/` or `src/logic/`. The frontend must only interact with this logic via the REST API endpoints, ensuring clean decoupling.
 
 ## Tech Stack (2026 Standard)
-- **Dashboarding**: Marimo
+- **Frontend**: Vue.js (Modern SPA framework)
 - **Framework**: FastAPI (using `Annotated` dependencies)
 - **ORM**: SQLModel + Alembic
 - **Data Handling**: Polars

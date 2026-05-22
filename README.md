@@ -8,8 +8,7 @@ Kapital is a scalable financial SaaS platform for wealth management and analysis
 
 ## 🛠 Tech Stack
 
-- **Frontend Dashboard**: [Marimo](https://marimo.io/) (Phase 1)
-- **Frontend Framework**: [Vue.js](https://vuejs.org/) (Phase 2)
+- **Frontend**: [Vue.js](https://vuejs.org/) (Decoupled SPA)
 - **Backend Framework**: [FastAPI](https://fastapi.tiangolo.com/)
 - **ORM**: [SQLModel](https://sqlmodel.tiangolo.com/) + [Alembic](https://alembic.sqlalchemy.org/)
 - **Data Handling**: [Polars](https://pola.rs/)
@@ -38,9 +37,9 @@ cd kapital
 uv sync
 ```
 
-### Running the Dashboard
+### Running the API Server
 ```bash
-uv run marimo edit
+uv run uvicorn src.main:app --reload
 ```
 
 ## 🧑‍💻 Maintainer Setup

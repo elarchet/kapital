@@ -29,8 +29,8 @@
 - **Infrastructure**: You may generate Alembic migrations, but never run `alembic upgrade head` without a manual "Go" from the user.
 - **Deletions**: Strictly forbidden without explicit confirmation.
 
-## Marimo Guidelines
-- **No Logic in Notebooks**: Do not write heavy calculations inside Marimo `@app.cell` blocks. Import them from `src/`.
+## Frontend Guidelines
+- **Clean Decoupling**: Keep frontend code fully decoupled from the backend REST API. Ensure API endpoints are structured, documented, and fully type-safe.
 
 ## Documentation
-- Document every Marimo notebook as if it were a functional specification for the future Vue frontend.
+- Document REST API endpoints and complex service logic to facilitate seamless frontend integration.
