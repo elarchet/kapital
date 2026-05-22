@@ -166,3 +166,11 @@ cython_debug/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Portable Node.js distribution
+.node-dist/
+.node-dist.tar.xz
+
+# Frontend dependencies and builds
+frontend/node_modules/
+frontend/dist/
