@@ -29,7 +29,6 @@ class User(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
         nullable=False,
     )
     email: str = Field(unique=True, index=True, nullable=False, max_length=320)
-    username: str = Field(nullable=False, max_length=150)
     hashed_password: str = Field(nullable=False, max_length=512)
 
     # -- relationships ---------------------------------------------------------

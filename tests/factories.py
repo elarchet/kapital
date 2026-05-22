@@ -50,7 +50,6 @@ class UserFactory(BaseFactory):
         model = User
 
     email = factory.Faker("safe_email")
-    username = factory.Faker("user_name")
     hashed_password = ""
 
     @factory.post_generation

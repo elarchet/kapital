@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, Form, HTTPException, status
 from sqlmodel import Session
 
 from src.auth import create_access_token, get_current_user
@@ -13,6 +12,26 @@ from src.models.user import User
 from src.schemas.user import UserCreate, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+class OAuth2PasswordRequestFormEmail:
+    """OAuth2 password request form that explicitly documents that the username is the email address."""
+
+    def __init__(
+        self,
+        grant_type: str = Form(default=None, pattern="password"),
+        username: str = Form(description="The registered email address of the user."),
+        password: str = Form(),
+        scope: str = Form(default=""),
+        client_id: str | None = Form(default=None),
+        client_secret: str | None = Form(default=None),
+    ) -> None:
+        self.grant_type = grant_type
+        self.username = username
+        self.password = password
+        self.scopes = [s.strip() for s in scope.split()]
+        self.client_id = client_id
+        self.client_secret = client_secret
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -32,10 +51,14 @@ def register_user(
 
 @router.post("/token")
 def login_for_access_token(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    form_data: Annotated[OAuth2PasswordRequestFormEmail, Depends()],
     db: Annotated[Session, Depends(get_session)],
 ) -> dict[str, str]:
-    """Standard OAuth2 password flow login to obtain a JWT token."""
+    """Standard OAuth2 password flow login to obtain a JWT token.
+
+    Note: The OAuth2 standard specifies the field name as `username`, but
+    this API expects the registered `email` address in that field.
+    """
     user = user_crud.authenticate(db, email=form_data.username, password=form_data.password)
     if not user:
         raise HTTPException(

@@ -27,7 +27,6 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         """Create a new user, automatically hashing their plain password."""
         db_obj = User(
             email=obj_in.email,
-            username=obj_in.username,
             hashed_password="",  # Will be set by set_password
         )
         db_obj.set_password(obj_in.password)

@@ -86,7 +86,6 @@ def test_register_and_login(client: TestClient):
     # Register a new user
     register_payload = {
         "email": "testapi@example.com",
-        "username": "api_test_user",
         "password": "SecurePassword1!",
     }
     response = client.post("/api/auth/register", json=register_payload)
