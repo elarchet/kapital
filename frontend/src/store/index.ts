@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { api } from '../services/api';
+import { SIDEBAR_CONFIG } from '../config/sidebar';
 
 export interface Portfolio {
   id: number;
@@ -31,6 +32,8 @@ export const useKapitalStore = defineStore('kapital', {
     error: null as string | null,
     isAuthenticated: api.isAuthenticated(),
     userEmail: api.getCurrentUserEmail(),
+    sidebarWidth: Number(localStorage.getItem('sidebarWidth')) || SIDEBAR_CONFIG.DEFAULT_WIDTH,
+    sidebarCollapsed: localStorage.getItem('sidebarCollapsed') === 'true',
   }),
 
   getters: {
@@ -112,6 +115,18 @@ export const useKapitalStore = defineStore('kapital', {
   },
 
   actions: {
+    setSidebarWidth(width: number) {
+      const clampedWidth = Math.max(SIDEBAR_CONFIG.MIN_WIDTH, Math.min(SIDEBAR_CONFIG.MAX_WIDTH, width));
+      this.sidebarWidth = clampedWidth;
+      localStorage.setItem('sidebarWidth', String(clampedWidth));
+    },
+    setSidebarCollapsed(collapsed: boolean) {
+      this.sidebarCollapsed = collapsed;
+      localStorage.setItem('sidebarCollapsed', String(collapsed));
+    },
+    toggleSidebar() {
+      this.setSidebarCollapsed(!this.sidebarCollapsed);
+    },
     async fetchAllData() {
       if (!this.isAuthenticated) return;
       this.loading = true;

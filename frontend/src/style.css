@@ -203,7 +203,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Modern Left Sidebar Drawer */
 .sidebar {
-  width: 280px;
+  width: var(--sidebar-width, 280px);
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -214,12 +214,83 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 20;
 }
 
+.sidebar:not(.is-resizing) {
+  transition: width var(--transition-normal);
+}
+
 .sidebar-logo {
   padding: 2rem 1.5rem;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
   border-bottom: 1px solid var(--border-color);
+}
+
+/* Resize & Collapse Interface Elements */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+  z-index: 30;
+  background: transparent;
+  transition: background-color var(--transition-fast);
+}
+
+.resize-handle:hover,
+.sidebar.is-resizing .resize-handle {
+  background-color: var(--accent-color);
+}
+
+.btn-collapse {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.btn-collapse:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.collapse-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.nav-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 1rem 0;
+}
+
+/* Collapsed Sidebar overrides */
+.sidebar.collapsed .sidebar-logo {
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem 0.5rem;
+  justify-content: center;
+}
+
+.sidebar.collapsed .nav-link {
+  justify-content: center;
+  padding: 0.75rem 0;
+  gap: 0;
+}
+
+.sidebar.collapsed .sidebar-profile {
+  justify-content: center;
+  padding: 1.5rem 0;
 }
 
 .logo-icon {

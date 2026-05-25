@@ -1,0 +1,6 @@
+export const SIDEBAR_CONFIG = {
+  MIN_WIDTH: 200,
+  MAX_WIDTH: 450,
+  COLLAPSED_WIDTH: 72,
+  DEFAULT_WIDTH: 280,
+} as const;
