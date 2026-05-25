@@ -26,8 +26,14 @@ Kapital is a scalable financial SaaS platform for wealth management and analysis
 ### Prerequisites
 - Python 3.14+
 - `uv` installed
+- **Node.js & NPM**: A pre-packaged Node.js distribution is provided in the `.node-dist` directory. To make `node` and `npm` available in your current terminal session, run:
+  ```bash
+  export PATH="$PWD/.node-dist/bin:$PATH"
+  ```
+  For a permanent setup, you can add this line to your shell configuration file (e.g. `~/.bashrc` or `~/.zshrc`).
 
 ### Installation
+Make sure Node.js/NPM are in your `PATH` (as described in Prerequisites), then run:
 ```bash
 # Clone the repository
 git clone <repo-url>
@@ -37,11 +43,19 @@ cd kapital
 uv sync --directory backend
 
 # Install frontend dependencies
-cd frontend && npm install && cd ..
+npm install --prefix frontend
 ```
 
-### Running the API Server
-You can run the FastAPI backend from the root using:
+### Running the Application (Frontend & Backend)
+You can run both the Vue.js frontend and the FastAPI backend concurrently using the provided startup script:
+```bash
+chmod +x start.sh
+./start.sh
+```
+This script automatically sets the PATH to use the local `.node-dist` binaries, starts both development servers, and handles clean process termination when you stop the command (e.g., using `Ctrl+C`).
+
+### Running the API Server Only
+If you only need to run the FastAPI backend, you can run from the root:
 ```bash
 uv run --directory backend uvicorn src.main:app --reload
 ```
