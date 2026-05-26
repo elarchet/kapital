@@ -3,6 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useKapitalStore } from '../store';
 import Sidebar from '../components/Sidebar.vue';
+import AddPositionButton from '../components/AddPositionButton.vue';
+import CreatePositionModal from '../components/CreatePositionModal.vue';
+import ImportTransactionsModal from '../components/ImportTransactionsModal.vue';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -10,7 +13,6 @@ import {
   Grid,
   Loader,
   Trash2,
-  Plus,
   ArrowLeft
 } from '@lucide/vue';
 
@@ -19,16 +21,7 @@ const router = useRouter();
 const store = useKapitalStore();
 
 const showCreatePosModal = ref(false);
-
-// New Position Form fields
-const posAssetType = ref('stock');
-const posTicker = ref('');
-const posName = ref('');
-const posIsin = ref('');
-const posQuantity = ref(1.0);
-const posCurrency = ref('EUR');
-const isSubmitting = ref(false);
-const submitError = ref('');
+const showImportModal = ref(false);
 
 const portfolioId = computed(() => Number(route.params.id));
 
@@ -81,40 +74,18 @@ onMounted(async () => {
 });
 
 watch(() => route.params.id, () => {
-  // Clear modal and error states when changing portfolios
+  // Clear modal states when changing portfolios
   showCreatePosModal.value = false;
-  submitError.value = '';
+  showImportModal.value = false;
 });
 
 const formatCurrency = (val: number, cur: string = 'EUR') => {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur }).format(val);
 };
 
-const handleCreatePosition = async () => {
-  if (!portfolioId.value || !posName.value.trim() || posQuantity.value <= 0) return;
-  isSubmitting.value = true;
-  submitError.value = '';
-  try {
-    await store.createPosition({
-      portfolio_id: portfolioId.value,
-      asset_type: posAssetType.value,
-      ticker: posTicker.value.trim() || undefined,
-      name: posName.value.trim(),
-      isin: posIsin.value.trim() || undefined,
-      quantity: posQuantity.value,
-      currency: posCurrency.value,
-    });
-    // Reset form
-    posTicker.value = '';
-    posName.value = '';
-    posIsin.value = '';
-    posQuantity.value = 1.0;
-    showCreatePosModal.value = false;
-  } catch (err: any) {
-    submitError.value = err.message || 'Failed to add position.';
-  } finally {
-    isSubmitting.value = false;
-  }
+const handleManualSuccess = async () => {
+  showCreatePosModal.value = false;
+  await store.fetchAllData();
 };
 
 const handleDeletePosition = async (id: number) => {
@@ -180,10 +151,10 @@ const handleDeletePortfolio = async () => {
               <Trash2 style="width: 16px; height: 16px;" />
               <span>Delete Strategy</span>
             </button>
-            <button @click="showCreatePosModal = true" class="btn btn-primary">
-              <Plus style="width: 16px; height: 16px;" />
-              <span>Add Position</span>
-            </button>
+            <AddPositionButton 
+              @open-manual="showCreatePosModal = true" 
+              @open-import="showImportModal = true" 
+            />
           </div>
         </header>
 
@@ -260,7 +231,7 @@ const handleDeletePortfolio = async () => {
           <section class="table-container">
             <div class="table-header-block">
               <h3 class="table-title">Strategy Holdings</h3>
-              <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm);">
+              <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
                 {{ portfolioPositions.length }} items
               </span>
             </div>
@@ -322,101 +293,21 @@ const handleDeletePortfolio = async () => {
           </section>
         </div>
 
-        <!-- Add Position Modal (Current Portfolio Pre-Selected) -->
-        <div v-if="showCreatePosModal" class="modal-overlay">
-          <div class="modal-card">
-            <div class="modal-header">
-              <h3 class="table-title">Add Asset to "{{ portfolio.name }}"</h3>
-              <button @click="showCreatePosModal = false" style="background: none; border: none; cursor: pointer; font-size: 1.25rem;">&times;</button>
-            </div>
-            <div class="modal-body">
-              <div v-if="submitError" class="login-error" style="margin-bottom: 1rem;">
-                {{ submitError }}
-              </div>
+        <!-- Add Position Modal -->
+        <CreatePositionModal 
+          v-if="showCreatePosModal" 
+          :portfolio="portfolio" 
+          @close="showCreatePosModal = false" 
+          @success="handleManualSuccess" 
+        />
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div class="form-group">
-                  <label for="posAsset">Asset Class</label>
-                  <select v-model="posAssetType" id="posAsset" class="form-control">
-                    <option value="stock">Stock</option>
-                    <option value="crypto">Crypto</option>
-                    <option value="etf">ETF</option>
-                    <option value="bond">Bond</option>
-                    <option value="cash">Cash Deposit</option>
-                    <option value="commodity">Commodity</option>
-                    <option value="fund">Fund</option>
-                    <option value="other">Other Asset</option>
-                  </select>
-                </div>
-
-                <div class="form-group">
-                  <label for="posCurrency">Currency</label>
-                  <select v-model="posCurrency" id="posCurrency" class="form-control">
-                    <option value="EUR">EUR (€)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="CHF">CHF</option>
-                  </select>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="posName">Asset Label / Company Name</label>
-                <input 
-                  v-model="posName" 
-                  type="text" 
-                  id="posName" 
-                  class="form-control" 
-                  placeholder="e.g. Apple Inc. or Bitcoin Cash" 
-                  required 
-                />
-              </div>
-
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                <div class="form-group">
-                  <label for="posTicker">Ticker Symbol</label>
-                  <input 
-                    v-model="posTicker" 
-                    type="text" 
-                    id="posTicker" 
-                    class="form-control" 
-                    placeholder="e.g. AAPL or BTC" 
-                  />
-                </div>
-
-                <div class="form-group">
-                  <label for="posIsin">ISIN Number</label>
-                  <input 
-                    v-model="posIsin" 
-                    type="text" 
-                    id="posIsin" 
-                    class="form-control" 
-                    placeholder="e.g. US0378331005" 
-                  />
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label for="posQuantity">Quantity / Weight</label>
-                <input 
-                  v-model.number="posQuantity" 
-                  type="number" 
-                  step="any"
-                  id="posQuantity" 
-                  class="form-control" 
-                  required 
-                />
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button @click="showCreatePosModal = false" class="btn btn-sm">Cancel</button>
-              <button @click="handleCreatePosition" class="btn btn-sm btn-primary" :disabled="isSubmitting || !posName.trim()">
-                <span v-if="isSubmitting">Recording holding...</span>
-                <span v-else>Record Holding</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <!-- Import Positions Modal -->
+        <ImportTransactionsModal 
+          v-if="showImportModal" 
+          :portfolio="portfolio" 
+          @close="showImportModal = false" 
+          @success="store.fetchAllData" 
+        />
       </template>
     </main>
   </div>
