@@ -3,15 +3,18 @@ from __future__ import annotations
 from sqlmodel import Session, select
 
 from src.crud.base import CRUDBase
+from src.models.fee import Fee
 from src.models.operation import (
     BuyOperation,
     DividendOperation,
+    ExpenseOperation,
     FeeOperation,
     FxRateChangeOperation,
     InterestOperation,
     LimitBuyOperation,
     LimitSellOperation,
     Operation,
+    RevenueOperation,
     SellOperation,
     StockSplitOperation,
     TaxOperation,
@@ -36,6 +39,8 @@ OPERATION_TYPE_MAP: dict[str, type[Operation]] = {
     "transfer_out": TransferOutOperation,
     "stock_split": StockSplitOperation,
     "fx_rate_change": FxRateChangeOperation,
+    "expense": ExpenseOperation,
+    "revenue": RevenueOperation,
 }
 
 
@@ -90,6 +95,9 @@ class CRUDOperation(CRUDBase[Operation, OperationCreate, OperationUpdate]):
         # Extract data from Pydantic schema
         obj_data = obj_in.model_dump()
 
+        # Handle 'fees' separately because setting it directly as None/dicts is invalid for SQLAlchemy relationship
+        fees_data = obj_data.pop("fees", None)
+
         # Filter obj_data to only include attributes that are valid for the specific subclass.
         # This prevents passing null subclass-specific fields (e.g. limit_price) to incorrect subclasses.
         mapper = model_cls.__mapper__
@@ -98,6 +106,11 @@ class CRUDOperation(CRUDBase[Operation, OperationCreate, OperationUpdate]):
 
         # Instantiate specific subclass
         db_obj = model_cls(**filtered_data)
+
+        # Convert and attach fees if provided
+        if fees_data:
+            db_obj.fees = [Fee(**fee) for fee in fees_data]
+
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
