@@ -10,6 +10,7 @@ from src.database import init_db
 from src.routers import (
     auth,
     financial_account,
+    import_file_schema,
     institution,
     operation,
     portfolio,
@@ -47,6 +48,7 @@ app.include_router(position.router, prefix="/api")
 app.include_router(institution.router, prefix="/api")
 app.include_router(financial_account.router, prefix="/api")
 app.include_router(operation.router, prefix="/api")
+app.include_router(import_file_schema.router, prefix="/api")
 
 
 @app.get("/")
