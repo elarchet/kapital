@@ -174,5 +174,79 @@ export const api = {
     return request<any>(`/api/positions/${id}`, {
       method: 'DELETE',
     });
+  },
+
+  // Import schemas and uploads
+  async getImportFileSchemas(): Promise<any[]> {
+    return request<any[]>('/api/import-file-schemas/');
+  },
+
+  async createImportFileSchema(data: {
+    name: string;
+    is_public: boolean;
+    delimiter: string;
+    decimal_separator: string;
+    mappings: string;
+  }): Promise<any> {
+    return request<any>('/api/import-file-schemas/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteImportFileSchema(id: number): Promise<any> {
+    return request<any>(`/api/import-file-schemas/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async detectImportFileSchema(headers: string[]): Promise<any> {
+    return request<any>('/api/import-file-schemas/detect', {
+      method: 'POST',
+      body: JSON.stringify(headers),
+    });
+  },
+
+  async getImportMetadata(): Promise<any> {
+    return request<any>('/api/portfolios/import-metadata');
+  },
+
+  async importPositions(
+    portfolioId: number,
+    file: File,
+    schemaId: number | null,
+    customSchemaConfig: any | null
+  ): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (schemaId !== null) {
+      formData.append('schema_id', String(schemaId));
+    }
+    if (customSchemaConfig !== null) {
+      formData.append('custom_schema_config', JSON.stringify(customSchemaConfig));
+    }
+
+    const token = localStorage.getItem('kapital_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`/api/portfolios/${portfolioId}/import`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMsg = 'Failed to import file.';
+      try {
+        const errorData = await response.json();
+        if (errorData?.detail) errorMsg = errorData.detail;
+      } catch {}
+      throw new Error(errorMsg);
+    }
+
+    return response.json();
   }
 };
