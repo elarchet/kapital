@@ -21,6 +21,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "alembic>=1.13.1",
     "factory-boy>=3.3.1",
     "httpx>=0.28.1",
     "pytest>=9.0.3",
@@ -89,6 +90,13 @@ ignore = [
     "TC002",   # Allow third-party imports outside TYPE_CHECKING — FastAPI needs them at runtime
     "TC003",   # Allow stdlib imports outside TYPE_CHECKING — FastAPI needs them at runtime
 ]
+"alembic/**/*.py" = [
+    "INP001",  # Alembic directories are not standard Python packages
+    "ERA001",  # Allow commented-out main options in env.py
+    "TC003",   # Allow stdlib imports in migration scripts
+    "W291",    # Allow trailing whitespaces in migration metadata
+]
+
 
 [tool.ruff.lint.isort]
 required-imports = [
