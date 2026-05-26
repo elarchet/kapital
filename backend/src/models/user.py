@@ -33,6 +33,7 @@ class User(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
 
     # -- relationships ---------------------------------------------------------
     portfolios: list["Portfolio"] = Relationship(back_populates="user")
+    import_file_schemas: list["ImportFileSchema"] = Relationship(back_populates="user")
 
     # -- password helpers ------------------------------------------------------
 
@@ -58,6 +59,7 @@ class User(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
 
 
 # Prevent circular import — used only for type annotations above.
+from src.models.import_file_schema import ImportFileSchema  # noqa: E402
 from src.models.portfolio import Portfolio  # noqa: E402
 
 User.model_rebuild()

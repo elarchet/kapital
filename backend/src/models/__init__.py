@@ -8,17 +8,21 @@ Import everything from here for convenience::
 from __future__ import annotations
 
 from src.models.base import SABase, SoftDeleteMixin, TimestampMixin
+from src.models.fee import Fee, FeeType
 from src.models.financial_account import FinancialAccount
+from src.models.import_file_schema import ImportFileSchema
 from src.models.institution import Institution
 from src.models.operation import (
     BuyOperation,
     DividendOperation,
+    ExpenseOperation,
     FeeOperation,
     FxRateChangeOperation,
     InterestOperation,
     LimitBuyOperation,
     LimitSellOperation,
     Operation,
+    RevenueOperation,
     SellOperation,
     StockSplitOperation,
     TaxOperation,
@@ -33,9 +37,13 @@ __all__ = [
     "AssetType",
     "BuyOperation",
     "DividendOperation",
+    "ExpenseOperation",
+    "Fee",
     "FeeOperation",
+    "FeeType",
     "FinancialAccount",
     "FxRateChangeOperation",
+    "ImportFileSchema",
     "Institution",
     "InterestOperation",
     "LimitBuyOperation",
@@ -43,6 +51,7 @@ __all__ = [
     "Operation",
     "Portfolio",
     "Position",
+    "RevenueOperation",
     "SABase",
     "SellOperation",
     "SoftDeleteMixin",

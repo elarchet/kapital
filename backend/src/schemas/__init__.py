@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+from src.schemas.fee import (
+    FeeCreate,
+    FeeRead,
+)
 from src.schemas.financial_account import (
     FinancialAccountCreate,
     FinancialAccountRead,
     FinancialAccountUpdate,
+)
+from src.schemas.import_file_schema import (
+    ImportFileSchemaCreate,
+    ImportFileSchemaRead,
+    ImportFileSchemaUpdate,
 )
 from src.schemas.institution import (
     InstitutionCreate,
@@ -32,9 +41,14 @@ from src.schemas.user import (
 )
 
 __all__ = [
+    "FeeCreate",
+    "FeeRead",
     "FinancialAccountCreate",
     "FinancialAccountRead",
     "FinancialAccountUpdate",
+    "ImportFileSchemaCreate",
+    "ImportFileSchemaRead",
+    "ImportFileSchemaUpdate",
     "InstitutionCreate",
     "InstitutionRead",
     "InstitutionUpdate",

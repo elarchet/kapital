@@ -29,6 +29,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.base import SABase
 
 if TYPE_CHECKING:
+    from src.models.fee import Fee
     from src.models.financial_account import FinancialAccount
     from src.models.position import Position
 
@@ -70,6 +71,12 @@ class Operation(SABase):
         nullable=False,
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transaction_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    exchange_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=20, scale=10),
+        nullable=True,
+        default=None,
+    )
 
     # -- foreign keys ----------------------------------------------------------
     position_id: Mapped[int] = mapped_column(
@@ -97,6 +104,11 @@ class Operation(SABase):
     financial_account: Mapped[FinancialAccount] = relationship(
         back_populates="operations",
         foreign_keys=[financial_account_id],
+    )
+    fees: Mapped[list[Fee]] = relationship(
+        back_populates="operation",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     # -- STI mapper config -----------------------------------------------------
@@ -287,22 +299,46 @@ class FxRateChangeOperation(Operation):
         nullable=True,
         default=None,
     )
-    exchange_rate: Mapped[Decimal | None] = mapped_column(
-        Numeric(precision=20, scale=10),
+    # Inherited exchange_rate
+
+
+class ExpenseOperation(Operation):
+    """An external payment / card debit."""
+
+    __mapper_args__: ClassVar[dict[str, object]] = {"polymorphic_identity": "expense"}
+
+    merchant_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    merchant_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class RevenueOperation(Operation):
+    """An external credit / card refund."""
+
+    __mapper_args__: ClassVar[dict[str, object]] = {"polymorphic_identity": "revenue"}
+
+    merchant_name: Mapped[str | None] = mapped_column(
+        String(200),
         nullable=True,
-        default=None,
+        use_existing_column=True,
+    )
+    merchant_category: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        use_existing_column=True,
     )
 
 
 __all__ = [
     "BuyOperation",
     "DividendOperation",
+    "ExpenseOperation",
     "FeeOperation",
     "FxRateChangeOperation",
     "InterestOperation",
     "LimitBuyOperation",
     "LimitSellOperation",
     "Operation",
+    "RevenueOperation",
     "SellOperation",
     "StockSplitOperation",
     "TaxOperation",

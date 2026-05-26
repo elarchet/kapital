@@ -6,6 +6,8 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.schemas.fee import FeeCreate, FeeRead
+
 
 class OperationBase(BaseModel):
     operation_type: str = Field(max_length=30)
@@ -27,11 +29,15 @@ class OperationBase(BaseModel):
     source_currency: str | None = Field(default=None, max_length=3)
     target_currency: str | None = Field(default=None, max_length=3)
     exchange_rate: Decimal | None = None
+    transaction_id: str | None = Field(default=None, max_length=100)
+    merchant_name: str | None = Field(default=None, max_length=200)
+    merchant_category: str | None = Field(default=None, max_length=100)
 
 
 class OperationCreate(OperationBase):
     position_id: int
     financial_account_id: int
+    fees: list[FeeCreate] | None = None
 
     @model_validator(mode="after")
     def validate_polymorphic_fields(self) -> Self:
@@ -86,6 +92,10 @@ class OperationUpdate(BaseModel):
     source_currency: str | None = Field(default=None, max_length=3)
     target_currency: str | None = Field(default=None, max_length=3)
     exchange_rate: Decimal | None = None
+    transaction_id: str | None = Field(default=None, max_length=100)
+    merchant_name: str | None = Field(default=None, max_length=200)
+    merchant_category: str | None = Field(default=None, max_length=100)
+    fees: list[FeeCreate] | None = None
 
 
 class OperationRead(OperationBase):
@@ -95,3 +105,4 @@ class OperationRead(OperationBase):
     position_id: int
     financial_account_id: int
     created_at: datetime
+    fees: list[FeeRead] = []
