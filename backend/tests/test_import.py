@@ -13,7 +13,7 @@ from sqlmodel import Session, SQLModel, select
 
 from src.database import get_session
 from src.main import app
-from src.models import AssetType, FeeType, Operation, Position, User, Portfolio
+from src.models import AssetType, FeeType, Operation, Portfolio, Position, User
 from src.models.base import SABase
 from src.models.import_file_schema import ImportFileSchema
 from src.services.import_service import autodetect_schema, import_portfolio_transactions
@@ -146,8 +146,8 @@ def test_autodetect_schema(session):
 
 def test_import_portfolio_transactions(session):  # noqa: PLR0915
     # Setup test portfolio and user
-    user = cast(User, UserFactory())
-    portfolio = cast(Portfolio, PortfolioFactory(user=user))
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
     session.commit()
     session.refresh(user)
     session.refresh(portfolio)
@@ -276,7 +276,7 @@ def test_import_portfolio_transactions(session):  # noqa: PLR0915
 
 
 def test_get_import_metadata(client, session):
-    user = cast(User, UserFactory(email="import_meta@example.com"))
+    user = cast("User", UserFactory(email="import_meta@example.com"))
     session.commit()
     session.refresh(user)
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlmodel import Session
@@ -12,9 +12,7 @@ from src.database import get_session
 from src.models.portfolio import Portfolio
 from src.models.user import User
 from src.schemas.portfolio import PortfolioCreate, PortfolioRead, PortfolioUpdate
-
-if TYPE_CHECKING:
-    from src.services.import_service import ImportSummary
+from src.services.import_service import ImportSummary
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
 

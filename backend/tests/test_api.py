@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -15,6 +16,7 @@ from src.main import app
 from src.models import (
     SABase,
 )
+from src.models.import_file_schema import ImportFileSchema
 from tests.factories import (
     FinancialAccountFactory,
     InstitutionFactory,
@@ -344,3 +346,69 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
     intruder_payload["position_id"] = position.id
     response = client.post("/api/operations/", json=intruder_payload, headers=h2)
     assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_import_portfolio_csv_endpoint(client: TestClient, session: Session):
+    user = UserFactory(email="importer@example.com")
+    portfolio = PortfolioFactory(user=user)
+    session.commit()
+    session.refresh(user)
+    session.refresh(portfolio)
+
+    headers = get_auth_headers(client, user.email)
+
+    # Seed the ImportFileSchema
+    t212_mappings = {
+        "columns": {
+            "operation_type": "Action",
+            "executed_at": "Time",
+            "isin": "ISIN",
+            "ticker": "Ticker",
+            "name": "Name",
+            "notes": "Notes",
+            "transaction_id": "ID",
+            "quantity": "No. of shares",
+            "unit_price": "Price / share",
+            "currency": "Currency (Total)",
+            "total_amount": "Total",
+            "exchange_rate": "Exchange rate",
+        },
+        "type_mappings": {
+            "buy": ["Market buy"],
+        },
+    }
+    schema = ImportFileSchema(
+        name="Trading 212 API Test",
+        is_public=True,
+        delimiter=",",
+        decimal_separator=".",
+        mappings=json.dumps(t212_mappings),
+        user_id=user.id,
+    )
+    session.add(schema)
+    session.commit()
+    session.refresh(schema)
+
+    csv_data = (
+        "Action,Time,ISIN,Ticker,Name,Notes,ID,No. of shares,Price / share,Currency (Total),Total,Exchange rate\n"
+        "Market buy,2026-01-08 08:18:00,US0378331005,AAPL,Apple Inc.,Notes,12345,10,150.00,USD,1500.00,1.0\n"
+    )
+
+    files = {"file": ("test.csv", csv_data, "text/csv")}
+    form_data = {"schema_id": str(schema.id)}
+
+    response = client.post(
+        f"/api/portfolios/{portfolio.id}/import",
+        headers=headers,
+        files=files,
+        data=form_data,
+    )
+
+    assert response.status_code == status.HTTP_200_OK, response.text
+    data = response.json()
+    assert "positions_created" in data
+    assert "operations_imported" in data
+    assert "operations_skipped" in data
+    assert data["positions_created"] == 2
+    assert data["operations_imported"] == 1
+    assert data["operations_skipped"] == 0
