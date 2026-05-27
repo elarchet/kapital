@@ -31,10 +31,21 @@
 
 ## Repository Structure
 - **Symmetric Layout**: All Python backend source code lives in `backend/src/` and tests live in `backend/tests/`. All frontend code lives in `frontend/`.
-- **Command Execution**: Always execute Python/backend commands (like prek, pytest, uvicorn) using the `--directory backend` flag or by navigating into the `backend/` directory first.
+- **Command Execution**: Always execute Python/backend commands (like prek, pytest, uvicorn) using the `--directory backend` flag or by navigating into the `backend/` directory first. Always use `uv` as the python manager for running commands (e.g., prefix with `uv run`).
 
 ## Frontend Guidelines
 - **Clean Decoupling**: Keep frontend code fully decoupled from the backend REST API. Ensure API endpoints are structured, documented, and fully type-safe.
+- **Component Privilege**: When adding a feature, privilege components over views when possible (reusability is key).
+- **Frontend Testing**: If frontend testing is available, run it at the very end of development to ensure no issues were introduced. If no frontend tests are available, at least try to run the application to verify that it starts and loads correctly.
+
+## Parametrization & Configurability
+- **Maximize Parameters**: For both frontend and backend, use as many parameters/options as possible to let the user easily and quickly tweak the app.
+
+## Testing & Quality Workflow
+- **No Initial Tests**: Do not run `pytest` at the beginning of your analysis. Consider all tests valid when you have not added or modified any code.
+- **Feature Tests**: When adding a feature, add as many tests as required.
+- **Selective Run**: When a feature is ready, if possible run only the tests related to the modifications. In case of doubt, run all tests.
+- **Prek Timing**: Run `prek` only at the very end when you want to commit, not before.
 
 ## Documentation
 - Document REST API endpoints and complex service logic to facilitate seamless frontend integration.
