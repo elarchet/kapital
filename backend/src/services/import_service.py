@@ -97,6 +97,24 @@ def parse_datetime_safe(val: str) -> datetime:
         return datetime.now(UTC)
 
 
+def _get_mapped_col(columns: dict, db_key: str, op_type: str | None) -> str | None:
+    val = columns.get(db_key)
+    if isinstance(val, dict):
+        if op_type and op_type in val:
+            return val[op_type]
+        return val.get("global")
+    return val
+
+
+def _get_transformation(transformations: dict, db_key: str, op_type: str | None) -> dict:
+    val = transformations.get(db_key, {})
+    if "divisor" in val or "multiplier" in val:
+        return val
+    if op_type and op_type in val:
+        return val[op_type]
+    return val.get("global", {})
+
+
 def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     db: Session,
     portfolio_id: int,
@@ -171,10 +189,10 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
 
     # 4. Process Rows Chronologically
     # Map raw rows to parsed operations
-    def apply_transformation(col_name: str, val: Decimal | None) -> Decimal | None:
+    def apply_transformation(col_name: str, val: Decimal | None, op_type: str | None) -> Decimal | None:
         if val is None:
             return None
-        trans = transformations.get(col_name, {})
+        trans = _get_transformation(transformations, col_name, op_type)
         divisor_val = trans.get("divisor")
         if divisor_val:
             with contextlib.suppress(ArithmeticError, ValueError, TypeError):
@@ -206,31 +224,31 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             continue
 
         # Extract values
-        ticker = row.get(columns.get("ticker", "Ticker"))
-        isin = row.get(columns.get("isin", "ISIN"))
-        name = row.get(columns.get("name", "Name")) or ticker or isin or "Asset"
-        notes = row.get(columns.get("notes", "Notes"))
-        transaction_id = row.get(columns.get("transaction_id", "ID"))
-        currency = row.get(columns.get("currency", "Currency (Total)")) or "EUR"
+        ticker = row.get(_get_mapped_col(columns, "ticker", op_type))
+        isin = row.get(_get_mapped_col(columns, "isin", op_type))
+        name = row.get(_get_mapped_col(columns, "name", op_type)) or ticker or isin or "Asset"
+        notes = row.get(_get_mapped_col(columns, "notes", op_type))
+        transaction_id = row.get(_get_mapped_col(columns, "transaction_id", op_type))
+        currency = row.get(_get_mapped_col(columns, "currency", op_type)) or "EUR"
 
-        executed_at_str = row.get(columns.get("executed_at", "Time"))
+        executed_at_str = row.get(_get_mapped_col(columns, "executed_at", op_type))
         if not executed_at_str:
             continue
         executed_at = parse_datetime_safe(executed_at_str)
 
-        quantity = parse_decimal_safe(row.get(columns.get("quantity", "No. of shares")), decimal_separator)
-        quantity = apply_transformation("quantity", quantity)
+        quantity = parse_decimal_safe(row.get(_get_mapped_col(columns, "quantity", op_type)), decimal_separator)
+        quantity = apply_transformation("quantity", quantity, op_type)
 
-        unit_price = parse_decimal_safe(row.get(columns.get("unit_price", "Price / share")), decimal_separator)
-        unit_price = apply_transformation("unit_price", unit_price)
+        unit_price = parse_decimal_safe(row.get(_get_mapped_col(columns, "unit_price", op_type)), decimal_separator)
+        unit_price = apply_transformation("unit_price", unit_price, op_type)
 
-        total_amount = parse_decimal_safe(row.get(columns.get("total_amount", "Total")), decimal_separator)
-        total_amount = apply_transformation("total_amount", total_amount)
+        total_amount = parse_decimal_safe(row.get(_get_mapped_col(columns, "total_amount", op_type)), decimal_separator)
+        total_amount = apply_transformation("total_amount", total_amount, op_type)
         if total_amount is None:
             total_amount = Decimal(0)
 
         # Apply scaling based on currency (e.g. GBX to GBP)
-        price_currency = row.get(columns.get("price_currency", "Currency (Price / share)")) or currency
+        price_currency = row.get(_get_mapped_col(columns, "price_currency", op_type)) or currency
         if price_currency in scaling.get("unit_price", {}):
             factor = Decimal(str(scaling["unit_price"][price_currency]))
             if unit_price:
@@ -243,20 +261,23 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 currency = "GBP"
 
         # Exchange rate
-        exchange_rate = parse_decimal_safe(row.get(columns.get("exchange_rate", "Exchange rate")), decimal_separator)
+        exchange_rate = parse_decimal_safe(
+            row.get(_get_mapped_col(columns, "exchange_rate", op_type)),
+            decimal_separator,
+        )
 
         # Child Fees and Taxes
         fees = []
-        fee_amt_col = columns.get("fee_amount")
+        fee_amt_col = _get_mapped_col(columns, "fee_amount", op_type)
         if fee_amt_col:
             fee_val = parse_decimal_safe(row.get(fee_amt_col), decimal_separator)
-            fee_val = apply_transformation("fee_amount", fee_val)
+            fee_val = apply_transformation("fee_amount", fee_val, op_type)
             if fee_val and fee_val > 0:
-                fee_curr = row.get(columns.get("fee_currency")) or currency
+                fee_curr = row.get(_get_mapped_col(columns, "fee_currency", op_type)) or currency
 
                 # Resolve fee_type if mapped
                 resolved_fee_type = "conversion"
-                fee_type_col = columns.get("fee_type")
+                fee_type_col = _get_mapped_col(columns, "fee_type", op_type)
                 if fee_type_col:
                     raw_fee_type = row.get(fee_type_col)
                     if raw_fee_type:
@@ -280,16 +301,16 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                     ),
                 )
 
-        tax_amt_col = columns.get("tax_amount")
+        tax_amt_col = _get_mapped_col(columns, "tax_amount", op_type)
         if tax_amt_col:
             tax_val = parse_decimal_safe(row.get(tax_amt_col), decimal_separator)
-            tax_val = apply_transformation("tax_amount", tax_val)
+            tax_val = apply_transformation("tax_amount", tax_val, op_type)
             if tax_val and tax_val > 0:
-                tax_curr = row.get(columns.get("tax_currency")) or currency
+                tax_curr = row.get(_get_mapped_col(columns, "tax_currency", op_type)) or currency
 
                 # Resolve tax type
                 resolved_tax_type = "withholding_tax"
-                fee_type_col = columns.get("fee_type")
+                fee_type_col = _get_mapped_col(columns, "fee_type", op_type)
                 if fee_type_col:
                     raw_fee_type = row.get(fee_type_col)
                     if raw_fee_type:
@@ -314,13 +335,13 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 )
 
         # Merchant fields
-        merchant_name = row.get(columns.get("merchant_name"))
-        merchant_category = row.get(columns.get("merchant_category"))
+        merchant_name = row.get(_get_mapped_col(columns, "merchant_name", op_type))
+        merchant_category = row.get(_get_mapped_col(columns, "merchant_category", op_type))
 
         # Source / destination reference for transfer_in / transfer_out
-        source_ref_col = columns.get("source_reference")
+        source_ref_col = _get_mapped_col(columns, "source_reference", op_type)
         source_reference = row.get(source_ref_col) if source_ref_col else None
-        dest_ref_col = columns.get("destination_reference")
+        dest_ref_col = _get_mapped_col(columns, "destination_reference", op_type)
         destination_reference = row.get(dest_ref_col) if dest_ref_col else None
 
         if op_type == "transfer_in" and not source_reference:
@@ -368,19 +389,19 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                     pass
 
             if not source_currency or not target_currency:
-                source_currency = row.get(columns.get("source_currency", "Currency (Currency conversion from amount)"))
-                target_currency = row.get(columns.get("target_currency", "Currency (Currency conversion to amount)"))
+                source_currency = row.get(_get_mapped_col(columns, "source_currency", op_type))
+                target_currency = row.get(_get_mapped_col(columns, "target_currency", op_type))
                 if source_currency:
                     source_currency = source_currency.strip()
                 if target_currency:
                     target_currency = target_currency.strip()
                 if not exchange_rate:
                     from_amt = parse_decimal_safe(
-                        row.get(columns.get("from_amount", "Currency conversion from amount")),
+                        row.get(_get_mapped_col(columns, "from_amount", op_type)),
                         decimal_separator,
                     )
                     to_amt = parse_decimal_safe(
-                        row.get(columns.get("to_amount", "Currency conversion to amount")),
+                        row.get(_get_mapped_col(columns, "to_amount", op_type)),
                         decimal_separator,
                     )
                     if from_amt and to_amt and from_amt > 0:
