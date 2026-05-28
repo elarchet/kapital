@@ -67,7 +67,7 @@ uv run uvicorn src.main:app --reload
 
 ## 🧑‍💻 Maintainer Setup
 
-To configure the pre-commit and quality hooks on the backend:
+To configure the repo-wide pre-commit and quality hooks (defined in `prek.toml` at the root):
 ```bash
 uv sync --all-groups --directory backend
 uv run --directory backend prek install
