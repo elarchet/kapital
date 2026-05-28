@@ -116,7 +116,7 @@ const handleDeletePortfolio = async () => {
     <main class="main-content">
       <!-- Loading state if portfolios list is not populated yet -->
       <div v-if="store.loading && !store.portfolios.length" class="empty-state" style="flex: 1;">
-        <Loader style="animation: spin 1.5s linear infinite; width: 40px; height: 40px; color: var(--accent-color);" />
+        <Loader class="animate-spin w-10 h-10 text-accent" />
         <p style="margin-top: 1rem; font-weight: 500;">Aggregating portfolios...</p>
       </div>
 
@@ -313,9 +313,3 @@ const handleDeletePortfolio = async () => {
   </div>
 </template>
 
-<style scoped>
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-</style>

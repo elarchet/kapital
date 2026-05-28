@@ -459,10 +459,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="modal-overlay" @click.self="requestClose">
-    <div class="modal-card wide-modal">
+    <div class="modal-card max-w-[1400px]! w-[95vw]! max-h-[90vh] flex flex-col">
       <div class="modal-header">
         <h3 class="table-title">Import Transactions to "{{ portfolio.name }}"</h3>
-        <button @click="requestClose" class="modal-close-btn">&times;</button>
+        <button @click="requestClose" class="bg-transparent border-0 cursor-pointer text-[1.25rem] text-text-secondary transition-colors duration-150 ease-in-out hover:text-text-primary">&times;</button>
       </div>
       
       <div class="modal-body" style="overflow-y: auto; flex: 1;">
@@ -620,29 +620,3 @@ onBeforeUnmount(() => {
   />
 </template>
 
-<style scoped>
-.modal-close-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1.25rem;
-  color: var(--text-secondary);
-  transition: color var(--transition-fast);
-}
-.modal-close-btn:hover {
-  color: var(--text-primary);
-}
-
-.wide-modal {
-  max-width: 1400px !important;
-  width: 95vw !important;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-</style>

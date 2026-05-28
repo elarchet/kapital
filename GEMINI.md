@@ -36,6 +36,10 @@
 ## Frontend Guidelines
 - **Clean Decoupling**: Keep frontend code fully decoupled from the backend REST API. Ensure API endpoints are structured, documented, and fully type-safe.
 - **Component Privilege**: When adding a feature, privilege components over views when possible (reusability is key).
+- **Tailwind First**: All component styling must use Tailwind CSS v4 utility classes. `<style scoped>` blocks must be empty or contain only patterns genuinely impossible with utilities. Never duplicate in CSS what Tailwind can express.
+- **File Size Discipline**: Vue components and Python modules must stay under ~400 lines. When a file approaches that limit, proactively split it — extract child components, composables, or service modules. Do not wait for a dedicated refactor request.
+- **Subfolders Over Flat Dirs**: Group related components into subfolders (e.g., `components/import/`, `components/portfolio/`). If a feature grows beyond 3–4 components, create a dedicated subfolder immediately.
+- **Proactive Cleanup**: When editing a file that is already oversized or structurally messy, clean it up as part of the current task rather than deferring it.
 - **Frontend Testing**: If frontend testing is available, run it at the very end of development to ensure no issues were introduced. If no frontend tests are available, at least try to run the application to verify that it starts and loads correctly.
 
 ## Parametrization & Configurability

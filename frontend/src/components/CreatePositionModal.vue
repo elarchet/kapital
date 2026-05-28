@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
     <div class="modal-card">
       <div class="modal-header">
         <h3 class="table-title">Add Asset to "{{ portfolio.name }}"</h3>
-        <button @click="requestClose" class="modal-close-btn">&times;</button>
+        <button @click="requestClose" class="bg-transparent border-0 cursor-pointer text-[1.25rem] text-text-secondary transition-colors duration-150 ease-in-out hover:text-text-primary">&times;</button>
       </div>
       <div class="modal-body">
         <div v-if="submitError" class="login-error" style="margin-bottom: 1rem;">
@@ -190,16 +190,3 @@ onBeforeUnmount(() => {
   </div>
 </template>
 
-<style scoped>
-.modal-close-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1.25rem;
-  color: var(--text-secondary);
-  transition: color var(--transition-fast);
-}
-.modal-close-btn:hover {
-  color: var(--text-primary);
-}
-</style>

@@ -269,8 +269,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="show" class="wizard-modal-overlay" @click.self="attemptClose">
-    <div class="wizard-card" style="position: relative;">
+  <div v-if="show" class="fixed inset-0 w-screen h-screen bg-slate-900/20 backdrop-blur-[2px] flex items-start justify-center z-[200] overflow-y-auto py-16 px-4 animate-[fadeIn_0.15s_ease-out_forwards]" @click.self="attemptClose">
+    <div class="w-full max-w-[600px] bg-bg-secondary border border-border-color rounded-md shadow-lg flex flex-col overflow-visible animate-[slideUp_0.2s_ease-out]" style="position: relative;">
       
       <!-- Custom exit confirmation dialog -->
       <DiscardChangesConfirmModal 
@@ -279,23 +279,23 @@ onBeforeUnmount(() => {
         @confirm="emit('close')" 
       />
 
-      <div class="wizard-header">
+      <div class="py-4 px-6 border-b border-border-color flex justify-between items-center bg-bg-secondary rounded-t-md">
         <h4 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">
           {{ activeOpType ? `Configure Mapping for "${activeOpType}"` : 'Configure Global Mapping' }}
         </h4>
-        <button @click="attemptClose" class="wizard-close-btn">&times;</button>
+        <button @click="attemptClose" class="bg-transparent border-0 cursor-pointer text-2xl text-text-secondary leading-none hover:text-text-primary">&times;</button>
       </div>
 
-      <div class="wizard-body">
+      <div class="p-6 overflow-visible min-h-[280px]">
         <!-- Read-only Column Info -->
-        <div class="info-grid">
+        <div class="grid grid-cols-2 gap-4 bg-bg-primary py-3 px-4 rounded-sm border border-border-color">
           <div>
-            <div class="info-label">File Column Header</div>
-            <div class="info-value">{{ csvHeaderName }}</div>
+            <div class="text-[0.65rem] font-bold text-text-tertiary uppercase tracking-wider mb-0.5">File Column Header</div>
+            <div class="text-[0.85rem] font-semibold text-text-primary">{{ csvHeaderName }}</div>
           </div>
           <div>
-            <div class="info-label">Example Cell Value</div>
-            <div class="info-value" style="font-family: monospace; background-color: var(--bg-tertiary); padding: 0.15rem 0.4rem; border-radius: 4px; display: inline-block;">
+            <div class="text-[0.65rem] font-bold text-text-tertiary uppercase tracking-wider mb-0.5">Example Cell Value</div>
+            <div class="text-[0.85rem] font-semibold text-text-primary" style="font-family: monospace; background-color: var(--bg-tertiary); padding: 0.15rem 0.4rem; border-radius: 4px; display: inline-block;">
               {{ exampleValue || '—' }}
             </div>
           </div>
@@ -334,7 +334,7 @@ onBeforeUnmount(() => {
 
       </div>
 
-      <div class="wizard-footer">
+      <div class="py-4 px-6 border-t border-border-color flex justify-end gap-3 bg-bg-primary">
         <button v-if="initialMapping && initialMapping.dbKey" @click="handleClear" class="btn btn-sm btn-danger-icon" title="Remove mapping">
           <Trash2 style="width: 14px; height: 14px; color: var(--color-danger);" />
           <span>Clear Mapping</span>
@@ -354,91 +354,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.wizard-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(15, 23, 42, 0.2);
-  backdrop-filter: blur(2px);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  z-index: 200;
-  animation: fadeIn var(--transition-fast) forwards;
-  overflow-y: auto;
-  padding: 4rem 1rem;
-}
-
-.wizard-card {
-  width: 100%;
-  max-width: 600px;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  animation: slideUp 0.2s ease-out;
-  overflow: visible; /* Allows custom dropdown menu to overlay outside without clipping */
-}
-
-.wizard-header {
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: var(--bg-secondary);
-  border-top-left-radius: var(--radius-md);
-  border-top-right-radius: var(--radius-md);
-}
-
-.wizard-close-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1.5rem;
-  color: var(--text-secondary);
-  line-height: 1;
-}
-
-.wizard-close-btn:hover {
-  color: var(--text-primary);
-}
-
-.wizard-body {
-  padding: 1.5rem;
-  overflow: visible; /* Prevent scrollbar container clipping */
-  min-height: 280px; /* Ensure sufficient space for the custom select dropdown list */
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  background-color: var(--bg-primary);
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-}
-
-.info-label {
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.15rem;
-}
-
-.info-value {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
 @keyframes slideUp {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }

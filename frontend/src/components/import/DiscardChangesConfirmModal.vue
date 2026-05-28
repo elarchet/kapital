@@ -55,11 +55,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="show" class="confirm-modal-overlay" @click.self="$emit('cancel')">
-    <div class="confirm-modal-card">
-      <div class="confirm-modal-body">
+  <div v-if="show" class="fixed inset-0 w-screen h-screen bg-slate-900/60 backdrop-blur-[4px] flex items-center justify-center z-[300] animate-[fadeIn_0.15s_ease-out_forwards]" @click.self="$emit('cancel')">
+    <div class="w-full max-w-[440px] bg-bg-secondary border border-border-color rounded-md shadow-lg overflow-hidden flex flex-col animate-[slideUp_0.15s_ease-out]">
+      <div class="p-6">
         <div style="display: flex; gap: 1rem; align-items: flex-start;">
-          <div class="alert-icon-container">
+          <div class="bg-danger-light p-2 rounded-full flex items-center justify-center flex-shrink-0">
             <AlertTriangle style="width: 24px; height: 24px; color: var(--color-danger);" />
           </div>
           <div>
@@ -72,20 +72,20 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-      <div class="confirm-modal-footer">
+      <div class="py-4 px-6 border-t border-border-color flex justify-end gap-3 bg-bg-primary">
         <button 
           @click="$emit('cancel')" 
           @mouseenter="selectedOption = 'keep'"
           class="btn btn-sm"
-          :class="{ 'active-selection': selectedOption === 'keep' }"
+          :class="{ 'outline-2 outline-accent outline-offset-2 shadow-[0_0_0_3px] shadow-accent-light': selectedOption === 'keep' }"
         >
           Keep Editing
         </button>
         <button 
           @click="$emit('confirm')" 
           @mouseenter="selectedOption = 'discard'"
-          class="btn btn-sm btn-danger-action"
-          :class="{ 'active-selection': selectedOption === 'discard' }"
+          class="btn btn-sm bg-danger-color text-white border-danger-color hover:bg-red-600 hover:border-red-600"
+          :class="{ 'outline-2 outline-danger-color outline-offset-2 shadow-[0_0_0_3px] shadow-danger-light bg-red-600': selectedOption === 'discard' }"
         >
           Discard Changes
         </button>
@@ -93,89 +93,3 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
-
-<style scoped>
-.confirm-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 300; /* Ensure overlay displays on top of everything */
-  animation: fadeIn 0.15s ease-out forwards;
-}
-
-.confirm-modal-card {
-  width: 100%;
-  max-width: 440px;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  animation: slideUp 0.15s ease-out;
-}
-
-.confirm-modal-body {
-  padding: 1.5rem;
-}
-
-.alert-icon-container {
-  background-color: var(--color-danger-light);
-  padding: 0.5rem;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.confirm-modal-footer {
-  padding: 1rem 1.5rem;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  background-color: var(--bg-primary);
-}
-
-.btn-danger-action {
-  background-color: var(--color-danger);
-  color: white;
-  border-color: var(--color-danger);
-}
-.btn-danger-action:hover {
-  background-color: #dc2626;
-  border-color: #dc2626;
-}
-
-.active-selection {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 3px var(--accent-light);
-}
-
-.btn-danger-action.active-selection {
-  outline: 2px solid var(--color-danger);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 3px var(--color-danger-light);
-  background-color: #dc2626;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { transform: translateY(15px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-</style>

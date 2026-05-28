@@ -84,30 +84,35 @@ const selectField = (key: string) => {
 <template>
   <div class="form-group" style="margin-top: 1.25rem; position: relative;">
     <label>Database Destination Field</label>
-    <div class="custom-select-container">
-      <button type="button" @click="toggleDropdown" class="custom-select-trigger">
+    <div class="relative w-full">
+      <button type="button" @click="toggleDropdown" class="w-full py-3 px-4 text-sm border border-border-color rounded-sm bg-bg-secondary text-text-primary flex justify-between items-center cursor-pointer outline-none transition-all duration-150 ease-in-out text-left focus:border-accent focus:shadow-[0_0_0_3px] focus:shadow-accent-light">
         <span v-if="selectedField" :style="{ color: selectedField.is_required ? 'var(--color-danger)' : 'var(--text-primary)', fontWeight: selectedField.is_required ? '600' : 'normal' }">
           {{ selectedField.label }}
         </span>
         <span v-else style="color: var(--text-tertiary);">-- Ignore Column (Do Not Map) --</span>
-        <span v-if="selectedField" class="type-badge" :class="'type-' + selectedField.type">{{ selectedField.type }}</span>
-        <span class="chevron-arrow">&#9662;</span>
+        <span v-if="selectedField" class="text-[0.65rem] font-bold uppercase py-0.5 px-1.5 rounded-[4px] tracking-wide" :class="{
+          'bg-blue-50 text-blue-600': selectedField.type === 'numeric',
+          'bg-amber-50 text-amber-600': selectedField.type === 'enum',
+          'bg-violet-50 text-violet-600': selectedField.type === 'datetime',
+          'bg-gray-100 text-gray-600': selectedField.type === 'string'
+        }">{{ selectedField.type }}</span>
+        <span class="text-text-tertiary text-[0.75rem]">&#9662;</span>
       </button>
 
       <!-- Dropdown Options Panel -->
-      <div v-if="isDropdownOpen" class="custom-select-dropdown">
+      <div v-if="isDropdownOpen" class="absolute top-full left-0 w-full mt-1 bg-bg-secondary border border-border-color rounded-sm shadow-lg z-[160] p-2 flex flex-col gap-2">
         <input 
           type="text" 
           v-model="searchQuery" 
-          class="form-control select-search-input" 
+          class="form-control p-2 text-[0.8rem]" 
           placeholder="Search destination fields..."
           @click.stop
         />
-        <div class="custom-select-options">
+        <div class="max-h-[400px] overflow-y-auto flex flex-col gap-0.5">
           <div 
             @click="selectField('')" 
-            class="custom-select-option"
-            :class="{ active: selectedDbKey === '' }"
+            class="py-2 px-3 text-[0.85rem] cursor-pointer rounded-[4px] flex justify-between items-center transition-colors duration-150 ease-in-out hover:bg-bg-tertiary"
+            :class="{ 'bg-accent-light text-accent': selectedDbKey === '' }"
           >
             <span style="color: var(--text-tertiary); font-size: 0.8rem;">-- Ignore Column (Do Not Map) --</span>
           </div>
@@ -115,13 +120,18 @@ const selectField = (key: string) => {
             v-for="field in filteredFields" 
             :key="field.key"
             @click="selectField(field.key)" 
-            class="custom-select-option"
-            :class="{ active: selectedDbKey === field.key }"
+            class="py-2 px-3 text-[0.85rem] cursor-pointer rounded-[4px] flex justify-between items-center transition-colors duration-150 ease-in-out hover:bg-bg-tertiary"
+            :class="{ 'bg-accent-light text-accent': selectedDbKey === field.key }"
           >
             <span :style="{ color: field.is_required ? 'var(--color-danger)' : 'var(--text-primary)', fontWeight: field.is_required ? '600' : 'normal' }">
               {{ field.label }}
             </span>
-            <span class="type-badge" :class="'type-' + field.type">{{ field.type }}</span>
+            <span class="text-[0.65rem] font-bold uppercase py-0.5 px-1.5 rounded-[4px] tracking-wide" :class="{
+              'bg-blue-50 text-blue-600': field.type === 'numeric',
+              'bg-amber-50 text-amber-600': field.type === 'enum',
+              'bg-violet-50 text-violet-600': field.type === 'datetime',
+              'bg-gray-100 text-gray-600': field.type === 'string'
+            }">{{ field.type }}</span>
           </div>
           <div v-if="filteredFields.length === 0" style="padding: 1rem; text-align: center; color: var(--text-tertiary); font-size: 0.8rem;">
             No fields match query.
@@ -130,115 +140,7 @@ const selectField = (key: string) => {
       </div>
 
       <!-- Intercept outside click backdrop -->
-      <div v-if="isDropdownOpen" class="custom-select-backdrop" @click="isDropdownOpen = false"></div>
+      <div v-if="isDropdownOpen" class="fixed inset-0 w-screen h-screen z-[150] bg-transparent" @click="isDropdownOpen = false"></div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.custom-select-container {
-  position: relative;
-  width: 100%;
-}
-
-.custom-select-trigger {
-  width: 100%;
-  padding: 0.75rem 1rem;
-  font-size: 0.875rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  outline: none;
-  transition: all var(--transition-fast);
-  text-align: left;
-}
-
-.custom-select-trigger:focus {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px var(--accent-light);
-}
-
-.chevron-arrow {
-  color: var(--text-tertiary);
-  font-size: 0.75rem;
-}
-
-.custom-select-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  width: 100%;
-  margin-top: 0.25rem;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-lg);
-  z-index: 160;
-  padding: 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.select-search-input {
-  padding: 0.5rem;
-  font-size: 0.8rem;
-}
-
-.custom-select-options {
-  max-height: 400px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.custom-select-option {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.85rem;
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: background-color var(--transition-fast);
-}
-
-.custom-select-option:hover {
-  background-color: var(--bg-tertiary);
-}
-
-.custom-select-option.active {
-  background-color: var(--accent-light);
-  color: var(--accent-color);
-}
-
-.custom-select-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 150;
-  background: transparent;
-}
-
-.type-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
-  letter-spacing: 0.02em;
-}
-
-.type-numeric { background-color: #eff6ff; color: #2563eb; }
-.type-enum { background-color: #fffbeb; color: #d97706; }
-.type-datetime { background-color: #f5f3ff; color: #7c3aed; }
-.type-string { background-color: #f3f4f6; color: #4b5563; }
-</style>

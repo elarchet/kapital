@@ -13,10 +13,10 @@ defineProps<{
 
 <template>
   <div 
-    class="preview-box" 
+    class="mt-5 rounded-sm py-3 px-4 border border-transparent transition-transform duration-150 ease-in-out" 
     :class="{ 
-      'preview-success': liveConversion.success, 
-      'preview-error': !liveConversion.success,
+      'bg-success-light border-emerald-500/20': liveConversion.success, 
+      'bg-danger-light border-red-500/20': !liveConversion.success,
       'shake-anim': shouldShake 
     }"
   >
@@ -24,8 +24,8 @@ defineProps<{
       <CheckCircle v-if="liveConversion.success" style="width: 18px; height: 18px; color: var(--color-success); flex-shrink: 0; margin-top: 0.1rem;" />
       <AlertCircle v-else style="width: 18px; height: 18px; color: var(--color-danger); flex-shrink: 0; margin-top: 0.1rem;" />
       <div>
-        <div class="preview-heading">Live Conversion Preview</div>
-        <div class="preview-result">
+        <div class="text-[0.7rem] font-bold uppercase text-text-secondary tracking-wider">Live Conversion Preview</div>
+        <div class="text-[0.875rem] mt-0.5">
           <span v-if="liveConversion.success" style="font-weight: 600; color: var(--text-primary);">
             {{ liveConversion.value }}
           </span>
@@ -39,37 +39,6 @@ defineProps<{
 </template>
 
 <style scoped>
-.preview-box {
-  margin-top: 1.25rem;
-  border-radius: var(--radius-sm);
-  padding: 0.75rem 1rem;
-  border: 1px solid transparent;
-  transition: transform 0.15s ease;
-}
-
-.preview-success {
-  background-color: var(--color-success-light);
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.preview-error {
-  background-color: var(--color-danger-light);
-  border-color: rgba(239, 68, 68, 0.2);
-}
-
-.preview-heading {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  letter-spacing: 0.05em;
-}
-
-.preview-result {
-  font-size: 0.875rem;
-  margin-top: 0.15rem;
-}
-
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }

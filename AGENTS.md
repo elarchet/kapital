@@ -9,8 +9,14 @@
 - **Framework**: Decoupled Vue.js frontend + FastAPI REST API.
 - **Rule**: All financial logic (PnL, aggregations) must live in `backend/src/services/` or `backend/src/logic/`. The frontend must only interact with this logic via the REST API endpoints, ensuring clean decoupling.
 
+## Styling Rules
+- **Tailwind First**: All styling must use Tailwind CSS v4 utility classes directly in templates. Writing custom CSS is only acceptable for patterns that cannot be expressed with utilities (e.g., complex animations, third-party overrides).
+- **No Scoped CSS Duplication**: Never redeclare styles in `<style scoped>` blocks that are already achievable via Tailwind utilities. Scoped blocks should be empty or near-empty.
+- **Design Tokens**: All colors, spacing, typography, and other design tokens must be declared once in `frontend/src/style.css` under the `@theme` directive. Components must never hardcode raw values.
+
 ## Tech Stack (2026 Standard)
 - **Frontend**: Vue.js (Modern SPA framework)
+- **Styling**: Tailwind CSS v4 (CSS-first, `@theme` tokens in `style.css`)
 - **Framework**: FastAPI (using `Annotated` dependencies)
 - **ORM**: SQLModel + Alembic
 - **Data Handling**: Polars
@@ -26,3 +32,6 @@
 
 ## Architectural Rules
 - **Structure**: Symmetric decoupled layout (`backend/` with `backend/src/` and `frontend/` with `frontend/src/`).
+- **File Size Limit**: No file (Vue component, Python module, etc.) should exceed ~400 lines. If a file approaches this limit, refactor it by extracting sub-components or splitting logic into dedicated modules.
+- **Subfolders**: Do not hesitate to create subfolders to group related components or modules (e.g., `components/import/`, `components/portfolio/`). Flat directories with many files are an anti-pattern.
+- **Proactive Refactoring**: When touching a file that is already oversized or poorly structured, refactor it as part of the task — do not defer cleanup.

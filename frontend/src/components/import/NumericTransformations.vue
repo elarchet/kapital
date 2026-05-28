@@ -4,8 +4,8 @@ const transformationValue = defineModel<number | null>('transformationValue', { 
 </script>
 
 <template>
-  <div class="options-container">
-    <h5 class="options-title">Numeric Data Transformations</h5>
+  <div class="mt-5 bg-bg-primary border border-border-color rounded-sm p-4">
+    <h5 class="text-[0.8rem] font-bold uppercase text-text-secondary tracking-wider mb-3">Numeric Data Transformations</h5>
     <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; align-items: center;">
       <select v-model="transformationType" class="form-control">
         <option value="none">No transformation (Direct parse)</option>
@@ -28,22 +28,3 @@ const transformationValue = defineModel<number | null>('transformationValue', { 
     </div>
   </div>
 </template>
-
-<style scoped>
-.options-container {
-  margin-top: 1.25rem;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 1rem;
-}
-
-.options-title {
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  letter-spacing: 0.05em;
-  margin-bottom: 0.75rem;
-}
-</style>

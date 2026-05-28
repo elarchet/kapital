@@ -127,7 +127,7 @@ const startResize = (e: MouseEvent) => {
       <div v-else class="nav-divider"></div>
 
       <div v-if="store.loading && !store.portfolios.length" style="padding: 1rem; text-align: center; color: var(--text-tertiary);">
-        <Loader class="nav-icon" style="animation: spin 1.5s linear infinite; margin: 0 auto;" />
+        <Loader class="nav-icon animate-spin mx-auto" />
       </div>
 
       <div v-else-if="!store.portfolios.length && !store.sidebarCollapsed" style="padding: 0.5rem 0.75rem; font-size: 0.8rem; color: var(--text-tertiary); font-style: italic;">
@@ -215,9 +215,3 @@ const startResize = (e: MouseEvent) => {
   </aside>
 </template>
 
-<style scoped>
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-</style>

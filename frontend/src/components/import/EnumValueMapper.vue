@@ -14,14 +14,14 @@ const enumMappings = defineModel<Record<string, string>>('enumMappings', { requi
 </script>
 
 <template>
-  <div class="options-container">
-    <h5 class="options-title">Map Unique CSV Values to Database Enums</h5>
+  <div class="mt-5 bg-bg-primary border border-border-color rounded-sm p-4">
+    <h5 class="text-[0.8rem] font-bold uppercase text-text-secondary tracking-wider mb-3">Map Unique CSV Values to Database Enums</h5>
     <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
       The file column contains raw labels. Map each unique label below to standard database option.
     </p>
-    <div class="enum-scroll-list">
-      <div v-for="val in uniqueCsvValues" :key="val" class="enum-row">
-        <span class="enum-raw-badge" :title="val">{{ val || '—' }}</span>
+    <div class="flex flex-col gap-2 max-h-[160px] overflow-y-auto border border-border-color rounded-sm p-2 bg-bg-secondary">
+      <div v-for="val in uniqueCsvValues" :key="val" class="grid grid-cols-2 gap-3 items-center">
+        <span class="text-[0.75rem] font-mono bg-bg-tertiary py-1 px-2 rounded-sm overflow-hidden text-ellipsis whitespace-nowrap border border-border-color" :title="val">{{ val || '—' }}</span>
         <select 
           v-model="enumMappings[val]" 
           class="form-control" 
@@ -39,53 +39,3 @@ const enumMappings = defineModel<Record<string, string>>('enumMappings', { requi
     </div>
   </div>
 </template>
-
-<style scoped>
-.options-container {
-  margin-top: 1.25rem;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 1rem;
-}
-
-.options-title {
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  letter-spacing: 0.05em;
-  margin-bottom: 0.75rem;
-}
-
-.enum-scroll-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-height: 160px;
-  overflow-y: auto;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 0.5rem;
-  background-color: var(--bg-secondary);
-}
-
-.enum-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.enum-raw-badge {
-  font-size: 0.75rem;
-  font-family: monospace;
-  background-color: var(--bg-tertiary);
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border: 1px solid var(--border-color);
-}
-</style>

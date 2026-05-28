@@ -16,7 +16,7 @@ const handleFileChange = (e: Event) => {
 <template>
   <div class="form-group">
     <label>Select CSV File</label>
-    <label class="upload-zone">
+    <label class="border-2 border-dashed border-border-color rounded-md py-10 px-6 text-center cursor-pointer transition-all duration-150 ease-in-out bg-bg-primary flex flex-col items-center justify-center hover:border-accent hover:bg-accent-light">
       <Plus style="width: 24px; height: 24px; color: var(--text-tertiary); margin: 0 auto 0.5rem auto;" />
       <p style="font-weight: 500; font-size: 0.9rem;">Click to upload or drag & drop CSV file</p>
       <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">Standard CSV files supported</p>
@@ -24,23 +24,3 @@ const handleFileChange = (e: Event) => {
     </label>
   </div>
 </template>
-
-<style scoped>
-.upload-zone {
-  border: 2px dashed var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 2.5rem 1.5rem;
-  text-align: center;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  background-color: var(--bg-primary);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.upload-zone:hover {
-  border-color: var(--accent-color);
-  background-color: var(--accent-light);
-}
-</style>
