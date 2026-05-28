@@ -5,7 +5,7 @@ import { useKapitalStore } from '../store';
 import Sidebar from '../components/Sidebar.vue';
 import AddPositionButton from '../components/AddPositionButton.vue';
 import CreatePositionModal from '../components/CreatePositionModal.vue';
-import ImportTransactionsModal from '../components/ImportTransactionsModal.vue';
+import ImportTransactionsModal from '../components/import/ImportTransactionsModal.vue';
 import { 
   DollarSign, 
   TrendingUp, 
