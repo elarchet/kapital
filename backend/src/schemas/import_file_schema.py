@@ -9,6 +9,7 @@ class ImportFileSchemaBase(BaseModel):
     delimiter: str = ","
     decimal_separator: str = "."
     mappings: str = "{}"
+    is_incomplete: bool = False
 
 
 class ImportFileSchemaCreate(ImportFileSchemaBase):
@@ -21,6 +22,7 @@ class ImportFileSchemaUpdate(BaseModel):
     delimiter: str | None = None
     decimal_separator: str | None = None
     mappings: str | None = None
+    is_incomplete: bool | None = None
 
 
 class ImportFileSchemaRead(ImportFileSchemaBase):

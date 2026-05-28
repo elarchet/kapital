@@ -28,7 +28,7 @@ const isCustomMapping = ref(false);
 
 const isImporting = ref(false);
 const importError = ref('');
-const importSuccessSummary = ref<{ positions_created: number; operations_imported: number; operations_skipped: number } | null>(null);
+const importSuccessSummary = ref<{ positions_created: number; operations_imported: number; operations_skipped: number; is_template_only?: boolean } | null>(null);
 
 // Mappings configuration
 const mappingTemplateName = ref('');
@@ -108,6 +108,10 @@ const getEnumMappingsForField = (dbKey: string, mappings: any) => {
   return result;
 };
 
+const isSchemaIncomplete = (schema: any) => {
+  return schema ? !!schema.is_incomplete : false;
+};
+
 const onSchemaSelect = () => {
   if (selectedSchemaId.value === -1) {
     isCustomMapping.value = true;
@@ -115,9 +119,16 @@ const onSchemaSelect = () => {
     initializeConfigs();
     prepopulateGuesses(importFileHeaders.value);
   } else {
-    isCustomMapping.value = false;
     const schema = availableSchemas.value.find(s => s.id === selectedSchemaId.value);
     if (schema) {
+      const isIncomplete = isSchemaIncomplete(schema);
+      if (isIncomplete) {
+        isCustomMapping.value = true;
+        saveMappingTemplate.value = true;
+        mappingTemplateName.value = schema.name;
+      } else {
+        isCustomMapping.value = false;
+      }
       importDelimiter.value = schema.delimiter;
       importDecimalSep.value = schema.decimal_separator;
       try {
@@ -938,7 +949,30 @@ const handleImport = async () => {
 
     if (isCustomMapping.value) {
       if (!isValidCustomMapping.value) {
-        throw new Error('Please fix the validation errors before importing.');
+        if (saveMappingTemplate.value && mappingTemplateName.value.trim()) {
+          const mappingConfig = buildCustomMappingPayload();
+
+          await api.createImportFileSchema({
+            name: mappingTemplateName.value.trim(),
+            is_public: false,
+            delimiter: importDelimiter.value,
+            decimal_separator: importDecimalSep.value,
+            mappings: JSON.stringify(mappingConfig),
+            is_incomplete: true,
+          });
+          
+          importSuccessSummary.value = {
+            positions_created: 0,
+            operations_imported: 0,
+            operations_skipped: 0,
+            is_template_only: true,
+          };
+          loadSchemas();
+          emit('success');
+          return;
+        } else {
+          throw new Error('Please fix the validation errors before importing.');
+        }
       }
       const mappingConfig = buildCustomMappingPayload();
 
@@ -949,6 +983,7 @@ const handleImport = async () => {
           delimiter: importDelimiter.value,
           decimal_separator: importDecimalSep.value,
           mappings: JSON.stringify(mappingConfig),
+          is_incomplete: false,
         });
         finalSchemaId = newSchema.id;
       } else {
@@ -1021,11 +1056,13 @@ onBeforeUnmount(() => {
 
         <!-- Success State -->
         <div v-if="importSuccessSummary" style="background-color: var(--color-success-light); border: 1px solid rgba(16, 185, 129, 0.2); padding: 1.5rem; border-radius: var(--radius-md); text-align: center; margin-bottom: 1rem;">
-          <h4 style="color: var(--color-success); font-size: 1.1rem; margin-bottom: 0.5rem;">Import Successful!</h4>
+          <h4 style="color: var(--color-success); font-size: 1.1rem; margin-bottom: 0.5rem;">
+            {{ importSuccessSummary.is_template_only ? 'Template Saved!' : 'Import Successful!' }}
+          </h4>
           <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">
-            Your transaction history has been successfully parsed and processed.
+            {{ importSuccessSummary.is_template_only ? `The configuration template "${mappingTemplateName}" has been successfully saved.` : 'Your transaction history has been successfully parsed and processed.' }}
           </p>
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; background-color: var(--bg-secondary); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); max-width: 500px; margin: 0 auto;">
+          <div v-if="!importSuccessSummary.is_template_only" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; background-color: var(--bg-secondary); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); max-width: 500px; margin: 0 auto;">
             <div>
               <div style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Positions Created</div>
               <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">{{ importSuccessSummary.positions_created }}</div>
@@ -1070,7 +1107,7 @@ onBeforeUnmount(() => {
                   <label for="templateSelect">Template Schema</label>
                   <select v-model="selectedSchemaId" id="templateSelect" @change="onSchemaSelect" class="form-control">
                     <option v-for="schema in availableSchemas" :key="schema.id" :value="schema.id">
-                      {{ schema.name }} {{ schema.is_public ? '(Public)' : '(Saved)' }}
+                      {{ schema.name }} {{ schema.is_public ? '(Public)' : '(Saved)' }} {{ isSchemaIncomplete(schema) ? '[Incomplete]' : '' }}
                     </option>
                     <option :value="-1">Custom Mapping Template...</option>
                   </select>
@@ -1374,13 +1411,25 @@ onBeforeUnmount(() => {
       <div class="modal-footer">
         <button @click="requestClose" class="btn btn-sm">Cancel</button>
         <button 
-          v-if="!importSuccessSummary"
+          v-if="!importSuccessSummary && isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
+          @click="handleImport"
+          class="btn btn-sm btn-primary"
+          :disabled="isImporting || !mappingTemplateName.trim()"
+          style="background-color: var(--color-warning); border-color: var(--color-warning); color: white;"
+        >
+          <Loader v-if="isImporting" style="animation: spin 1.5s linear infinite; width: 14px; height: 14px;" />
+          <span v-if="isImporting">Saving template...</span>
+          <span v-else>Save Incomplete Template</span>
+        </button>
+        <button 
+          v-else-if="!importSuccessSummary"
           @click="handleImport" 
           class="btn btn-sm btn-primary" 
           :disabled="isImporting || !importFile || (isCustomMapping && !isValidCustomMapping) || (isCustomMapping && saveMappingTemplate && !mappingTemplateName.trim())"
         >
           <Loader v-if="isImporting" style="animation: spin 1.5s linear infinite; width: 14px; height: 14px;" />
           <span v-if="isImporting">Importing data...</span>
+          <span v-else-if="isCustomMapping && saveMappingTemplate">Save Template & Import</span>
           <span v-else>Import Transactions</span>
         </button>
         <button 

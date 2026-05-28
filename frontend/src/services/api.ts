@@ -187,6 +187,7 @@ export const api = {
     delimiter: string;
     decimal_separator: string;
     mappings: string;
+    is_incomplete?: boolean;
   }): Promise<any> {
     return request<any>('/api/import-file-schemas/', {
       method: 'POST',

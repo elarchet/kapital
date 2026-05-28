@@ -26,6 +26,8 @@ class ImportFileSchema(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     # JSON mappings stored as serialized text
     mappings: str = Field(default="{}", nullable=False)
 
+    is_incomplete: bool = Field(default=False, nullable=False)
+
     # -- foreign keys ----------------------------------------------------------
     user_id: int | None = Field(
         default=None,
