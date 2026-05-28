@@ -369,27 +369,62 @@ const activeDbOpTypes = computed(() => {
   return Array.from(types);
 });
 
-const exampleTransactions = computed(() => {
-  if (operationTypeColumnIdx.value === null) return [];
-  
-  const examples: Record<string, { opType: string; csvRow: string[]; rowIdx: number }> = {};
+const matchingRowsByType = computed(() => {
+  const result: Record<string, { csvRow: string[]; rowIdx: number }[]> = {};
+  if (operationTypeColumnIdx.value === null) return result;
   
   allRawRows.value.forEach((row, idx) => {
     const rawAction = row[operationTypeColumnIdx.value!];
     if (rawAction) {
       const opType = operationTypeMappings.value[rawAction];
-      if (opType && !examples[opType]) {
-        examples[opType] = {
-          opType,
-          csvRow: row,
-          rowIdx: idx
-        };
+      if (opType) {
+        if (!result[opType]) {
+          result[opType] = [];
+        }
+        result[opType].push({ csvRow: row, rowIdx: idx });
       }
     }
   });
+  return result;
+});
+
+const selectedExampleOffset = ref<Record<string, number>>({});
+
+const nextExampleForType = (opType: string) => {
+  const matches = matchingRowsByType.value[opType] || [];
+  if (matches.length <= 1) return;
+  const currentOffset = selectedExampleOffset.value[opType] || 0;
+  selectedExampleOffset.value[opType] = (currentOffset + 1) % matches.length;
+};
+
+const prevExampleForType = (opType: string) => {
+  const matches = matchingRowsByType.value[opType] || [];
+  if (matches.length <= 1) return;
+  const currentOffset = selectedExampleOffset.value[opType] || 0;
+  selectedExampleOffset.value[opType] = (currentOffset - 1 + matches.length) % matches.length;
+};
+
+const exampleTransactions = computed(() => {
+  if (operationTypeColumnIdx.value === null) return [];
   
   return activeDbOpTypes.value.map(type => {
-    return examples[type] || { opType: type, csvRow: [], rowIdx: -1 };
+    const matches = matchingRowsByType.value[type] || [];
+    if (matches.length === 0) {
+      return { opType: type, csvRow: [], rowIdx: -1, totalMatches: 0, currentOffset: 0 };
+    }
+    
+    let offset = selectedExampleOffset.value[type] || 0;
+    if (offset >= matches.length) {
+      offset = 0;
+    }
+    const match = matches[offset];
+    return {
+      opType: type,
+      csvRow: match.csvRow,
+      rowIdx: match.rowIdx,
+      totalMatches: matches.length,
+      currentOffset: offset
+    };
   }).filter(e => e.rowIdx !== -1);
 });
 
@@ -1237,16 +1272,25 @@ onBeforeUnmount(() => {
 
                           <!-- Example rows per type -->
                           <tr v-for="example in exampleTransactions" :key="example.opType">
-                            <td style="vertical-align: middle; text-align: center;">
-                              <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
-                                <span class="badge" :class="'badge-' + example.opType" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase;">
-                                  {{ example.opType }} Example
-                                </span>
+                             <td style="vertical-align: middle; text-align: left; padding: 0.35rem 0.5rem;">
+                              <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 0.15rem;">
+                                <div style="display: flex; align-items: center; gap: 0.35rem; width: 100%;">
+                                  <span class="badge" :class="'badge-' + example.opType" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; min-width: 110px; text-align: center; display: inline-block;">
+                                    {{ example.opType }}
+                                  </span>
+                                  
+                                  <!-- Compact Switcher Controls -->
+                                  <div v-if="example.totalMatches > 1" style="display: flex; align-items: center; gap: 0.15rem;">
+                                    <button @click.stop="prevExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Previous Example">&larr;</button>
+                                    <button @click.stop="nextExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Next Example">&rarr;</button>
+                                  </div>
+                                </div>
+
                                 <span v-if="liveValidationStats[example.opType]" :style="{
                                   fontSize: '0.65rem',
                                   fontWeight: 600,
                                   color: liveValidationStats[example.opType].failed > 0 ? 'var(--color-danger)' : 'var(--color-success)'
-                                }">
+                                }" style="margin-top: 0.1rem; padding-left: 0.25rem;">
                                   {{ liveValidationStats[example.opType].success }} / {{ liveValidationStats[example.opType].total }} parsed
                                 </span>
                               </div>
