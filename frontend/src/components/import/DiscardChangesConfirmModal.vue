@@ -84,8 +84,8 @@ onBeforeUnmount(() => {
         <button 
           @click="$emit('confirm')" 
           @mouseenter="selectedOption = 'discard'"
-          class="btn btn-sm bg-danger-color text-white border-danger-color hover:bg-red-600 hover:border-red-600"
-          :class="{ 'outline-2 outline-danger-color outline-offset-2 shadow-[0_0_0_3px] shadow-danger-light bg-red-600': selectedOption === 'discard' }"
+          class="btn btn-sm btn-danger-solid"
+          :class="{ 'outline-2 outline-danger-color outline-offset-2 shadow-[0_0_0_3px] shadow-danger-light': selectedOption === 'discard' }"
         >
           Discard Changes
         </button>
