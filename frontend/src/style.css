@@ -364,6 +364,14 @@ h1, h2, h3, h4, h5, h6 {
   @apply bg-danger-light;
 }
 
+.btn-danger-solid {
+  @apply bg-danger-color text-white border-danger-color;
+}
+
+.btn-danger-solid:hover {
+  @apply bg-red-600 border-red-600;
+}
+
 .btn-sm {
   @apply py-1 px-2 text-[0.75rem] rounded-[4px];
 }
@@ -441,6 +449,10 @@ h1, h2, h3, h4, h5, h6 {
 
 .modal-card {
   @apply w-full max-w-[500px] bg-bg-secondary border border-border-color rounded-lg shadow-lg overflow-hidden flex flex-col;
+}
+
+.modal-card--wide {
+  @apply max-w-[1600px] w-[98vw] max-h-[92vh];
 }
 
 .modal-header {

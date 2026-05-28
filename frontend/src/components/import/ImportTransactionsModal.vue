@@ -459,7 +459,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="modal-overlay" @click.self="requestClose">
-    <div class="modal-card max-w-[1400px]! w-[95vw]! max-h-[90vh] flex flex-col">
+    <div class="modal-card modal-card--wide flex flex-col">
       <div class="modal-header">
         <h3 class="table-title">Import Transactions to "{{ portfolio.name }}"</h3>
         <button @click="requestClose" class="bg-transparent border-0 cursor-pointer text-[1.25rem] text-text-secondary transition-colors duration-150 ease-in-out hover:text-text-primary">&times;</button>
