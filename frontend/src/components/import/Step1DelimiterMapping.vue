@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import CustomDropdown from './CustomDropdown.vue';
 
 const props = defineProps<{
   importFileHeaders: string[];
@@ -24,39 +26,84 @@ const onColumnChange = () => {
 const goToStep2 = () => {
   emit('next');
 };
+
+const colIdxString = computed({
+  get() {
+    return operationTypeColumnIdx.value !== null ? String(operationTypeColumnIdx.value) : '';
+  },
+  set(val: string) {
+    if (val === '') {
+      operationTypeColumnIdx.value = null;
+    } else {
+      operationTypeColumnIdx.value = Number(val);
+    }
+    onColumnChange();
+  }
+});
+
+const columnOptions = computed(() => {
+  return props.importFileHeaders.map((h, idx) => ({
+    value: String(idx),
+    label: h
+  }));
+});
+
+const delimiterOptions = [
+  { value: ',', label: 'Comma (,)' },
+  { value: ';', label: 'Semicolon (;)' },
+  { value: '\t', label: 'Tab' }
+];
+
+const decimalSeparatorOptions = [
+  { value: '.', label: 'Dot (.)' },
+  { value: ',', label: 'Comma (,)' }
+];
+
+const dbOpOptions = computed(() => {
+  const enumVals = props.importFields.find(f => f.key === 'operation_type')?.enum_values || [];
+  return enumVals.map((opt: string) => ({
+    value: opt,
+    label: opt
+  }));
+});
 </script>
 
 <template>
   <div>
-    <h4 style="font-size: 0.95rem; margin-bottom: 1.25rem; font-weight: 600;">Step 1: Identify Delimiters & Transaction Type Column</h4>
-    
-    <div style="display: flex; flex-wrap: wrap; gap: 2rem; align-items: start; width: 100%;">
+    <div style="display: flex; flex-wrap: wrap; gap: 2rem; align-items: start; width: 100%; min-height: 380px;">
       <!-- Left Column: Delimiter details and Transaction Type column select -->
       <div style="flex: 1 1 350px; min-width: 0;">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label>Delimiter</label>
-            <select v-model="delimiter" class="form-control">
-              <option value=",">Comma (,)</option>
-              <option value=";">Semicolon (;)</option>
-              <option value="&#9;">Tab</option>
-            </select>
+          <div style="margin-bottom: 0;">
+            <CustomDropdown
+              v-model="delimiter"
+              :options="delimiterOptions"
+              :searchable="false"
+              placeholder="Choose delimiter..."
+              label="Delimiter"
+            />
           </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label>Decimal Separator</label>
-            <select v-model="decimalSeparator" class="form-control">
-              <option value=".">Dot (.)</option>
-              <option value=",">Comma (,)</option>
-            </select>
+          <div style="margin-bottom: 0;">
+            <CustomDropdown
+              v-model="decimalSeparator"
+              :options="decimalSeparatorOptions"
+              :searchable="false"
+              placeholder="Choose separator..."
+              label="Decimal Separator"
+            />
           </div>
         </div>
 
-        <div class="form-group" style="margin-bottom: 0;">
-          <label>Transaction Type Column</label>
-          <select v-model="operationTypeColumnIdx" class="form-control" @change="onColumnChange">
-            <option :value="null">-- Select Column --</option>
-            <option v-for="(h, idx) in importFileHeaders" :key="idx" :value="idx">{{ h }}</option>
-          </select>
+        <div style="margin-bottom: 0;">
+          <CustomDropdown
+            v-model="colIdxString"
+            :options="columnOptions"
+            :searchable="true"
+            :showClear="true"
+            clearLabel="-- Select Column --"
+            placeholder="-- Select Column --"
+            label="Transaction Type Column"
+          />
           <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
             Select the column in your CSV file that contains the transaction action type (e.g. "Buy", "Sell", "Dividend").
           </p>
@@ -69,17 +116,22 @@ const goToStep2 = () => {
           <h5 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.75rem;">
             Map File Actions to Database Transaction Types
           </h5>
-          <div style="display: flex; flex-direction: column; gap: 0.75rem; border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-sm); background-color: var(--bg-secondary); max-height: 250px; overflow-y: auto;">
-            <div v-for="val in uniqueOperationTypes" :key="val" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 1rem; align-items: center;">
-              <span style="font-size: 0.75rem; font-family: monospace; background-color: var(--bg-primary); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="val">
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-sm); background-color: var(--bg-secondary); max-height: 420px; overflow-y: auto;">
+            <div v-for="val in uniqueOperationTypes" :key="val" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.75rem; align-items: center;">
+              <span style="font-size: 0.75rem; font-family: monospace; background-color: var(--bg-primary); padding: 0.2rem 0.4rem; border-radius: var(--radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="val">
                 {{ val }}
               </span>
-              <select v-model="operationTypeMappings[val]" class="form-control" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; height: auto;">
-                <option value="">-- Choose DB Operation --</option>
-                <option v-for="opt in importFields.find(f => f.key === 'operation_type')?.enum_values || []" :key="opt" :value="opt">
-                  {{ opt }}
-                </option>
-              </select>
+              <div style="margin-bottom: 0;">
+                <CustomDropdown
+                  v-model="operationTypeMappings[val]"
+                  :options="dbOpOptions"
+                  :searchable="false"
+                  :showClear="true"
+                  :compact="true"
+                  clearLabel="-- Choose DB Operation --"
+                  placeholder="-- Choose DB Operation --"
+                />
+              </div>
             </div>
           </div>
         </div>

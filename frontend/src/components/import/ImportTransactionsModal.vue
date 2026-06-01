@@ -24,6 +24,7 @@ import {
   clearWizardConfig
 } from '../../services/import';
 import Step2ColumnMapping from './Step2ColumnMapping.vue';
+import CustomDropdown from './CustomDropdown.vue';
 
 const props = defineProps<{
   portfolio: {
@@ -94,6 +95,50 @@ const showExitConfirm = ref<boolean>(false);
 // Dirty state check
 const isDirty = computed(() => {
   return importFile.value !== null;
+});
+
+const selectedSchemaIdString = computed({
+  get() {
+    return selectedSchemaId.value !== null ? String(selectedSchemaId.value) : '';
+  },
+  set(val: string) {
+    if (val === '') {
+      selectedSchemaId.value = null;
+    } else {
+      selectedSchemaId.value = Number(val);
+    }
+    onSchemaSelect();
+  }
+});
+
+const schemaOptions = computed(() => {
+  const options = availableSchemas.value.map(schema => {
+    let rightLabel = schema.is_public ? 'Public' : 'Saved';
+    if (isSchemaIncomplete(schema)) {
+      rightLabel = 'Incomplete';
+    }
+    const rightBadgeClass = isSchemaIncomplete(schema)
+      ? 'bg-amber-50 text-amber-600'
+      : schema.is_public
+        ? 'bg-blue-50 text-blue-600'
+        : 'bg-emerald-50 text-emerald-600';
+
+    return {
+      value: String(schema.id),
+      label: schema.name,
+      rightLabel,
+      rightBadgeClass
+    };
+  });
+
+  options.push({
+    value: '-1',
+    label: 'Custom Mapping Template...',
+    rightLabel: 'Custom',
+    rightBadgeClass: 'bg-slate-100 text-slate-600'
+  });
+
+  return options;
 });
 
 const requestClose = () => {
@@ -485,7 +530,7 @@ onBeforeUnmount(() => {
           />
 
           <div v-else>
-            <div style="display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
+            <div v-if="!isCustomMapping || currentStep === 1" style="display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
               <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <Layers style="width: 16px; height: 16px; color: var(--accent-color);" />
                 <span style="font-weight: 600; font-size: 0.9rem;">{{ importFile.name }}</span>
@@ -497,14 +542,13 @@ onBeforeUnmount(() => {
             <div style="display: flex; flex-direction: column; gap: 1.5rem; width: 100%;">
               <div>
                 <!-- Template select -->
-                <div class="form-group" style="max-width: 400px;">
-                  <label for="templateSelect">Template Schema</label>
-                  <select v-model="selectedSchemaId" id="templateSelect" @change="onSchemaSelect" class="form-control">
-                    <option v-for="schema in availableSchemas" :key="schema.id" :value="schema.id">
-                      {{ schema.name }} {{ schema.is_public ? '(Public)' : '(Saved)' }} {{ isSchemaIncomplete(schema) ? '[Incomplete]' : '' }}
-                    </option>
-                    <option :value="-1">Custom Mapping Template...</option>
-                  </select>
+                <div v-if="!isCustomMapping || currentStep === 1" class="form-group" style="max-width: 400px; position: relative;">
+                  <CustomDropdown
+                    v-model="selectedSchemaIdString"
+                    :options="schemaOptions"
+                    placeholder="Select schema template..."
+                    label="Template Schema"
+                  />
                   <p v-if="autodetectedSchemaId && selectedSchemaId === autodetectedSchemaId" style="font-size: 0.75rem; color: var(--color-success); margin-top: 0.25rem; font-weight: 500;">
                     ✓ Autodetected format matching this file
                   </p>
