@@ -90,7 +90,8 @@ export function getWizardSetup(params: {
         scope: 'type',
         divisor: specific.divisor,
         multiplier: specific.multiplier,
-        enumMappings: specific.enumMappings
+        enumMappings: specific.enumMappings,
+        dateFormat: specific.dateFormat
       };
     } else {
       initialMapping = {
@@ -98,7 +99,8 @@ export function getWizardSetup(params: {
         scope: 'global',
         divisor: conf.global.divisor,
         multiplier: conf.global.multiplier,
-        enumMappings: conf.global.enumMappings
+        enumMappings: conf.global.enumMappings,
+        dateFormat: conf.global.dateFormat
       };
     }
   } else {
@@ -107,7 +109,8 @@ export function getWizardSetup(params: {
       scope: 'global',
       divisor: conf.global.divisor,
       multiplier: conf.global.multiplier,
-      enumMappings: conf.global.enumMappings
+      enumMappings: conf.global.enumMappings,
+      dateFormat: conf.global.dateFormat
     };
   }
 
@@ -129,6 +132,7 @@ export function saveWizardConfig(
     divisor?: number;
     multiplier?: number;
     enumMappings?: Record<string, string>;
+    dateFormat?: string;
   }
 ) {
   const conf = columnConfigMap[colIdx];
@@ -138,7 +142,8 @@ export function saveWizardConfig(
     dbKey: payload.dbKey,
     divisor: payload.divisor,
     multiplier: payload.multiplier,
-    enumMappings: payload.enumMappings
+    enumMappings: payload.enumMappings,
+    dateFormat: payload.dateFormat
   };
 
   if (payload.scope === 'global') {

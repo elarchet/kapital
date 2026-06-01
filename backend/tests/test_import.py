@@ -302,3 +302,54 @@ def test_get_import_metadata(client, session):
     executed_at_field = next(f for f in fields if f["key"] == "executed_at")
     assert executed_at_field["is_required"] is True
     assert executed_at_field["type"] == "datetime"
+
+
+def test_import_with_custom_date_format(session):
+    # Setup test portfolio and user
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+    session.refresh(user)
+    session.refresh(portfolio)
+
+    # Custom mapping config using custom date format
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "total_amount": "Total",
+            "currency": "Currency",
+            "quantity": "Qty",
+        },
+        "type_mappings": {
+            "buy": ["BUY"],
+        },
+        "date_formats": {
+            "executed_at": "%d/%m/%Y %H:%M:%S",
+        },
+    }
+
+    # CSV content with date format "01/06/2026 15:30:00" (June 1st, 2026)
+    csv_content = b"Type,Date,Asset,Total,Currency,Qty\nBUY,01/06/2026 15:30:00,Apple,150.0,USD,10\n"
+
+    summary = import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["operations_imported"] == 1
+    op = session.exec(select(Operation)).first()
+    assert op is not None
+    assert op.executed_at.year == 2026
+    assert op.executed_at.month == 6
+    assert op.executed_at.day == 1
+    assert op.executed_at.hour == 15
+    assert op.executed_at.minute == 30

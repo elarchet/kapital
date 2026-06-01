@@ -22,6 +22,7 @@ export function buildCustomMappingPayload(params: {
 }) {
   const transformations: Record<string, any> = {};
   const enum_mappings: Record<string, Record<string, string[]>> = {};
+  const date_formats: Record<string, any> = {};
 
   const dbKeyToCol = new Map<string, { global?: string; typeSpecific?: Record<string, string> }>();
 
@@ -45,6 +46,10 @@ export function buildCustomMappingPayload(params: {
           divisor: conf.global.divisor,
           multiplier: conf.global.multiplier
         };
+      }
+
+      if (conf.global.dateFormat && conf.global.dateFormat !== 'auto') {
+        date_formats[conf.global.dbKey] = conf.global.dateFormat;
       }
 
       if (conf.global.enumMappings) {
@@ -72,6 +77,13 @@ export function buildCustomMappingPayload(params: {
             divisor: specificConf.divisor,
             multiplier: specificConf.multiplier
           };
+        }
+
+        if (specificConf.dateFormat && specificConf.dateFormat !== 'auto') {
+          if (!date_formats[specificConf.dbKey]) {
+            date_formats[specificConf.dbKey] = {};
+          }
+          date_formats[specificConf.dbKey][opType] = specificConf.dateFormat;
         }
 
         if (specificConf.enumMappings) {
@@ -124,7 +136,8 @@ export function buildCustomMappingPayload(params: {
     columns: finalColumns,
     type_mappings,
     enum_mappings,
-    transformations
+    transformations,
+    date_formats
   };
 }
 
@@ -150,6 +163,7 @@ export function parseSchemaMappings(
   try {
     const mappings = JSON.parse(mappingsJson);
     const cols = mappings.columns || {};
+    const dateFormats = mappings.date_formats || {};
 
     // 1. Parse operation type column
     const opTypeHeader = cols.operation_type;
@@ -177,11 +191,22 @@ export function parseSchemaMappings(
       if (typeof val === 'string') {
         const idx = importFileHeaders.indexOf(val);
         if (idx >= 0) {
+          let globalDateFormat = 'auto';
+          const dfVal = dateFormats[dbKey];
+          if (dfVal) {
+            if (typeof dfVal === 'string') {
+              globalDateFormat = dfVal;
+            } else if (typeof dfVal === 'object') {
+              globalDateFormat = dfVal.global || 'auto';
+            }
+          }
+
           columnConfigMap[idx].global = {
             dbKey,
             divisor: mappings.transformations?.[dbKey]?.divisor,
             multiplier: mappings.transformations?.[dbKey]?.multiplier,
-            enumMappings: getEnumMappingsForField(dbKey, mappings)
+            enumMappings: getEnumMappingsForField(dbKey, mappings),
+            dateFormat: globalDateFormat
           };
         }
       } else if (val && typeof val === 'object') {
@@ -189,11 +214,22 @@ export function parseSchemaMappings(
         Object.entries(valObj).forEach(([opType, headerName]) => {
           const idx = importFileHeaders.indexOf(headerName);
           if (idx >= 0) {
+            let specDateFormat = 'auto';
+            const dfVal = dateFormats[dbKey];
+            if (dfVal) {
+              if (typeof dfVal === 'string') {
+                specDateFormat = dfVal;
+              } else if (typeof dfVal === 'object') {
+                specDateFormat = dfVal[opType] || dfVal.global || 'auto';
+              }
+            }
+
             const mapEntry = {
               dbKey,
               divisor: mappings.transformations?.[dbKey]?.[opType]?.divisor || mappings.transformations?.[dbKey]?.divisor,
               multiplier: mappings.transformations?.[dbKey]?.[opType]?.multiplier || mappings.transformations?.[dbKey]?.multiplier,
-              enumMappings: getEnumMappingsForField(dbKey, mappings)
+              enumMappings: getEnumMappingsForField(dbKey, mappings),
+              dateFormat: specDateFormat
             };
 
             if (opType === 'global') {

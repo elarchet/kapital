@@ -82,9 +82,15 @@ def parse_decimal_safe(val: str | None, decimal_sep: str = ".") -> Decimal | Non
         return None
 
 
-def parse_datetime_safe(val: str) -> datetime:
+def parse_datetime_safe(val: str, date_format: str | None = None) -> datetime:
     """Parse string timestamp dynamically supporting ISO and common formats."""
     cleaned = val.strip()
+    if date_format and date_format != "auto":
+        try:
+            return datetime.strptime(cleaned, date_format)  # noqa: DTZ007
+        except ValueError:
+            pass
+
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%fZ"):
         try:
             return datetime.strptime(cleaned, fmt)  # noqa: DTZ007
@@ -95,6 +101,15 @@ def parse_datetime_safe(val: str) -> datetime:
         return datetime.fromisoformat(cleaned)
     except ValueError:
         return datetime.now(UTC)
+
+
+def _get_date_format(date_formats: dict, db_key: str, op_type: str | None) -> str | None:
+    val = date_formats.get(db_key)
+    if isinstance(val, dict):
+        if op_type and op_type in val:
+            return val[op_type]
+        return val.get("global")
+    return val
 
 
 def _get_mapped_col(columns: dict, db_key: str, op_type: str | None) -> str | None:
@@ -147,6 +162,7 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     type_mappings = schema_mappings.get("type_mappings", {})
     scaling = schema_mappings.get("scaling", {})
     transformations = schema_mappings.get("transformations", {})
+    date_formats = schema_mappings.get("date_formats", {})
 
     # 2. Setup Default Institution and Financial Account
     institution_name = schema_mappings.get("institution_name", "Trading 212")
@@ -234,7 +250,8 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
         executed_at_str = row.get(_get_mapped_col(columns, "executed_at", op_type))
         if not executed_at_str:
             continue
-        executed_at = parse_datetime_safe(executed_at_str)
+        date_fmt = _get_date_format(date_formats, "executed_at", op_type)
+        executed_at = parse_datetime_safe(executed_at_str, date_fmt)
 
         quantity = parse_decimal_safe(row.get(_get_mapped_col(columns, "quantity", op_type)), decimal_separator)
         quantity = apply_transformation("quantity", quantity, op_type)

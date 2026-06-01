@@ -3,6 +3,7 @@ export interface ColMapping {
   divisor?: number;
   multiplier?: number;
   enumMappings?: Record<string, string>;
+  dateFormat?: string;
 }
 
 export interface RowError {

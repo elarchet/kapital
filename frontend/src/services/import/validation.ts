@@ -1,5 +1,50 @@
 import type { ColMapping, RowError } from './types';
 
+export function parseDateTimeWithFormat(val: string, format?: string): Date | null {
+  if (!val) return null;
+  const cleaned = val.trim();
+  if (!format || format === 'auto') {
+    const d = new Date(cleaned);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  try {
+    let regexStr = format
+      .replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') // escape regex chars
+      .replace('%Y', '(?<year>\\d{4})')
+      .replace('%m', '(?<month>\\d{1,2})')
+      .replace('%d', '(?<day>\\d{1,2})')
+      .replace('%H', '(?<hour>\\d{1,2})')
+      .replace('%M', '(?<minute>\\d{1,2})')
+      .replace('%S', '(?<second>\\d{1,2})');
+    
+    if (regexStr.endsWith('(?<second>\\d{1,2})')) {
+      regexStr += '(?<ms>\\.\\d+)?';
+    }
+
+    const regex = new RegExp(`^${regexStr}`);
+    const match = cleaned.match(regex);
+    if (match && match.groups) {
+      const year = parseInt(match.groups.year, 10);
+      const month = parseInt(match.groups.month, 10) - 1; // 0-based
+      const day = parseInt(match.groups.day, 10);
+      const hour = match.groups.hour ? parseInt(match.groups.hour, 10) : 0;
+      const minute = match.groups.minute ? parseInt(match.groups.minute, 10) : 0;
+      const second = match.groups.second ? parseInt(match.groups.second, 10) : 0;
+      
+      const d = new Date(year, month, day, hour, minute, second);
+      if (!isNaN(d.getTime())) {
+        return d;
+      }
+    }
+  } catch (err) {
+    console.error('Error parsing date with custom format:', err);
+  }
+
+  const fallback = new Date(cleaned);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
+
 export function getMappedColIdxForField(
   dbKey: string,
   opType: string,
@@ -105,8 +150,8 @@ export function validateLiveStats(params: {
             });
           }
         } else if (field.type === 'datetime') {
-          const parsedDate = new Date(val);
-          if (isNaN(parsedDate.getTime())) {
+          const parsedDate = parseDateTimeWithFormat(val, mappingConf?.dateFormat);
+          if (!parsedDate) {
             rowErrors.push({
               fieldKey: field.key,
               fieldLabel: field.label,

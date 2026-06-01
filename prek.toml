@@ -34,7 +34,7 @@ repo = "https://github.com/abravalheri/validate-pyproject"
 rev = "v0.25"
 [[repos.hooks]]
 id = "validate-pyproject"
-files = "^backend/"
+files = "^backend/pyproject\\.toml$"
 
 [[repos]]
 repo = "https://github.com/commitizen-tools/commitizen"

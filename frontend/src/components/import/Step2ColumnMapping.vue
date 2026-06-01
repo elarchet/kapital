@@ -28,14 +28,12 @@ const emit = defineEmits<{
 
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-      <h4 style="font-size: 0.95rem; font-weight: 600; margin: 0;">Step 2: Configure Column Mappings</h4>
-      <button @click="emit('back')" class="btn btn-sm">&larr; Back to Step 1</button>
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; margin-bottom: 1.25rem;">
+      <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0; flex: 1;">
+        Click on any cell in the table below to configure its database field mapping. You can configure mappings globally or specifically for each transaction type.
+      </p>
+      <button @click="emit('back')" class="btn btn-sm" style="flex-shrink: 0;">&larr; Back to Step 1</button>
     </div>
-
-    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1.25rem;">
-      Click on any cell in the table below to configure its database field mapping. You can configure mappings globally or specifically for each transaction type.
-    </p>
 
     <MappingExampleTable
       :importFileHeaders="importFileHeaders"

@@ -6,6 +6,8 @@ import DestinationFieldSelect from './DestinationFieldSelect.vue';
 import NumericTransformations from './NumericTransformations.vue';
 import EnumValueMapper from './EnumValueMapper.vue';
 import LiveConversionPreview from './LiveConversionPreview.vue';
+import DateFormatSelector from './DateFormatSelector.vue';
+import { parseDateTimeWithFormat } from '../../services/import/validation';
 
 const props = defineProps<{
   show: boolean;
@@ -28,6 +30,7 @@ const props = defineProps<{
     divisor?: number;
     multiplier?: number;
     enumMappings?: Record<string, string>;
+    dateFormat?: string;
   };
 }>();
 
@@ -40,6 +43,7 @@ const emit = defineEmits<{
     divisor?: number;
     multiplier?: number;
     enumMappings?: Record<string, string>;
+    dateFormat?: string;
   }): void;
 }>();
 
@@ -48,6 +52,7 @@ const selectedDbKey = ref('');
 const transformationType = ref<'none' | 'divisor' | 'multiplier'>('none');
 const transformationValue = ref<number | null>(null);
 const enumMappings = ref<Record<string, string>>({});
+const dateFormat = ref('auto');
 
 // Shake animation state
 const shouldShake = ref(false);
@@ -80,6 +85,10 @@ const isWizardDirty = computed(() => {
     if (currentVal !== initialVal) return true;
   }
 
+  // check date format
+  const initialDateFormat = initial?.dateFormat || 'auto';
+  if (dateFormat.value !== initialDateFormat) return true;
+
   return false;
 });
 
@@ -99,11 +108,13 @@ watch(() => props.show, (newVal) => {
         transformationValue.value = null;
       }
       enumMappings.value = { ...(props.initialMapping.enumMappings || {}) };
+      dateFormat.value = props.initialMapping.dateFormat || 'auto';
     } else {
       selectedDbKey.value = '';
       transformationType.value = 'none';
       transformationValue.value = null;
       enumMappings.value = {};
+      dateFormat.value = 'auto';
     }
     showExitConfirm.value = false;
   }
@@ -172,9 +183,9 @@ const liveConversion = computed(() => {
 
   if (fieldType === 'datetime') {
     const cleaned = rawVal.trim();
-    const parsedDate = new Date(cleaned);
-    if (isNaN(parsedDate.getTime())) {
-      return { success: false, error: `"${rawVal}" cannot be parsed as a valid timestamp.` };
+    const parsedDate = parseDateTimeWithFormat(cleaned, dateFormat.value);
+    if (!parsedDate) {
+      return { success: false, error: `"${rawVal}" cannot be parsed as a valid timestamp with format "${dateFormat.value}".` };
     }
     return { success: true, value: parsedDate.toISOString() };
   }
@@ -213,7 +224,8 @@ const handleSave = () => {
     scope: scope.value,
     divisor: transformationType.value === 'divisor' ? (transformationValue.value || undefined) : undefined,
     multiplier: transformationType.value === 'multiplier' ? (transformationValue.value || undefined) : undefined,
-    enumMappings: selectedField.value?.type === 'enum' ? enumMappings.value : undefined
+    enumMappings: selectedField.value?.type === 'enum' ? enumMappings.value : undefined,
+    dateFormat: selectedField.value?.type === 'datetime' ? dateFormat.value : undefined
   });
 };
 
@@ -317,8 +329,15 @@ onBeforeUnmount(() => {
             v-model:transformationValue="transformationValue"
           />
 
+          <!-- Date format options for datetime fields -->
+          <DateFormatSelector
+            v-if="selectedField.type === 'datetime'"
+            v-model:dateFormat="dateFormat"
+          />
+
           <!-- Enum Mapper for enum fields -->
           <EnumValueMapper
+            v-slot:default
             v-if="selectedField.type === 'enum'"
             :selectedField="selectedField"
             :uniqueCsvValues="uniqueCsvValues"
