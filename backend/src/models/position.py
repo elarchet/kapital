@@ -38,7 +38,7 @@ class Position(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     asset_type: AssetType = Field(nullable=False, index=True)
     ticker: str | None = Field(default=None, max_length=20, index=True)
-    name: str = Field(nullable=False, max_length=300)
+    name: str | None = Field(default=None, nullable=True, max_length=300)
     isin: str | None = Field(default=None, max_length=12, index=True)
     quantity: Decimal = Field(
         default=Decimal(0),

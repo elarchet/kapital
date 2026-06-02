@@ -11,7 +11,7 @@ from src.models.position import AssetType
 class PositionBase(BaseModel):
     asset_type: AssetType
     ticker: str | None = Field(default=None, max_length=20)
-    name: str = Field(max_length=300)
+    name: str | None = Field(default=None, max_length=300)
     isin: str | None = Field(default=None, max_length=12)
     quantity: Decimal = Field(default=Decimal("0.0"))
     currency: str = Field(default="EUR", max_length=3)

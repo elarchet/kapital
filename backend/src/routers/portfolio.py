@@ -100,7 +100,7 @@ def get_import_metadata(
             {
                 "key": "name",
                 "label": "Asset Name / Label",
-                "is_required": True,
+                "is_required": False,
                 "type": "string",
             },
             {
