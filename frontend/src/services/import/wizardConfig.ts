@@ -146,12 +146,16 @@ export function saveWizardConfig(
     dateFormat: payload.dateFormat
   };
 
-  if (payload.scope === 'global') {
-    conf.global = mapEntry;
-  } else {
-    if (opType) {
+  // Always save to typeSpecific when opType is provided; fall back to global only when explicitly absent
+  if (opType) {
+    if (payload.dbKey) {
       conf.typeSpecific[opType] = mapEntry;
+    } else {
+      // "Ignore column" — remove any existing type-specific mapping
+      delete conf.typeSpecific[opType];
     }
+  } else {
+    conf.global = mapEntry;
   }
 }
 

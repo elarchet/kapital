@@ -34,12 +34,12 @@ const emit = defineEmits<{
 
 // Selected cells for keyboard selection & actions
 const selectedCells = ref<Set<string>>(new Set());
-const lastSelectedCell = ref<{ colIdx: number; opType: string | null } | null>(null);
+const lastSelectedCell = ref<{ colIdx: number; opType: string } | null>(null);
 
 // Clipboard state for copy-pasting mappings
 const copiedMapping = ref<{
   colIdx: number;
-  opType: string | null;
+  opType: string;
   dbKey: string;
   divisor?: number;
   multiplier?: number;
@@ -50,26 +50,26 @@ const copiedMapping = ref<{
 // Cell flashing state for visual shortcut feedback
 const recentlyFlashed = ref<Record<string, string>>({}); // cellKey -> CSS class
 
-const flashCell = (colIdx: number, opType: string | null, flashClass: string) => {
-  const key = `${colIdx}-${opType || 'global'}`;
+const flashCell = (colIdx: number, opType: string, flashClass: string) => {
+  const key = `${colIdx}-${opType}`;
   recentlyFlashed.value[key] = flashClass;
   setTimeout(() => {
     delete recentlyFlashed.value[key];
   }, 1000);
 };
 
-const isSelected = (colIdx: number, opType: string | null): boolean => {
-  const key = `${colIdx}-${opType || 'global'}`;
+const isSelected = (colIdx: number, opType: string): boolean => {
+  const key = `${colIdx}-${opType}`;
   return selectedCells.value.has(key);
 };
 
-const isCopiedSource = (colIdx: number, opType: string | null): boolean => {
+const isCopiedSource = (colIdx: number, opType: string): boolean => {
   return copiedMapping.value !== null &&
          copiedMapping.value.colIdx === colIdx &&
          copiedMapping.value.opType === opType;
 };
 
-const getCellOutlineStyle = (colIdx: number, opType: string | null) => {
+const getCellOutlineStyle = (colIdx: number, opType: string) => {
   if (isSelected(colIdx, opType)) {
     return '2px solid var(--accent-color)';
   }
@@ -79,8 +79,8 @@ const getCellOutlineStyle = (colIdx: number, opType: string | null) => {
   return undefined;
 };
 
-const selectCell = (colIdx: number, opType: string | null, multiSelect: boolean) => {
-  const key = `${colIdx}-${opType || 'global'}`;
+const selectCell = (colIdx: number, opType: string, multiSelect: boolean) => {
+  const key = `${colIdx}-${opType}`;
   if (multiSelect) {
     if (selectedCells.value.has(key)) {
       selectedCells.value.delete(key);
@@ -88,7 +88,7 @@ const selectCell = (colIdx: number, opType: string | null, multiSelect: boolean)
         const remaining = Array.from(selectedCells.value);
         if (remaining.length > 0) {
           const [c, o] = remaining[remaining.length - 1].split('-');
-          lastSelectedCell.value = { colIdx: parseInt(c), opType: o === 'global' ? null : o };
+          lastSelectedCell.value = { colIdx: parseInt(c), opType: o };
         } else {
           lastSelectedCell.value = null;
         }
@@ -104,11 +104,29 @@ const selectCell = (colIdx: number, opType: string | null, multiSelect: boolean)
   }
 };
 
-const getFirstSelectedCell = (): { colIdx: number; opType: string | null } | null => {
+const selectColumn = (colIdx: number) => {
+  if (colIdx === props.operationTypeColumnIdx) return;
+
+  selectedCells.value.clear();
+  props.exampleTransactions.forEach(example => {
+    selectedCells.value.add(`${colIdx}-${example.opType}`);
+  });
+  if (props.exampleTransactions.length > 0) {
+    const firstOpType = props.exampleTransactions[0].opType;
+    lastSelectedCell.value = { colIdx, opType: firstOpType };
+    nextTick(() => {
+      const selector = `#cell-${firstOpType}-${colIdx}`;
+      const el = document.querySelector(selector) as HTMLTableCellElement;
+      if (el) el.focus();
+    });
+  }
+};
+
+const getFirstSelectedCell = (): { colIdx: number; opType: string } | null => {
   const firstKey = Array.from(selectedCells.value)[0];
   if (!firstKey) return null;
   const [c, o] = firstKey.split('-');
-  return { colIdx: parseInt(c), opType: o === 'global' ? null : o };
+  return { colIdx: parseInt(c), opType: o };
 };
 
 const openWizardForSelected = () => {
@@ -119,7 +137,7 @@ const openWizardForSelected = () => {
 
   const targets = Array.from(selectedCells.value).map(key => {
     const [c, o] = key.split('-');
-    return { colIdx: parseInt(c), opType: o === 'global' ? null : o };
+    return { colIdx: parseInt(c), opType: o };
   });
 
   emit('open-wizard', {
@@ -129,7 +147,7 @@ const openWizardForSelected = () => {
   });
 };
 
-const handleCellClick = (colIdx: number, opType: string | null, event: MouseEvent) => {
+const handleCellClick = (colIdx: number, opType: string, event: MouseEvent) => {
   if (colIdx === props.operationTypeColumnIdx) return;
 
   const isCtrl = event.ctrlKey || event.metaKey;
@@ -144,16 +162,11 @@ const handleCellClick = (colIdx: number, opType: string | null, event: MouseEven
   }
 };
 
-const copyMapping = (colIdx: number, opType: string | null) => {
+const copyMapping = (colIdx: number, opType: string) => {
   const conf = props.columnConfigMap[colIdx];
   if (!conf) return;
 
-  let mappingToCopy: any = null;
-  if (opType) {
-    mappingToCopy = conf.typeSpecific[opType]?.dbKey ? conf.typeSpecific[opType] : conf.global;
-  } else {
-    mappingToCopy = conf.global;
-  }
+  const mappingToCopy = conf.typeSpecific[opType];
 
   if (mappingToCopy && mappingToCopy.dbKey) {
     copiedMapping.value = {
@@ -169,7 +182,7 @@ const copyMapping = (colIdx: number, opType: string | null) => {
   }
 };
 
-const canPaste = (colIdx: number, opType: string | null): boolean => {
+const canPaste = (colIdx: number, opType: string): boolean => {
   if (!copiedMapping.value) return false;
   if (colIdx === props.operationTypeColumnIdx) return false;
   if (copiedMapping.value.colIdx === colIdx && copiedMapping.value.opType === opType) return false;
@@ -182,7 +195,7 @@ const pasteMappingToSelected = () => {
   selectedCells.value.forEach(key => {
     const [cStr, oStr] = key.split('-');
     const targetColIdx = parseInt(cStr);
-    const targetOpType = oStr === 'global' ? null : oStr;
+    const targetOpType = oStr;
 
     if (canPaste(targetColIdx, targetOpType)) {
       emit('update-mapping', {
@@ -207,7 +220,7 @@ const clearMappingForSelected = () => {
   selectedCells.value.forEach(key => {
     const [cStr, oStr] = key.split('-');
     const targetColIdx = parseInt(cStr);
-    const targetOpType = oStr === 'global' ? null : oStr;
+    const targetOpType = oStr;
 
     emit('update-mapping', {
       colIdx: targetColIdx,
@@ -226,10 +239,8 @@ const navigateGrid = (key: string) => {
   const opType = primary.opType;
 
   // Find current row index
-  let rowIdx = -1; // -1 is global mapping row
-  if (opType !== null) {
-    rowIdx = props.exampleTransactions.findIndex(e => e.opType === opType);
-  }
+  const rowIdx = props.exampleTransactions.findIndex(e => e.opType === opType);
+  if (rowIdx === -1) return;
 
   const numCols = props.importFileHeaders.length;
   const numRows = props.exampleTransactions.length;
@@ -249,23 +260,21 @@ const navigateGrid = (key: string) => {
     } while (nextCol === props.operationTypeColumnIdx);
   } else if (key === 'ArrowUp') {
     nextRowIdx = rowIdx - 1;
-    if (nextRowIdx < -1) nextRowIdx = numRows - 1;
+    if (nextRowIdx < 0) nextRowIdx = numRows - 1;
   } else if (key === 'ArrowDown') {
     nextRowIdx = rowIdx + 1;
-    if (nextRowIdx >= numRows) nextRowIdx = -1;
+    if (nextRowIdx >= numRows) nextRowIdx = 0;
   }
 
-  const nextOpType = nextRowIdx === -1 ? null : props.exampleTransactions[nextRowIdx].opType;
+  const nextOpType = props.exampleTransactions[nextRowIdx].opType;
 
   selectedCells.value.clear();
-  const nextKey = `${nextCol}-${nextOpType || 'global'}`;
+  const nextKey = `${nextCol}-${nextOpType}`;
   selectedCells.value.add(nextKey);
   lastSelectedCell.value = { colIdx: nextCol, opType: nextOpType };
 
   nextTick(() => {
-    const selector = nextOpType === null 
-      ? `#cell-global-${nextCol}` 
-      : `#cell-${nextOpType}-${nextCol}`;
+    const selector = `#cell-${nextOpType}-${nextCol}`;
     const el = document.querySelector(selector) as HTMLTableCellElement;
     if (el) el.focus();
   });
@@ -314,37 +323,10 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown);
 });
 
-const getColumnMappingLabel = (colIdx: number) => {
-  if (colIdx === props.operationTypeColumnIdx) {
-    return 'Action / Type';
-  }
-
-  const conf = props.columnConfigMap[colIdx];
-  if (!conf) return '-- Unmapped --';
-
-  const resolvedKeys = new Set<string>();
-  props.activeDbOpTypes.forEach(opType => {
-    const key = conf.typeSpecific[opType]?.dbKey || conf.global.dbKey || '';
-    resolvedKeys.add(key);
-  });
-
-  if (resolvedKeys.size > 1) {
-    return '(Type-Specific)';
-  }
-
-  const singleKey = Array.from(resolvedKeys)[0];
-  if (!singleKey) {
-    return '-- Unmapped --';
-  }
-
-  const field = props.importFields.find(f => f.key === singleKey);
-  return field ? field.label : '-- Unmapped --';
-};
-
 const getResolvedKeyForCell = (colIdx: number, opType: string) => {
   const conf = props.columnConfigMap[colIdx];
   if (!conf) return '';
-  return conf.typeSpecific[opType]?.dbKey || conf.global.dbKey || '';
+  return conf.typeSpecific[opType]?.dbKey || '';
 };
 
 const prevExampleForType = (opType: string) => {
@@ -365,7 +347,17 @@ const nextExampleForType = (opType: string) => {
             <th style="min-width: 180px; background-color: var(--bg-tertiary); font-weight: 700; color: var(--text-secondary); text-align: center;">
               Context & Stats
             </th>
-            <th v-for="(h, idx) in importFileHeaders" :key="idx" style="min-width: 180px; padding: 0.75rem; vertical-align: top;">
+            <th 
+              v-for="(h, idx) in importFileHeaders" 
+              :key="idx"
+              @click="selectColumn(idx)"
+              @dblclick="idx !== operationTypeColumnIdx ? (selectColumn(idx), openWizardForSelected()) : null"
+              :style="{ cursor: idx !== operationTypeColumnIdx ? 'pointer' : 'default' }"
+              :class="[
+                idx !== operationTypeColumnIdx ? 'hover:bg-slate-50 dark:hover:bg-slate-800/40 select-none' : ''
+              ]"
+              style="min-width: 180px; padding: 0.75rem; vertical-align: top; transition: background-color 0.15s ease;"
+            >
               <div style="font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="h">
                 {{ h }}
               </div>
@@ -373,41 +365,6 @@ const nextExampleForType = (opType: string) => {
           </tr>
         </thead>
         <tbody>
-          <!-- Global Mapping row -->
-          <tr style="background-color: var(--accent-light);">
-            <td style="font-weight: 700; color: var(--accent-color); font-size: 0.75rem; text-align: center; vertical-align: middle;">
-              Global Mapping
-            </td>
-            <td 
-              v-for="(_, idx) in importFileHeaders" 
-              :key="idx" 
-              :id="`cell-global-${idx}`"
-              :tabindex="idx !== operationTypeColumnIdx ? 0 : -1"
-              @click="idx !== operationTypeColumnIdx ? handleCellClick(idx, null, $event) : null" 
-              @dblclick="idx !== operationTypeColumnIdx ? openWizardForSelected() : null"
-              :style="{ 
-                cursor: idx !== operationTypeColumnIdx ? 'pointer' : 'default',
-                outline: getCellOutlineStyle(idx, null),
-                outlineOffset: '-2px'
-              }" 
-              :class="[
-                idx !== operationTypeColumnIdx ? 'group focus:outline-none focus:bg-slate-100/50 dark:focus:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-150' : '',
-                recentlyFlashed[`${idx}-global`] || ''
-              ]"
-              style="font-size: 0.75rem; font-weight: 600; text-align: center; vertical-align: middle; position: relative;"
-            >
-              <div v-if="getColumnMappingLabel(idx) === '(Type-Specific)'" style="color: var(--text-secondary); font-style: italic; font-size: 0.7rem; font-weight: bold;">
-                (Type-Specific)
-              </div>
-              <div v-else-if="getColumnMappingLabel(idx) !== '-- Unmapped --'" style="display: inline-flex; align-items: center; gap: 0.25rem; background-color: var(--accent-color); color: white; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.75rem;">
-                {{ getColumnMappingLabel(idx) }}
-                <span v-if="columnConfigMap[idx]?.global?.divisor" style="font-size: 0.6rem; opacity: 0.9;">(/{{ columnConfigMap[idx].global.divisor }})</span>
-                <span v-if="columnConfigMap[idx]?.global?.multiplier" style="font-size: 0.6rem; opacity: 0.9;">(*{{ columnConfigMap[idx].global.multiplier }})</span>
-              </div>
-              <span v-else style="color: var(--text-tertiary); font-weight: normal;">-- Unmapped --</span>
-            </td>
-          </tr>
-
           <!-- Example rows per type -->
           <tr v-for="example in exampleTransactions" :key="example.opType">
             <td style="vertical-align: middle; text-align: left; padding: 0.35rem 0.5rem;">
@@ -455,8 +412,8 @@ const nextExampleForType = (opType: string) => {
                 <span style="font-family: monospace; font-size: 0.75rem; color: var(--text-secondary);">
                   {{ cell || '—' }}
                 </span>
-                <div v-if="getColumnMappingLabel(idx) === '(Type-Specific)' && getResolvedKeyForCell(idx, example.opType)" style="font-size: 0.65rem; color: var(--accent-color); font-weight: 600;">
-                  → {{ importFields.find(f => f.key === getResolvedKeyForCell(idx, example.opType))?.label }}
+                <div v-if="getResolvedKeyForCell(idx, example.opType)" style="font-size: 0.65rem; color: var(--accent-color); font-weight: 600; margin-top: 0.1rem;">
+                  → {{ importFields.find(f => f.key === getResolvedKeyForCell(idx, example.opType))?.label || getResolvedKeyForCell(idx, example.opType) }}
                 </div>
               </div>
             </td>

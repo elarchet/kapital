@@ -31,7 +31,7 @@ const emit = defineEmits<{
   <div>
     <div style="display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; margin-bottom: 1.25rem;">
       <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0; flex: 1;">
-        Click on any cell in the table below to configure its database field mapping. You can configure mappings globally or specifically for each transaction type.
+        Click on any cell or column header to configure database field mappings for transaction types.
       </p>
       <button @click="emit('back')" class="btn btn-sm" style="flex-shrink: 0;">&larr; Back to Step 1</button>
     </div>
