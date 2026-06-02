@@ -140,6 +140,12 @@ def get_import_metadata(
                 "type": "numeric",
             },
             {
+                "key": "price_currency",
+                "label": "Price Currency",
+                "is_required": False,
+                "type": "string",
+            },
+            {
                 "key": "transaction_id",
                 "label": "Transaction ID",
                 "is_required": False,

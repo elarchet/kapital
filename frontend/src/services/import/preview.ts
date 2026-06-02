@@ -56,6 +56,7 @@ export function parsePreviewRows(params: {
 
     const rawQty = getMappedVal('quantity');
     const rawPrice = getMappedVal('unit_price');
+    const rawPriceCurrency = getMappedVal('price_currency');
     const rawTotal = getMappedVal('total_amount');
     const rawCurrency = getMappedVal('currency');
 
@@ -65,6 +66,7 @@ export function parsePreviewRows(params: {
     if (rawTotal) parsedTotal = applyTrans('total_amount', rawTotal);
 
     const displayCurrency = rawCurrency || 'EUR';
+    const displayPriceCurrency = rawPriceCurrency || displayCurrency;
 
     const feesList: string[] = [];
     const feeAmtVal = getMappedVal('fee_amount');
@@ -97,6 +99,7 @@ export function parsePreviewRows(params: {
       isin,
       quantity: rawQty ? applyTrans('quantity', rawQty) : '',
       price: parsedPrice,
+      priceCurrency: displayPriceCurrency,
       total: parsedTotal,
       currency: displayCurrency,
       fees: feesList.join(', ') || 'None',

@@ -49,6 +49,7 @@ def fixture_engine():
                 "transaction_id": "ID",
                 "quantity": "No. of shares",
                 "unit_price": "Price / share",
+                "price_currency": "Currency (Price / share)",
                 "currency": "Currency (Total)",
                 "total_amount": "Total",
                 "exchange_rate": "Exchange rate",
@@ -231,6 +232,10 @@ def test_import_portfolio_transactions(session):  # noqa: PLR0915
     conversion_fee = next(f for f in brk_buy_op.fees if f.fee_type == FeeType.CONVERSION)
     assert conversion_fee.amount == Decimal("0.54")
     assert conversion_fee.currency == "EUR"
+    assert brk_buy_op.price_currency == "USD"
+    assert brk_buy_op.currency == "EUR"
+    assert brk_buy_op.source_currency == "EUR"
+    assert brk_buy_op.target_currency == "USD"
 
     # 3. Check cash positions are created and updated correctly
     cash_eur = session.exec(

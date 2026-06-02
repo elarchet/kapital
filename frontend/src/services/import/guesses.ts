@@ -23,6 +23,7 @@ export function prepopulateFieldGuesses(
     name: ['name', 'description', 'company'],
     quantity: ['shares', 'qty', 'quantity', 'number of shares', 'no. of shares'],
     unit_price: ['price', 'unit price', 'price / share'],
+    price_currency: ['price currency', 'price_currency'],
     total_amount: ['total', 'amount'],
     currency: ['currency'],
     executed_at: ['time', 'date', 'timestamp'],

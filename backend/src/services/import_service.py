@@ -270,6 +270,9 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             factor = Decimal(str(scaling["unit_price"][price_currency]))
             if unit_price:
                 unit_price *= factor
+            # Change currency symbol if scaled
+            if price_currency == "GBX":
+                price_currency = "GBP"
         if currency in scaling.get("total_amount", {}):
             factor = Decimal(str(scaling["total_amount"][currency]))
             total_amount *= factor
@@ -430,6 +433,10 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 target_currency = currency
             if not exchange_rate:
                 exchange_rate = Decimal("1.0")
+        # Factorized conversion fields for other operation types
+        elif price_currency and price_currency != currency:
+            source_currency = currency
+            target_currency = price_currency
 
         parsed_operations.append(
             {
@@ -439,6 +446,7 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 "name": name,
                 "quantity": quantity,
                 "unit_price": unit_price,
+                "price_currency": price_currency,
                 "total_amount": total_amount,
                 "currency": currency,
                 "executed_at": executed_at,
@@ -611,6 +619,7 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             operation_type=op_info["op_type"],
             quantity=op_info["quantity"],
             unit_price=op_info["unit_price"],
+            price_currency=op_info.get("price_currency"),
             total_amount=op_info["total_amount"],
             currency=op_info["currency"],
             executed_at=op_info["executed_at"],

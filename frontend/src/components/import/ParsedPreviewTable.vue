@@ -9,6 +9,7 @@ defineProps<{
     isin: string;
     quantity: string;
     price: string;
+    priceCurrency: string;
     total: string;
     currency: string;
     fees: string;
@@ -60,7 +61,7 @@ defineProps<{
               </span>
             </td>
             <td style="font-family: monospace;">{{ row.quantity }}</td>
-            <td style="font-family: monospace;">{{ row.price }} {{ row.currency }}</td>
+            <td style="font-family: monospace;">{{ row.price }} {{ row.priceCurrency }}</td>
             <td style="font-family: monospace; font-weight: 600;">{{ row.total }} {{ row.currency }}</td>
             <td>
               <span style="color: var(--text-secondary);">{{ row.fees }}</span>

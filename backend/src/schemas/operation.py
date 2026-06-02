@@ -13,6 +13,7 @@ class OperationBase(BaseModel):
     operation_type: str = Field(max_length=30)
     quantity: Decimal | None = None
     unit_price: Decimal | None = None
+    price_currency: str | None = Field(default=None, max_length=3)
     total_amount: Decimal
     currency: str = Field(default="EUR", max_length=3)
     executed_at: datetime
@@ -77,6 +78,7 @@ class OperationCreate(OperationBase):
 class OperationUpdate(BaseModel):
     quantity: Decimal | None = None
     unit_price: Decimal | None = None
+    price_currency: str | None = Field(default=None, max_length=3)
     total_amount: Decimal | None = None
     currency: str | None = Field(default=None, max_length=3)
     executed_at: datetime | None = None

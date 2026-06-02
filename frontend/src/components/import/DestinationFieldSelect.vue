@@ -20,10 +20,10 @@ const isFieldRelevant = (fieldKey: string, opType: string) => {
   if (universal.includes(fieldKey)) return true;
 
   if (opType === 'buy' || opType === 'sell' || opType === 'limit_buy' || opType === 'limit_sell') {
-    return ['ticker', 'isin', 'quantity', 'unit_price', 'fee_amount', 'fee_currency', 'fee_type', 'tax_amount', 'tax_currency', 'limit_price'].includes(fieldKey);
+    return ['ticker', 'isin', 'quantity', 'unit_price', 'price_currency', 'fee_amount', 'fee_currency', 'fee_type', 'tax_amount', 'tax_currency', 'limit_price'].includes(fieldKey);
   }
   if (opType === 'dividend') {
-    return ['ticker', 'isin', 'unit_price', 'tax_amount', 'tax_currency'].includes(fieldKey);
+    return ['ticker', 'isin', 'unit_price', 'price_currency', 'tax_amount', 'tax_currency'].includes(fieldKey);
   }
   if (opType === 'interest') {
     return [];

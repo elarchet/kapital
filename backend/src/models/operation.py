@@ -57,6 +57,11 @@ class Operation(SABase):
         Numeric(precision=20, scale=8),
         nullable=True,
     )
+    price_currency: Mapped[str | None] = mapped_column(
+        String(3),
+        nullable=True,
+        default=None,
+    )
     total_amount: Mapped[Decimal] = mapped_column(
         Numeric(precision=20, scale=8),
         nullable=False,
@@ -74,6 +79,16 @@ class Operation(SABase):
     transaction_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     exchange_rate: Mapped[Decimal | None] = mapped_column(
         Numeric(precision=20, scale=10),
+        nullable=True,
+        default=None,
+    )
+    source_currency: Mapped[str | None] = mapped_column(
+        String(3),
+        nullable=True,
+        default=None,
+    )
+    target_currency: Mapped[str | None] = mapped_column(
+        String(3),
         nullable=True,
         default=None,
     )
@@ -288,18 +303,6 @@ class FxRateChangeOperation(Operation):
     __mapper_args__: ClassVar[dict[str, object]] = {
         "polymorphic_identity": "fx_rate_change",
     }
-
-    source_currency: Mapped[str | None] = mapped_column(
-        String(3),
-        nullable=True,
-        default=None,
-    )
-    target_currency: Mapped[str | None] = mapped_column(
-        String(3),
-        nullable=True,
-        default=None,
-    )
-    # Inherited exchange_rate
 
 
 class ExpenseOperation(Operation):
