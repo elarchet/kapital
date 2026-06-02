@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlmodel import Session
 
 from src.auth import get_current_user
@@ -18,7 +18,14 @@ from src.services.import_service import autodetect_schema
 router = APIRouter(prefix="/import-file-schemas", tags=["import-file-schemas"])
 
 
-@router.post("/", response_model=ImportFileSchemaRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ImportFileSchemaRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+    },
+)
 def create_import_file_schema(
     schema_in: ImportFileSchemaCreate,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -46,12 +53,18 @@ def create_import_file_schema(
     return db_obj
 
 
-@router.get("/", response_model=list[ImportFileSchemaRead])
+@router.get(
+    "/",
+    response_model=list[ImportFileSchemaRead],
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+    },
+)
 def read_import_file_schemas(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
-    skip: int = 0,
-    limit: int = 100,
+    skip: Annotated[int, Query(ge=0, description="Number of schemas to skip")] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max number of schemas to return")] = 100,
 ) -> list[ImportFileSchema]:
     """Retrieve all available import file schemas (public + current user's)."""
     if current_user.id is None:
@@ -67,9 +80,16 @@ def read_import_file_schemas(
     )
 
 
-@router.get("/{schema_id}", response_model=ImportFileSchemaRead)
+@router.get(
+    "/{schema_id}",
+    response_model=ImportFileSchemaRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Import schema not found or not owned by user."},
+    },
+)
 def read_import_file_schema(
-    schema_id: int,
+    schema_id: Annotated[int, Path(description="The ID of the import file schema to retrieve")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> ImportFileSchema:
@@ -92,9 +112,16 @@ def read_import_file_schema(
     return schema
 
 
-@router.delete("/{schema_id}", response_model=ImportFileSchemaRead)
+@router.delete(
+    "/{schema_id}",
+    response_model=ImportFileSchemaRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Import schema not found or deletion permission denied."},
+    },
+)
 def delete_import_file_schema(
-    schema_id: int,
+    schema_id: Annotated[int, Path(description="The ID of the import file schema to delete")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> ImportFileSchema:
@@ -114,9 +141,14 @@ def delete_import_file_schema(
     return schema
 
 
-@router.post("/detect")
+@router.post(
+    "/detect",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+    },
+)
 def detect_schema_endpoint(
-    headers: list[str],
+    headers: Annotated[list[str], Body(description="List of CSV column headers to match against existing schemas")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> dict[str, int | None]:

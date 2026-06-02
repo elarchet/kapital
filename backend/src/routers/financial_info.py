@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from src.auth import get_current_user
 from src.models.user import User
@@ -25,12 +25,21 @@ def get_financial_info_service() -> FinancialInfoService:
     return _financial_info_service
 
 
-@router.get("/profile/{ticker}", response_model=TickerProfile)
+@router.get(
+    "/profile/{ticker}",
+    response_model=TickerProfile,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Failed to fetch profile information."},
+    },
+)
 async def get_profile(
-    ticker: str,
+    ticker: Annotated[str, Path(description="The ticker symbol to fetch (e.g. AAPL)")],
     current_user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001
     service: Annotated[FinancialInfoService, Depends(get_financial_info_service)],
-    provider: FinancialProviderName = FinancialProviderName.YFINANCE,
+    provider: Annotated[
+        FinancialProviderName,
+        Query(description="Financial provider source"),
+    ] = FinancialProviderName.YFINANCE,
 ) -> TickerProfile:
     """Fetch company metadata profile for a ticker symbol."""
     try:
@@ -42,12 +51,21 @@ async def get_profile(
         ) from e
 
 
-@router.get("/quote/{ticker}", response_model=TickerQuote)
+@router.get(
+    "/quote/{ticker}",
+    response_model=TickerQuote,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Failed to fetch stock quote."},
+    },
+)
 async def get_quote(
-    ticker: str,
+    ticker: Annotated[str, Path(description="The ticker symbol to fetch (e.g. AAPL)")],
     current_user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001
     service: Annotated[FinancialInfoService, Depends(get_financial_info_service)],
-    provider: FinancialProviderName = FinancialProviderName.YFINANCE,
+    provider: Annotated[
+        FinancialProviderName,
+        Query(description="Financial provider source"),
+    ] = FinancialProviderName.YFINANCE,
 ) -> TickerQuote:
     """Fetch real-time ticker quote."""
     try:
@@ -59,14 +77,23 @@ async def get_quote(
         ) from e
 
 
-@router.get("/history/{ticker}", response_model=list[HistoricalPrice])
+@router.get(
+    "/history/{ticker}",
+    response_model=list[HistoricalPrice],
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Failed to fetch historical prices."},
+    },
+)
 async def get_history(
-    ticker: str,
+    ticker: Annotated[str, Path(description="The ticker symbol to fetch (e.g. AAPL)")],
     current_user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001
     service: Annotated[FinancialInfoService, Depends(get_financial_info_service)],
-    period: str = "1mo",
-    interval: str = "1d",
-    provider: FinancialProviderName = FinancialProviderName.YFINANCE,
+    period: Annotated[str, Query(description="Historical period (e.g. 1mo, 1y)")] = "1mo",
+    interval: Annotated[str, Query(description="Data points interval (e.g. 1d, 1wk)")] = "1d",
+    provider: Annotated[
+        FinancialProviderName,
+        Query(description="Financial provider source"),
+    ] = FinancialProviderName.YFINANCE,
 ) -> list[HistoricalPrice]:
     """Fetch historical price points for chart visualization."""
     try:
@@ -78,12 +105,21 @@ async def get_history(
         ) from e
 
 
-@router.get("/financials/{ticker}", response_model=FinancialsReport)
+@router.get(
+    "/financials/{ticker}",
+    response_model=FinancialsReport,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Failed to fetch financials statements."},
+    },
+)
 async def get_financials(
-    ticker: str,
+    ticker: Annotated[str, Path(description="The ticker symbol to fetch (e.g. AAPL)")],
     current_user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001
     service: Annotated[FinancialInfoService, Depends(get_financial_info_service)],
-    provider: FinancialProviderName = FinancialProviderName.YFINANCE,
+    provider: Annotated[
+        FinancialProviderName,
+        Query(description="Financial provider source"),
+    ] = FinancialProviderName.YFINANCE,
 ) -> FinancialsReport:
     """Fetch fundamental financial statements (income statement, balance sheet, cashflow)."""
     try:

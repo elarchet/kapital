@@ -19,12 +19,12 @@ class OAuth2PasswordRequestFormEmail:
 
     def __init__(
         self,
-        grant_type: str = Form(default=None, pattern="password"),
-        username: str = Form(description="The registered email address of the user."),
-        password: str = Form(),
-        scope: str = Form(default=""),
-        client_id: str | None = Form(default=None),
-        client_secret: str | None = Form(default=None),
+        grant_type: Annotated[str | None, Form(pattern="password")] = None,
+        username: Annotated[str, Form(description="Registered email address.")] = "",
+        password: Annotated[str, Form(description="The user password.")] = "",
+        scope: Annotated[str, Form(description="Space-separated scope string.")] = "",
+        client_id: Annotated[str | None, Form(description="Optional client ID.")] = None,
+        client_secret: Annotated[str | None, Form(description="Optional client secret.")] = None,
     ) -> None:
         self.grant_type = grant_type
         self.username = username
@@ -34,7 +34,14 @@ class OAuth2PasswordRequestFormEmail:
         self.client_secret = client_secret
 
 
-@router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "A user with this email address already exists."},
+    },
+)
 def register_user(
     user_in: UserCreate,
     db: Annotated[Session, Depends(get_session)],
@@ -49,7 +56,12 @@ def register_user(
     return user_crud.create(db, obj_in=user_in)
 
 
-@router.post("/token")
+@router.post(
+    "/token",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"description": "Incorrect email or password."},
+    },
+)
 def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestFormEmail, Depends()],
     db: Annotated[Session, Depends(get_session)],
@@ -70,7 +82,13 @@ def login_for_access_token(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@router.get("/me", response_model=UserRead)
+@router.get(
+    "/me",
+    response_model=UserRead,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"description": "Could not validate credentials or user inactive."},
+    },
+)
 def read_user_me(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> User:

@@ -313,7 +313,7 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
         "financial_account_id": account.id,
     }
     response = client.post("/api/operations/", json=limit_buy_bad_payload, headers=h)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 3. Successful Limit Buy Operation with limit_price
     limit_buy_good_payload = limit_buy_bad_payload.copy()

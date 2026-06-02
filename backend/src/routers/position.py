@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlmodel import Session, select
 
 from src.auth import get_current_user
@@ -16,7 +16,15 @@ from src.schemas.position import PositionCreate, PositionRead, PositionUpdate
 router = APIRouter(prefix="/positions", tags=["positions"])
 
 
-@router.post("/", response_model=PositionRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=PositionRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Parent portfolio not found or not owned by user."},
+    },
+)
 def create_position(
     position_in: PositionCreate,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -38,13 +46,20 @@ def create_position(
     return position_crud.create(db, obj_in=position_in)
 
 
-@router.get("/", response_model=list[PositionRead])
+@router.get(
+    "/",
+    response_model=list[PositionRead],
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Filtered portfolio not found or not owned by user."},
+    },
+)
 def read_positions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
-    portfolio_id: int | None = None,
-    skip: int = 0,
-    limit: int = 100,
+    portfolio_id: Annotated[int | None, Query(description="Filter positions by a specific portfolio ID")] = None,
+    skip: Annotated[int, Query(ge=0, description="Number of positions to skip")] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max number of positions to return")] = 100,
 ) -> list[Position]:
     """Retrieve all active positions belonging to the user.
 
@@ -82,9 +97,16 @@ def read_positions(
     return list(db.exec(statement).all())
 
 
-@router.get("/{position_id}", response_model=PositionRead)
+@router.get(
+    "/{position_id}",
+    response_model=PositionRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Position not found."},
+    },
+)
 def read_position(
-    position_id: int,
+    position_id: Annotated[int, Path(description="The ID of the position to retrieve")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> Position:
@@ -97,15 +119,22 @@ def read_position(
     position = position_crud.get_by_owner(db, id=position_id, user_id=current_user.id)
     if not position:
         raise HTTPException(
-            status_code=status.HTTP_440_NOT_FOUND if False else status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail="Position not found.",
         )
     return position
 
 
-@router.put("/{position_id}", response_model=PositionRead)
+@router.put(
+    "/{position_id}",
+    response_model=PositionRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Position or new portfolio not found."},
+    },
+)
 def update_position(
-    position_id: int,
+    position_id: Annotated[int, Path(description="The ID of the position to update")],
     position_in: PositionUpdate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
@@ -133,9 +162,16 @@ def update_position(
     return position_crud.update(db, db_obj=position, obj_in=position_in)
 
 
-@router.delete("/{position_id}", response_model=PositionRead)
+@router.delete(
+    "/{position_id}",
+    response_model=PositionRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Position not found."},
+    },
+)
 def delete_position(
-    position_id: int,
+    position_id: Annotated[int, Path(description="The ID of the position to delete")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> Position:

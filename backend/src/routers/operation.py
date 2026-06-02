@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlmodel import Session, select
 
 from src.auth import get_current_user
@@ -17,7 +17,15 @@ from src.schemas.operation import OperationCreate, OperationRead, OperationUpdat
 router = APIRouter(prefix="/operations", tags=["operations"])
 
 
-@router.post("/", response_model=OperationRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=OperationRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Linked position or financial account not found."},
+    },
+)
 def create_operation(
     operation_in: OperationCreate,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -49,13 +57,20 @@ def create_operation(
     return operation_crud.create(db, obj_in=operation_in)
 
 
-@router.get("/", response_model=list[OperationRead])
+@router.get(
+    "/",
+    response_model=list[OperationRead],
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Filtered position not found or not owned by user."},
+    },
+)
 def read_operations(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
-    position_id: int | None = None,
-    skip: int = 0,
-    limit: int = 100,
+    position_id: Annotated[int | None, Query(description="Filter operations by a specific position ID")] = None,
+    skip: Annotated[int, Query(ge=0, description="Number of operations to skip")] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max number of operations to return")] = 100,
 ) -> list[Operation]:
     """Retrieve active operations, optionally filtered by position_id."""
     if current_user.id is None:
@@ -91,9 +106,16 @@ def read_operations(
     return list(db.execute(statement).scalars().all())
 
 
-@router.get("/{operation_id}", response_model=OperationRead)
+@router.get(
+    "/{operation_id}",
+    response_model=OperationRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Operation not found."},
+    },
+)
 def read_operation(
-    operation_id: int,
+    operation_id: Annotated[int, Path(description="The ID of the operation to retrieve")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> Operation:
@@ -112,9 +134,16 @@ def read_operation(
     return operation
 
 
-@router.put("/{operation_id}", response_model=OperationRead)
+@router.put(
+    "/{operation_id}",
+    response_model=OperationRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Operation not found."},
+    },
+)
 def update_operation(
-    operation_id: int,
+    operation_id: Annotated[int, Path(description="The ID of the operation to update")],
     operation_in: OperationUpdate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
@@ -134,9 +163,16 @@ def update_operation(
     return operation_crud.update(db, db_obj=operation, obj_in=operation_in)
 
 
-@router.delete("/{operation_id}", response_model=OperationRead)
+@router.delete(
+    "/{operation_id}",
+    response_model=OperationRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Operation not found."},
+    },
+)
 def delete_operation(
-    operation_id: int,
+    operation_id: Annotated[int, Path(description="The ID of the operation to delete")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> Operation:

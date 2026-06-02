@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, UploadFile, status
 from sqlmodel import Session
 
 from src.auth import get_current_user
@@ -17,7 +17,14 @@ from src.services.import_service import ImportSummary
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
 
 
-@router.post("/", response_model=PortfolioRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=PortfolioRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+    },
+)
 def create_portfolio(
     portfolio_in: PortfolioCreate,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -33,12 +40,18 @@ def create_portfolio(
     return portfolio_crud.create_with_owner(db, obj_in=portfolio_in, user_id=current_user.id)
 
 
-@router.get("/", response_model=list[PortfolioRead])
+@router.get(
+    "/",
+    response_model=list[PortfolioRead],
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+    },
+)
 def read_portfolios(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
-    skip: int = 0,
-    limit: int = 100,
+    skip: Annotated[int, Query(ge=0, description="Number of portfolios to skip")] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max number of portfolios to return")] = 100,
 ) -> list[Portfolio]:
     """Retrieve all active portfolios belonging to the authenticated user."""
     if current_user.id is None:
@@ -197,9 +210,16 @@ def get_import_metadata(
     }
 
 
-@router.get("/{portfolio_id}", response_model=PortfolioRead)
+@router.get(
+    "/{portfolio_id}",
+    response_model=PortfolioRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."},
+    },
+)
 def read_portfolio(
-    portfolio_id: int,
+    portfolio_id: Annotated[int, Path(description="The ID of the portfolio to retrieve")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> Portfolio:
@@ -218,9 +238,16 @@ def read_portfolio(
     return portfolio
 
 
-@router.put("/{portfolio_id}", response_model=PortfolioRead)
+@router.put(
+    "/{portfolio_id}",
+    response_model=PortfolioRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."},
+    },
+)
 def update_portfolio(
-    portfolio_id: int,
+    portfolio_id: Annotated[int, Path(description="The ID of the portfolio to update")],
     portfolio_in: PortfolioUpdate,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
@@ -240,9 +267,16 @@ def update_portfolio(
     return portfolio_crud.update(db, db_obj=portfolio, obj_in=portfolio_in)
 
 
-@router.delete("/{portfolio_id}", response_model=PortfolioRead)
+@router.delete(
+    "/{portfolio_id}",
+    response_model=PortfolioRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found."},
+    },
+)
 def delete_portfolio(
-    portfolio_id: int,
+    portfolio_id: Annotated[int, Path(description="The ID of the portfolio to delete")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
 ) -> Portfolio:
@@ -263,14 +297,26 @@ def delete_portfolio(
     return portfolio
 
 
-@router.post("/{portfolio_id}/import", status_code=status.HTTP_200_OK)
+@router.post(
+    "/{portfolio_id}/import",
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "User lacks valid identifier or custom schema JSON is invalid.",
+        },
+        status.HTTP_404_NOT_FOUND: {"description": "Portfolio not found or not owned by user."},
+    },
+)
 async def import_portfolio_positions(
-    portfolio_id: int,
+    portfolio_id: Annotated[int, Path(description="ID of the portfolio to import positions to")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
-    file: Annotated[UploadFile, File(...)],
-    schema_id: Annotated[int | None, Form()] = None,
-    custom_schema_config: Annotated[str | None, Form()] = None,
+    file: Annotated[UploadFile, File(description="CSV/Excel file containing position operations data")],
+    schema_id: Annotated[int | None, Form(description="Schema ID to use for mappings")] = None,
+    custom_schema_config: Annotated[
+        str | None,
+        Form(description="JSON string of custom schema mappings"),
+    ] = None,
 ) -> ImportSummary:
     """Import positions and operations into a portfolio using a file and schema template."""
     if current_user.id is None:

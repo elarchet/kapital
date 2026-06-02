@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlmodel import Session
 
 from src.auth import get_current_user
@@ -23,7 +23,14 @@ router = APIRouter(
 )
 
 
-@router.post("/", response_model=FinancialAccountRead, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=FinancialAccountRead,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Linked financial institution does not exist."},
+    },
+)
 def create_financial_account(
     account_in: FinancialAccountCreate,
     db: Annotated[Session, Depends(get_session)],
@@ -41,16 +48,22 @@ def create_financial_account(
 @router.get("/", response_model=list[FinancialAccountRead])
 def read_financial_accounts(
     db: Annotated[Session, Depends(get_session)],
-    skip: int = 0,
-    limit: int = 100,
+    skip: Annotated[int, Query(ge=0, description="Number of financial accounts to skip")] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max number of financial accounts to return")] = 100,
 ) -> list[FinancialAccount]:
     """Retrieve list of active financial accounts."""
     return financial_account_crud.get_multi(db, skip=skip, limit=limit)
 
 
-@router.get("/{account_id}", response_model=FinancialAccountRead)
+@router.get(
+    "/{account_id}",
+    response_model=FinancialAccountRead,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Financial account not found."},
+    },
+)
 def read_financial_account(
-    account_id: int,
+    account_id: Annotated[int, Path(description="The ID of the financial account to retrieve")],
     db: Annotated[Session, Depends(get_session)],
 ) -> FinancialAccount:
     """Retrieve details of a specific financial account."""
@@ -63,9 +76,15 @@ def read_financial_account(
     return account
 
 
-@router.put("/{account_id}", response_model=FinancialAccountRead)
+@router.put(
+    "/{account_id}",
+    response_model=FinancialAccountRead,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Financial account or new institution not found."},
+    },
+)
 def update_financial_account(
-    account_id: int,
+    account_id: Annotated[int, Path(description="The ID of the financial account to update")],
     account_in: FinancialAccountUpdate,
     db: Annotated[Session, Depends(get_session)],
 ) -> FinancialAccount:
@@ -86,9 +105,15 @@ def update_financial_account(
     return financial_account_crud.update(db, db_obj=account, obj_in=account_in)
 
 
-@router.delete("/{account_id}", response_model=FinancialAccountRead)
+@router.delete(
+    "/{account_id}",
+    response_model=FinancialAccountRead,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Financial account not found."},
+    },
+)
 def delete_financial_account(
-    account_id: int,
+    account_id: Annotated[int, Path(description="The ID of the financial account to delete")],
     db: Annotated[Session, Depends(get_session)],
 ) -> FinancialAccount:
     """Soft delete a specific financial account."""

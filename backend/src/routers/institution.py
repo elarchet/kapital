@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlmodel import Session
 
 from src.auth import get_current_user
@@ -31,16 +31,22 @@ def create_institution(
 @router.get("/", response_model=list[InstitutionRead])
 def read_institutions(
     db: Annotated[Session, Depends(get_session)],
-    skip: int = 0,
-    limit: int = 100,
+    skip: Annotated[int, Query(ge=0, description="Number of institutions to skip")] = 0,
+    limit: Annotated[int, Query(ge=1, le=1000, description="Max number of institutions to return")] = 100,
 ) -> list[Institution]:
     """Retrieve list of active master financial institutions."""
     return institution_crud.get_multi(db, skip=skip, limit=limit)
 
 
-@router.get("/{institution_id}", response_model=InstitutionRead)
+@router.get(
+    "/{institution_id}",
+    response_model=InstitutionRead,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Institution not found."},
+    },
+)
 def read_institution(
-    institution_id: int,
+    institution_id: Annotated[int, Path(description="The ID of the institution to retrieve")],
     db: Annotated[Session, Depends(get_session)],
 ) -> Institution:
     """Retrieve details of a specific financial institution."""
@@ -53,9 +59,15 @@ def read_institution(
     return institution
 
 
-@router.put("/{institution_id}", response_model=InstitutionRead)
+@router.put(
+    "/{institution_id}",
+    response_model=InstitutionRead,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Institution not found."},
+    },
+)
 def update_institution(
-    institution_id: int,
+    institution_id: Annotated[int, Path(description="The ID of the institution to update")],
     institution_in: InstitutionUpdate,
     db: Annotated[Session, Depends(get_session)],
 ) -> Institution:
@@ -69,9 +81,15 @@ def update_institution(
     return institution_crud.update(db, db_obj=institution, obj_in=institution_in)
 
 
-@router.delete("/{institution_id}", response_model=InstitutionRead)
+@router.delete(
+    "/{institution_id}",
+    response_model=InstitutionRead,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Institution not found."},
+    },
+)
 def delete_institution(
-    institution_id: int,
+    institution_id: Annotated[int, Path(description="The ID of the institution to delete")],
     db: Annotated[Session, Depends(get_session)],
 ) -> Institution:
     """Soft delete a specific financial institution."""
