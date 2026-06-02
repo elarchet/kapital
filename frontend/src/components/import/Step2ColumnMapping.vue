@@ -20,9 +20,10 @@ const emit = defineEmits<{
   (e: 'update:saveMappingTemplate', val: boolean): void;
   (e: 'update:mappingTemplateName', val: string): void;
   (e: 'back'): void;
-  (e: 'open-wizard', payload: { colIdx: number; opType: string | null }): void;
+  (e: 'open-wizard', payload: { colIdx: number; opType: string | null; targets?: Array<{ colIdx: number; opType: string | null }> }): void;
   (e: 'prev-example', opType: string): void;
   (e: 'next-example', opType: string): void;
+  (e: 'update-mapping', payload: { colIdx: number; opType: string | null; mapping: any }): void;
 }>();
 </script>
 
@@ -46,6 +47,7 @@ const emit = defineEmits<{
       @open-wizard="(payload) => emit('open-wizard', payload)"
       @prev-example="(opType) => emit('prev-example', opType)"
       @next-example="(opType) => emit('next-example', opType)"
+      @update-mapping="(payload) => emit('update-mapping', payload)"
     />
 
     <!-- Verification Panel -->

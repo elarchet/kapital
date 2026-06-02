@@ -90,6 +90,7 @@ const wizardActiveOpType = ref('');
 const wizardColIdx = ref<number | null>(null);
 const wizardUniqueValues = ref<string[]>([]);
 const wizardInitialMapping = ref<any>(null);
+const wizardTargetCells = ref<Array<{ colIdx: number; opType: string | null }>>([]);
 
 // Custom exit confirmation state
 const showExitConfirm = ref<boolean>(false);
@@ -366,10 +367,11 @@ const goToStep2 = () => {
   currentStep.value = 2;
 };
 
-const openWizard = (colIdx: number, opType: string | null) => {
+const openWizard = (colIdx: number, opType: string | null, targets?: Array<{ colIdx: number; opType: string | null }>) => {
   if (colIdx === operationTypeColumnIdx.value) return; // Already configured in Step 1
   wizardColIdx.value = colIdx;
   wizardActiveOpType.value = opType || '';
+  wizardTargetCells.value = targets && targets.length > 0 ? targets : [{ colIdx, opType }];
 
   const setup = getWizardSetup({
     colIdx,
@@ -380,7 +382,12 @@ const openWizard = (colIdx: number, opType: string | null) => {
     columnConfigMap: columnConfigMap.value
   });
 
-  wizardCsvHeaderName.value = setup.csvHeaderName;
+  if (targets && targets.length > 1) {
+    wizardCsvHeaderName.value = `${setup.csvHeaderName} (+ ${targets.length - 1} other columns)`;
+  } else {
+    wizardCsvHeaderName.value = setup.csvHeaderName;
+  }
+  
   wizardExampleValue.value = setup.exampleValue;
   wizardUniqueValues.value = setup.uniqueValues;
   wizardInitialMapping.value = setup.initialMapping;
@@ -389,17 +396,39 @@ const openWizard = (colIdx: number, opType: string | null) => {
 };
 
 const handleWizardSave = (payload: any) => {
-  if (wizardColIdx.value !== null) {
-    saveWizardConfig(columnConfigMap.value, wizardColIdx.value, wizardActiveOpType.value || null, payload);
+  if (wizardTargetCells.value.length > 0) {
+    wizardTargetCells.value.forEach(target => {
+      saveWizardConfig(columnConfigMap.value, target.colIdx, target.opType, {
+        ...payload,
+        scope: target.opType ? 'type' : 'global'
+      });
+    });
   }
   isWizardOpen.value = false;
 };
 
 const handleWizardClear = () => {
-  if (wizardColIdx.value !== null) {
-    clearWizardConfig(columnConfigMap.value, wizardColIdx.value, wizardActiveOpType.value || null);
+  if (wizardTargetCells.value.length > 0) {
+    wizardTargetCells.value.forEach(target => {
+      clearWizardConfig(columnConfigMap.value, target.colIdx, target.opType);
+    });
   }
   isWizardOpen.value = false;
+};
+
+const handleUpdateMapping = ({ colIdx, opType, mapping }: { colIdx: number; opType: string | null; mapping: any }) => {
+  if (mapping === null) {
+    clearWizardConfig(columnConfigMap.value, colIdx, opType);
+  } else {
+    saveWizardConfig(columnConfigMap.value, colIdx, opType, {
+      dbKey: mapping.dbKey,
+      scope: opType ? 'type' : 'global',
+      divisor: mapping.divisor,
+      multiplier: mapping.multiplier,
+      enumMappings: mapping.enumMappings,
+      dateFormat: mapping.dateFormat
+    });
+  }
 };
 
 const validationErrors = computed(() => {
@@ -690,9 +719,10 @@ onBeforeUnmount(() => {
                     :liveValidationStats="liveValidationStats"
                     :validationErrors="validationErrors"
                     @back="currentStep = 1"
-                    @open-wizard="({ colIdx, opType }) => openWizard(colIdx, opType)"
+                    @open-wizard="({ colIdx, opType, targets }) => openWizard(colIdx, opType, targets)"
                     @prev-example="prevExampleForType"
                     @next-example="nextExampleForType"
+                    @update-mapping="handleUpdateMapping"
                   />
                 </div>
               </div>
