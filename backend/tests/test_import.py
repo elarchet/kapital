@@ -358,3 +358,80 @@ def test_import_with_custom_date_format(session):
     assert op.executed_at.day == 1
     assert op.executed_at.hour == 15
     assert op.executed_at.minute == 30
+
+
+def test_update_import_file_schema(client, session):
+    # Create two users
+    user1 = cast("User", UserFactory(email="user1@example.com"))
+    user2 = cast("User", UserFactory(email="user2@example.com"))
+    session.commit()
+    session.refresh(user1)
+    session.refresh(user2)
+
+    # Authenticate user 1
+    response = client.post(
+        "/api/auth/token",
+        data={"username": "user1@example.com", "password": "SeedP@ss1!"},
+    )
+    assert response.status_code == 200
+    token1 = response.json()["access_token"]
+    headers1 = {"Authorization": f"Bearer {token1}"}
+
+    # Create a template owned by user 1
+    schema1 = ImportFileSchema(
+        name="User 1 Template",
+        is_public=False,
+        delimiter=",",
+        decimal_separator=".",
+        mappings="{}",
+        user_id=user1.id,
+    )
+    # Create a template owned by user 2
+    schema2 = ImportFileSchema(
+        name="User 2 Template",
+        is_public=False,
+        delimiter=";",
+        decimal_separator=",",
+        mappings="{}",
+        user_id=user2.id,
+    )
+    session.add(schema1)
+    session.add(schema2)
+    session.commit()
+    session.refresh(schema1)
+    session.refresh(schema2)
+
+    # 1. User 1 updates their own template
+    update_data = {
+        "name": "User 1 Template Updated",
+        "delimiter": ";",
+        "is_incomplete": True,
+    }
+    response = client.put(
+        f"/api/import-file-schemas/{schema1.id}",
+        json=update_data,
+        headers=headers1,
+    )
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["name"] == "User 1 Template Updated"
+    assert updated["delimiter"] == ";"
+    assert updated["is_incomplete"] is True
+
+    # 2. User 1 tries to update User 2's template
+    response = client.put(
+        f"/api/import-file-schemas/{schema2.id}",
+        json={"name": "Stolen Template"},
+        headers=headers1,
+    )
+    assert response.status_code == 404
+
+    # 3. User 1 tries to update a public template
+    public_schema = session.exec(select(ImportFileSchema).where(ImportFileSchema.is_public)).first()
+    assert public_schema is not None
+    response = client.put(
+        f"/api/import-file-schemas/{public_schema.id}",
+        json={"name": "Malicious public edit"},
+        headers=headers1,
+    )
+    assert response.status_code == 404

@@ -12,6 +12,7 @@ from src.models import ImportFileSchema, User
 from src.schemas import (
     ImportFileSchemaCreate,
     ImportFileSchemaRead,
+    ImportFileSchemaUpdate,
 )
 from src.services.import_service import autodetect_schema
 
@@ -160,3 +161,32 @@ def detect_schema_endpoint(
         )
     best_id = autodetect_schema(db, headers=headers, user_id=current_user.id)
     return {"schema_id": best_id}
+
+
+@router.put(
+    "/{schema_id}",
+    response_model=ImportFileSchemaRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Import schema not found or you do not have permission to edit it."},
+    },
+)
+def update_import_file_schema(
+    schema_id: Annotated[int, Path(description="The ID of the import file schema to update")],
+    schema_in: ImportFileSchemaUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_session)],
+) -> ImportFileSchema:
+    """Update an existing import file schema template owned by the current user."""
+    if current_user.id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user record lacks a valid identifier.",
+        )
+    schema = db.get(ImportFileSchema, schema_id)
+    if not schema or schema.user_id != current_user.id or not schema.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Import schema not found or you do not have permission to edit it.",
+        )
+    return import_file_schema_crud.update(db, db_obj=schema, obj_in=schema_in)
