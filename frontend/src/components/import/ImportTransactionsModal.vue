@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../../services/api';
-import { Layers, Loader } from '@lucide/vue';
+import { Layers, Loader, Trash2 } from '@lucide/vue';
 import ColumnMappingWizard from './ColumnMappingWizard.vue';
+import OverwriteTemplateConfirmModal from './OverwriteTemplateConfirmModal.vue';
+import DeleteTemplateConfirmModal from './DeleteTemplateConfirmModal.vue';
 import DiscardChangesConfirmModal from './DiscardChangesConfirmModal.vue';
 import ImportSuccessSummary from './ImportSuccessSummary.vue';
 import CSVUploadZone from './CSVUploadZone.vue';
@@ -91,6 +93,45 @@ const wizardInitialMapping = ref<any>(null);
 
 // Custom exit confirmation state
 const showExitConfirm = ref<boolean>(false);
+
+// Overwrite and Delete template states
+const showOverwriteConfirm = ref(false);
+const hasConfirmedOverwrite = ref(false);
+const showDeleteConfirm = ref(false);
+const isDeletingSchema = ref(false);
+
+const selectedSchema = computed(() => {
+  if (selectedSchemaId.value === null || selectedSchemaId.value === -1) return null;
+  return availableSchemas.value.find(s => s.id === selectedSchemaId.value) || null;
+});
+
+const promptDeleteTemplate = () => {
+  if (selectedSchema.value && !selectedSchema.value.is_public) {
+    showDeleteConfirm.value = true;
+  }
+};
+
+const handleDeleteTemplate = async () => {
+  if (!selectedSchema.value || selectedSchema.value.is_public) return;
+  isDeletingSchema.value = true;
+  importError.value = '';
+  try {
+    await api.deleteImportFileSchema(selectedSchema.value.id);
+    selectedSchemaId.value = null;
+    showDeleteConfirm.value = false;
+    await loadSchemas();
+  } catch (err: any) {
+    importError.value = err.message || 'Failed to delete template.';
+  } finally {
+    isDeletingSchema.value = false;
+  }
+};
+
+const onConfirmOverwrite = () => {
+  showOverwriteConfirm.value = false;
+  hasConfirmedOverwrite.value = true;
+  handleImport();
+};
 
 // Dirty state check
 const isDirty = computed(() => {
@@ -408,19 +449,52 @@ const handleImport = async () => {
   try {
     let finalSchemaId = selectedSchemaId.value;
 
+    if (isCustomMapping.value && saveMappingTemplate.value && mappingTemplateName.value.trim()) {
+      // Check if a template with this name already exists
+      const existingSchema = availableSchemas.value.find(
+        s => s.name.trim().toLowerCase() === mappingTemplateName.value.trim().toLowerCase()
+      );
+
+      if (existingSchema) {
+        if (existingSchema.is_public || existingSchema.user_id === null) {
+          throw new Error(`A public template named "${existingSchema.name}" already exists. Please choose a unique name.`);
+        }
+
+        if (!hasConfirmedOverwrite.value) {
+          showOverwriteConfirm.value = true;
+          isImporting.value = false;
+          return;
+        }
+      }
+    }
+
+    // Reset the confirmation flag for future runs
+    const overwriteConfirmed = hasConfirmedOverwrite.value;
+    hasConfirmedOverwrite.value = false;
+
     if (isCustomMapping.value) {
       if (!isValidCustomMapping.value) {
         if (saveMappingTemplate.value && mappingTemplateName.value.trim()) {
           const mappingConfig = buildCustomMappingPayload();
-
-          await api.createImportFileSchema({
+          const templateData = {
             name: mappingTemplateName.value.trim(),
             is_public: false,
             delimiter: importDelimiter.value,
             decimal_separator: importDecimalSep.value,
             mappings: JSON.stringify(mappingConfig),
             is_incomplete: true,
-          });
+          };
+
+          if (overwriteConfirmed) {
+            const existingSchema = availableSchemas.value.find(
+              s => s.name.trim().toLowerCase() === mappingTemplateName.value.trim().toLowerCase()
+            );
+            if (existingSchema) {
+              await api.updateImportFileSchema(existingSchema.id, templateData);
+            }
+          } else {
+            await api.createImportFileSchema(templateData);
+          }
           
           importSuccessSummary.value = {
             positions_created: 0,
@@ -438,15 +512,29 @@ const handleImport = async () => {
       const mappingConfig = buildCustomMappingPayload();
 
       if (saveMappingTemplate.value && mappingTemplateName.value.trim()) {
-        const newSchema = await api.createImportFileSchema({
+        const templateData = {
           name: mappingTemplateName.value.trim(),
           is_public: false,
           delimiter: importDelimiter.value,
           decimal_separator: importDecimalSep.value,
           mappings: JSON.stringify(mappingConfig),
           is_incomplete: false,
-        });
-        finalSchemaId = newSchema.id;
+        };
+
+        let savedSchema;
+        if (overwriteConfirmed) {
+          const existingSchema = availableSchemas.value.find(
+            s => s.name.trim().toLowerCase() === mappingTemplateName.value.trim().toLowerCase()
+          );
+          if (existingSchema) {
+            savedSchema = await api.updateImportFileSchema(existingSchema.id, templateData);
+          } else {
+            savedSchema = await api.createImportFileSchema(templateData);
+          }
+        } else {
+          savedSchema = await api.createImportFileSchema(templateData);
+        }
+        finalSchemaId = savedSchema.id;
       } else {
         const res = await api.importPositions(
           props.portfolio.id,
@@ -542,13 +630,29 @@ onBeforeUnmount(() => {
             <div style="display: flex; flex-direction: column; gap: 1.5rem; width: 100%;">
               <div>
                 <!-- Template select -->
-                <div v-if="!isCustomMapping || currentStep === 1" class="form-group" style="max-width: 400px; position: relative;">
-                  <CustomDropdown
-                    v-model="selectedSchemaIdString"
-                    :options="schemaOptions"
-                    placeholder="Select schema template..."
-                    label="Template Schema"
-                  />
+                <div v-if="!isCustomMapping || currentStep === 1" class="form-group" style="max-width: 450px;">
+                  <label>Template Schema</label>
+                  <div style="display: flex; gap: 0.5rem; align-items: stretch; margin-bottom: 0.25rem;">
+                    <div style="flex: 1; min-width: 0;">
+                      <CustomDropdown
+                        v-model="selectedSchemaIdString"
+                        :options="schemaOptions"
+                        placeholder="Select schema template..."
+                        label=""
+                        style="margin-bottom: 0;"
+                      />
+                    </div>
+                    <button
+                      v-if="selectedSchema && !selectedSchema.is_public"
+                      @click="promptDeleteTemplate"
+                      type="button"
+                      class="btn"
+                      title="Delete this template"
+                      style="padding: 0 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--border-color); background-color: var(--bg-secondary);"
+                    >
+                      <Trash2 style="width: 16px; height: 16px; color: var(--color-danger);" />
+                    </button>
+                  </div>
                   <p v-if="autodetectedSchemaId && selectedSchemaId === autodetectedSchemaId" style="font-size: 0.75rem; color: var(--color-success); margin-top: 0.25rem; font-weight: 500;">
                     ✓ Autodetected format matching this file
                   </p>
@@ -661,6 +765,22 @@ onBeforeUnmount(() => {
     @close="isWizardOpen = false"
     @clear="handleWizardClear"
     @save="handleWizardSave"
+  />
+
+  <!-- Overwrite template warning popup -->
+  <OverwriteTemplateConfirmModal
+    :show="showOverwriteConfirm"
+    :templateName="mappingTemplateName"
+    @cancel="showOverwriteConfirm = false"
+    @confirm="onConfirmOverwrite"
+  />
+
+  <!-- Delete template warning popup -->
+  <DeleteTemplateConfirmModal
+    :show="showDeleteConfirm"
+    :templateName="selectedSchema ? selectedSchema.name : ''"
+    @cancel="showDeleteConfirm = false"
+    @confirm="handleDeleteTemplate"
   />
 </template>
 
