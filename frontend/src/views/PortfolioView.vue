@@ -6,6 +6,7 @@ import Sidebar from '../components/Sidebar.vue';
 import AddPositionButton from '../components/AddPositionButton.vue';
 import CreatePositionModal from '../components/CreatePositionModal.vue';
 import ImportTransactionsModal from '../components/import/ImportTransactionsModal.vue';
+import BaseConfirmModal from '../components/BaseConfirmModal.vue';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -97,11 +98,18 @@ const handleDeletePosition = async (id: number) => {
   }
 };
 
-const handleDeletePortfolio = async () => {
+const showDeletePortfolioConfirm = ref(false);
+
+const handleDeletePortfolio = () => {
   if (!portfolio.value) return;
-  if (!confirm(`Are you sure you want to delete the portfolio "${portfolio.value.name}"?\nAll associated positions will also be removed.`)) return;
+  showDeletePortfolioConfirm.value = true;
+};
+
+const confirmDeletePortfolio = async () => {
+  if (!portfolio.value) return;
   try {
     await store.deletePortfolio(portfolioId.value);
+    showDeletePortfolioConfirm.value = false;
     router.push('/');
   } catch (err: any) {
     alert(err.message || 'Failed to delete portfolio.');
@@ -307,6 +315,19 @@ const handleDeletePortfolio = async () => {
           :portfolio="portfolio" 
           @close="showImportModal = false" 
           @success="store.fetchAllData" 
+        />
+
+        <!-- Delete Portfolio/Strategy Confirmation Modal -->
+        <BaseConfirmModal
+          :show="showDeletePortfolioConfirm"
+          title="Delete Strategy?"
+          :message="`Are you sure you want to delete the strategy folder '${portfolio ? portfolio.name : ''}'? All associated positions will also be permanently removed.`"
+          confirmText="Delete Strategy"
+          cancelText="Cancel"
+          variant="danger"
+          defaultAction="cancel"
+          @cancel="showDeletePortfolioConfirm = false"
+          @confirm="confirmDeletePortfolio"
         />
       </template>
     </main>
