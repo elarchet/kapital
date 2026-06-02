@@ -195,6 +195,20 @@ export const api = {
     });
   },
 
+  async updateImportFileSchema(id: number, data: Partial<{
+    name: string;
+    is_public: boolean;
+    delimiter: string;
+    decimal_separator: string;
+    mappings: string;
+    is_incomplete?: boolean;
+  }>): Promise<any> {
+    return request<any>(`/api/import-file-schemas/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
   async deleteImportFileSchema(id: number): Promise<any> {
     return request<any>(`/api/import-file-schemas/${id}`, {
       method: 'DELETE',
