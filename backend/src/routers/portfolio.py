@@ -212,6 +212,23 @@ def get_import_metadata(
                 "is_required": False,
                 "type": "string",
             },
+            {
+                "key": "interest_type",
+                "label": "Interest Type",
+                "is_required": False,
+                "type": "enum",
+                "enum_values": [
+                    "cash_interest",
+                    "cashback",
+                    "lending_interest",
+                    "bond_interest",
+                    "savings_interest",
+                    "margin_interest",
+                    "staking_rewards",
+                    "peer_to_peer_interest",
+                    "other",
+                ],
+            },
         ],
     }
 

@@ -6,6 +6,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.models import InterestType
 from src.schemas.fee import FeeCreate, FeeRead
 
 
@@ -33,6 +34,7 @@ class OperationBase(BaseModel):
     transaction_id: str | None = Field(default=None, max_length=100)
     merchant_name: str | None = Field(default=None, max_length=200)
     merchant_category: str | None = Field(default=None, max_length=100)
+    interest_type: InterestType | None = None
 
 
 class OperationCreate(OperationBase):
@@ -71,6 +73,8 @@ class OperationCreate(OperationBase):
             raise ValueError(
                 "source_currency, target_currency, and exchange_rate are all required for 'fx_rate_change'",
             )
+        elif op_type == "interest" and self.interest_type is None:
+            self.interest_type = InterestType.CASH_INTEREST
 
         return self
 
@@ -97,6 +101,7 @@ class OperationUpdate(BaseModel):
     transaction_id: str | None = Field(default=None, max_length=100)
     merchant_name: str | None = Field(default=None, max_length=200)
     merchant_category: str | None = Field(default=None, max_length=100)
+    interest_type: InterestType | None = None
     fees: list[FeeCreate] | None = None
 
 

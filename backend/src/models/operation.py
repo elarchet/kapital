@@ -13,10 +13,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar
 
 from sqlalchemy import (
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Numeric,
@@ -235,10 +237,30 @@ class TaxOperation(Operation):
     )
 
 
+class InterestType(StrEnum):
+    """Categorization of interest operations."""
+
+    CASH_INTEREST = "cash_interest"
+    CASHBACK = "cashback"
+    LENDING_INTEREST = "lending_interest"
+    BOND_INTEREST = "bond_interest"
+    SAVINGS_INTEREST = "savings_interest"
+    MARGIN_INTEREST = "margin_interest"
+    STAKING_REWARDS = "staking_rewards"
+    PEER_TO_PEER_INTEREST = "peer_to_peer_interest"
+    OTHER = "other"
+
+
 class InterestOperation(Operation):
     """Interest received or paid on cash balances."""
 
     __mapper_args__: ClassVar[dict[str, object]] = {"polymorphic_identity": "interest"}
+
+    interest_type: Mapped[InterestType | None] = mapped_column(
+        Enum(InterestType),
+        nullable=True,
+        default=None,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +360,7 @@ __all__ = [
     "FeeOperation",
     "FxRateChangeOperation",
     "InterestOperation",
+    "InterestType",
     "LimitBuyOperation",
     "LimitSellOperation",
     "Operation",
