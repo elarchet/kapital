@@ -24,7 +24,7 @@ defineProps<{
       <span>Mapped Output Preview</span>
       <span style="font-size: 0.7rem; background-color: var(--accent-light); color: var(--accent-color); padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">Real-time</span>
     </h4>
-    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
+    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem;">
       This shows exactly how the first few lines of your CSV will be parsed and loaded into the database according to your selected template.
     </p>
 

@@ -29,7 +29,7 @@ const emit = defineEmits<{
 
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; margin-bottom: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
       <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0; flex: 1;">
         Click on any cell or column header to configure database field mappings for transaction types.
       </p>
@@ -57,7 +57,7 @@ const emit = defineEmits<{
     />
 
     <!-- Validation Warnings Banner -->
-    <div v-if="validationErrors.length > 0" class="validation-alert" style="margin-bottom: 1.5rem; display: flex; gap: 0.75rem; background-color: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); padding: 1rem; border-radius: var(--radius-sm);">
+    <div v-if="validationErrors.length > 0" class="validation-alert" style="margin-bottom: 0.75rem; display: flex; gap: 0.5rem; background-color: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);">
       <AlertTriangle style="color: #ef4444; width: 20px; height: 20px; flex-shrink: 0; margin-top: 0.15rem;" />
       <div>
         <div style="font-weight: 600; font-size: 0.85rem; color: #ef4444; margin-bottom: 0.25rem;">Template Validation Errors</div>
@@ -68,7 +68,7 @@ const emit = defineEmits<{
     </div>
 
     <!-- Save template options -->
-    <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+    <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem;">
       <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500; text-transform: none; font-size: 0.875rem;">
         <input 
           type="checkbox" 

@@ -70,10 +70,10 @@ const dbOpOptions = computed(() => {
 
 <template>
   <div>
-    <div style="display: flex; flex-wrap: wrap; gap: 2rem; align-items: start; width: 100%; min-height: 380px;">
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: start; width: 100%; min-height: auto;">
       <!-- Left Column: Delimiter details and Transaction Type column select -->
       <div style="flex: 1 1 350px; min-width: 0;">
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
           <div style="margin-bottom: 0;">
             <CustomDropdown
               v-model="delimiter"
@@ -113,11 +113,11 @@ const dbOpOptions = computed(() => {
       <!-- Right Column: Map File Actions to Database Transaction Types -->
       <div style="flex: 1 1 350px; min-width: 0;">
         <div v-if="operationTypeColumnIdx !== null && uniqueOperationTypes.length > 0">
-          <h5 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.75rem;">
+          <h5 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.35rem;">
             Map File Actions to Database Transaction Types
           </h5>
-          <div style="display: flex; flex-direction: column; gap: 0.5rem; border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-sm); background-color: var(--bg-secondary); max-height: 420px; overflow-y: auto;">
-            <div v-for="val in uniqueOperationTypes" :key="val" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.75rem; align-items: center;">
+          <div style="display: flex; flex-direction: column; gap: 0.35rem; border: 1px solid var(--border-color); padding: 0.5rem; border-radius: var(--radius-sm); background-color: var(--bg-secondary); max-height: 240px; overflow-y: auto;">
+            <div v-for="val in uniqueOperationTypes" :key="val" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.5rem; align-items: center;">
               <span style="font-size: 0.75rem; font-family: monospace; background-color: var(--bg-primary); padding: 0.2rem 0.4rem; border-radius: var(--radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="val">
                 {{ val }}
               </span>
@@ -138,7 +138,7 @@ const dbOpOptions = computed(() => {
       </div>
     </div>
 
-    <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+    <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
       <button 
         @click="goToStep2" 
         class="btn btn-primary" 

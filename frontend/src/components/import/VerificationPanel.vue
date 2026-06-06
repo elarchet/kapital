@@ -24,14 +24,14 @@ const toggleErrorView = (opType: string) => {
 </script>
 
 <template>
-  <div style="margin-bottom: 1.5rem;">
-    <h5 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.75rem; letter-spacing: 0.05em;">
+  <div style="margin-bottom: 0.75rem;">
+    <h5 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.35rem; letter-spacing: 0.05em;">
       Simulation Verification Panel
     </h5>
 
-    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+    <div style="display: flex; flex-direction: column; gap: 0.4rem;">
       <div v-for="type in activeDbOpTypes" :key="type" style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); background-color: var(--bg-secondary); overflow: hidden;">
-        <div style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-primary); border-bottom: 1px solid var(--border-color);">
+        <div style="padding: 0.35rem 0.6rem; display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-primary); border-bottom: 1px solid var(--border-color);">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
             <span class="badge" :class="'badge-' + type" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase;">
               {{ type }}
@@ -53,7 +53,7 @@ const toggleErrorView = (opType: string) => {
           </span>
         </div>
 
-        <div v-if="expandedErrors[type] && liveValidationStats[type]?.errors.length > 0" style="padding: 1rem; border-top: 1px solid var(--border-color); max-height: 250px; overflow-y: auto;">
+        <div v-if="expandedErrors[type] && liveValidationStats[type]?.errors.length > 0" style="padding: 0.5rem; border-top: 1px solid var(--border-color); max-height: 200px; overflow-y: auto;">
           <table class="preview-table" style="margin-top: 0; font-size: 0.7rem; width: 100%;">
             <thead>
               <tr style="background-color: var(--bg-tertiary);">

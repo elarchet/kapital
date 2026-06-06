@@ -621,14 +621,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="modal-overlay" @click.self="requestClose">
-    <div class="modal-card modal-card--wide flex flex-col">
-      <div class="modal-header">
-        <h3 class="table-title">Import Transactions to "{{ portfolio.name }}"</h3>
+    <div class="modal-card flex flex-col transition-all duration-300" :class="importFile && !importSuccessSummary ? 'modal-card--wide' : 'w-full max-w-[550px]'">
+      <div class="modal-header !py-3 !px-4">
+        <h3 class="table-title !text-base !m-0">Import Transactions to "{{ portfolio.name }}"</h3>
         <button @click="requestClose" class="bg-transparent border-0 cursor-pointer text-[1.25rem] text-text-secondary transition-colors duration-150 ease-in-out hover:text-text-primary">&times;</button>
       </div>
       
-      <div class="modal-body" style="overflow-y: auto; flex: 1;">
-        <div v-if="importError" class="login-error" style="margin-bottom: 1rem;">
+      <div class="modal-body !p-4" style="overflow-y: auto; flex: 1;">
+        <div v-if="importError" class="login-error" style="margin-bottom: 0.5rem;">
           {{ importError }}
         </div>
 
@@ -647,7 +647,7 @@ onBeforeUnmount(() => {
           />
 
           <div v-else>
-            <div v-if="!isCustomMapping || currentStep === 1" style="display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-tertiary); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
+            <div v-if="!isCustomMapping || currentStep === 1" style="display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 0.75rem;">
               <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <Layers style="width: 16px; height: 16px; color: var(--accent-color);" />
                 <span style="font-weight: 600; font-size: 0.9rem;">{{ importFile.name }}</span>
@@ -656,10 +656,10 @@ onBeforeUnmount(() => {
               <button @click="importFile = null" style="background: none; border: none; color: var(--color-danger); cursor: pointer; font-size: 0.8rem; font-weight: 600;">Remove</button>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 1.5rem; width: 100%;">
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%;">
               <div>
                 <!-- Template select -->
-                <div v-if="!isCustomMapping || currentStep === 1" class="form-group" style="max-width: 450px;">
+                <div v-if="!isCustomMapping || currentStep === 1" class="form-group !mb-3" style="max-width: 450px;">
                   <label>Template Schema</label>
                   <div style="display: flex; gap: 0.5rem; align-items: stretch; margin-bottom: 0.25rem;">
                     <div style="flex: 1; min-width: 0;">
@@ -688,7 +688,7 @@ onBeforeUnmount(() => {
                 </div>
 
                 <!-- Custom mapping builder form -->
-                <div v-if="isCustomMapping" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.5rem; margin-top: 1rem; background-color: var(--bg-primary);">
+                <div v-if="isCustomMapping" style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; margin-top: 0.5rem; background-color: var(--bg-primary);">
                   
                   <!-- STEP 1: Delimiter & OpType mapping -->
                   <Step1DelimiterMapping
@@ -737,7 +737,7 @@ onBeforeUnmount(() => {
         </template>
       </div>
 
-      <div class="modal-footer">
+      <div class="modal-footer !py-3 !px-4">
         <button @click="requestClose" class="btn btn-sm">Cancel</button>
         <button 
           v-if="!importSuccessSummary && isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
