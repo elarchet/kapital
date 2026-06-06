@@ -6,7 +6,7 @@ The ``SABase`` class shares SQLModel's registry, so all tables are created
 together with a single ``metadata.create_all()`` call.
 
 Querying ``select(Operation)`` returns the correct subclass instance
-(``BuyOperation``, ``DividendOperation``, etc.) based on the discriminator.
+(``TradeOperation``, ``DividendOperation``, etc.) based on the discriminator.
 """
 
 from __future__ import annotations
@@ -34,6 +34,96 @@ if TYPE_CHECKING:
     from src.models.fee import Fee
     from src.models.financial_account import FinancialAccount
     from src.models.position import Position
+
+
+# ---------------------------------------------------------------------------
+# Enums
+# ---------------------------------------------------------------------------
+
+
+class TradeSide(StrEnum):
+    """Direction of a trade."""
+
+    BUY = "buy"
+    SELL = "sell"
+
+
+class OrderType(StrEnum):
+    """How the trade order was placed."""
+
+    MARKET = "market"
+    LIMIT = "limit"
+    STOP = "stop"
+    STOP_LIMIT = "stop_limit"
+
+
+class OrderStatus(StrEnum):
+    """Lifecycle status of a trade order."""
+
+    PENDING = "pending"
+    PARTIALLY_FILLED = "partially_filled"
+    FILLED = "filled"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+
+
+class InterestType(StrEnum):
+    """Categorization of interest operations."""
+
+    CASH_INTEREST = "cash_interest"
+    CASHBACK = "cashback"
+    LENDING_INTEREST = "lending_interest"
+    BOND_INTEREST = "bond_interest"
+    SAVINGS_INTEREST = "savings_interest"
+    MARGIN_INTEREST = "margin_interest"
+    STAKING_REWARDS = "staking_rewards"
+    PEER_TO_PEER_INTEREST = "peer_to_peer_interest"
+    OTHER = "other"
+
+
+class ExpenseCategory(StrEnum):
+    """Categorization of everyday expenses."""
+
+    GROCERIES = "groceries"
+    DINING = "dining"
+    TRANSPORT = "transport"
+    UTILITIES = "utilities"
+    ENTERTAINMENT = "entertainment"
+    HEALTHCARE = "healthcare"
+    EDUCATION = "education"
+    SHOPPING = "shopping"
+    TRAVEL = "travel"
+    SUBSCRIPTION = "subscription"
+    RENT = "rent"
+    INSURANCE = "insurance"
+    OTHER = "other"
+
+
+class RevenueCategory(StrEnum):
+    """Categorization of everyday revenue."""
+
+    SALARY = "salary"
+    FREELANCE = "freelance"
+    RENTAL_INCOME = "rental_income"
+    REFUND = "refund"
+    GIFT = "gift"
+    OTHER = "other"
+
+
+class PaymentMethod(StrEnum):
+    """Channel through which a payment was made or received."""
+
+    CARD = "card"
+    BANK_TRANSFER = "bank_transfer"
+    CASH = "cash"
+    MOBILE_PAYMENT = "mobile_payment"
+    CRYPTO = "crypto"
+    OTHER = "other"
+
+
+# ---------------------------------------------------------------------------
+# Base Operation
+# ---------------------------------------------------------------------------
 
 
 class Operation(SABase):
@@ -95,6 +185,65 @@ class Operation(SABase):
         default=None,
     )
 
+    # -- trade-specific columns ------------------------------------------------
+    trade_side: Mapped[TradeSide | None] = mapped_column(
+        Enum(TradeSide),
+        nullable=True,
+        default=None,
+    )
+    order_type: Mapped[OrderType | None] = mapped_column(
+        Enum(OrderType),
+        nullable=True,
+        default=None,
+    )
+    order_status: Mapped[OrderStatus | None] = mapped_column(
+        Enum(OrderStatus),
+        nullable=True,
+        default=None,
+    )
+    limit_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=20, scale=8),
+        nullable=True,
+        default=None,
+    )
+    stop_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=20, scale=8),
+        nullable=True,
+        default=None,
+    )
+    execution_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=20, scale=8),
+        nullable=True,
+        default=None,
+    )
+    order_placed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+    filled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+    # -- everyday finance columns ----------------------------------------------
+    expense_category: Mapped[ExpenseCategory | None] = mapped_column(
+        Enum(ExpenseCategory),
+        nullable=True,
+        default=None,
+    )
+    revenue_category: Mapped[RevenueCategory | None] = mapped_column(
+        Enum(RevenueCategory),
+        nullable=True,
+        default=None,
+    )
+    payment_method: Mapped[PaymentMethod | None] = mapped_column(
+        Enum(PaymentMethod),
+        nullable=True,
+        default=None,
+    )
+
     # -- foreign keys ----------------------------------------------------------
     position_id: Mapped[int] = mapped_column(
         ForeignKey("position.id"),
@@ -151,49 +300,23 @@ class Operation(SABase):
 
 
 # ---------------------------------------------------------------------------
-# Market order subclasses
+# Trade subclass (replaces Buy/Sell/LimitBuy/LimitSell)
 # ---------------------------------------------------------------------------
 
 
-class BuyOperation(Operation):
-    """A market buy order."""
+class TradeOperation(Operation):
+    """A trade order — buy or sell, with order type semantics.
 
-    __mapper_args__: ClassVar[dict[str, object]] = {"polymorphic_identity": "buy"}
+    ``trade_side`` (BUY/SELL) and ``order_type`` (MARKET/LIMIT/STOP/STOP_LIMIT)
+    are required.  For LIMIT/STOP_LIMIT orders, ``limit_price`` is expected.
+    For STOP/STOP_LIMIT orders, ``stop_price`` is expected.
+    """
 
+    __mapper_args__: ClassVar[dict[str, object]] = {"polymorphic_identity": "trade"}
 
-class SellOperation(Operation):
-    """A market sell order."""
-
-    __mapper_args__: ClassVar[dict[str, object]] = {"polymorphic_identity": "sell"}
-
-
-class LimitBuyOperation(Operation):
-    """A limit buy order — ``limit_price`` is required."""
-
-    __mapper_args__: ClassVar[dict[str, object]] = {
-        "polymorphic_identity": "limit_buy",
-    }
-
-    limit_price: Mapped[Decimal | None] = mapped_column(
-        Numeric(precision=20, scale=8),
-        nullable=True,
-        default=None,
-    )
-
-
-class LimitSellOperation(Operation):
-    """A limit sell order — ``limit_price`` is required."""
-
-    __mapper_args__: ClassVar[dict[str, object]] = {
-        "polymorphic_identity": "limit_sell",
-    }
-
-    limit_price: Mapped[Decimal | None] = mapped_column(
-        Numeric(precision=20, scale=8),
-        nullable=True,
-        default=None,
-        use_existing_column=True,
-    )
+    # All columns declared on base — no extra columns needed here.
+    # trade_side, order_type, limit_price, stop_price, execution_price,
+    # order_placed_at, filled_at, order_status are on the base table.
 
 
 # ---------------------------------------------------------------------------
@@ -237,20 +360,6 @@ class TaxOperation(Operation):
     )
 
 
-class InterestType(StrEnum):
-    """Categorization of interest operations."""
-
-    CASH_INTEREST = "cash_interest"
-    CASHBACK = "cashback"
-    LENDING_INTEREST = "lending_interest"
-    BOND_INTEREST = "bond_interest"
-    SAVINGS_INTEREST = "savings_interest"
-    MARGIN_INTEREST = "margin_interest"
-    STAKING_REWARDS = "staking_rewards"
-    PEER_TO_PEER_INTEREST = "peer_to_peer_interest"
-    OTHER = "other"
-
-
 class InterestOperation(Operation):
     """Interest received or paid on cash balances."""
 
@@ -260,6 +369,7 @@ class InterestOperation(Operation):
         Enum(InterestType),
         nullable=True,
         default=None,
+        use_existing_column=True,
     )
 
 
@@ -335,6 +445,8 @@ class ExpenseOperation(Operation):
     merchant_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     merchant_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    # expense_category and payment_method are on the base table
+
 
 class RevenueOperation(Operation):
     """An external credit / card refund."""
@@ -352,22 +464,27 @@ class RevenueOperation(Operation):
         use_existing_column=True,
     )
 
+    # revenue_category and payment_method are on the base table
+
 
 __all__ = [
-    "BuyOperation",
     "DividendOperation",
+    "ExpenseCategory",
     "ExpenseOperation",
     "FeeOperation",
     "FxRateChangeOperation",
     "InterestOperation",
     "InterestType",
-    "LimitBuyOperation",
-    "LimitSellOperation",
     "Operation",
+    "OrderStatus",
+    "OrderType",
+    "PaymentMethod",
+    "RevenueCategory",
     "RevenueOperation",
-    "SellOperation",
     "StockSplitOperation",
     "TaxOperation",
+    "TradeOperation",
+    "TradeSide",
     "TransferInOperation",
     "TransferOutOperation",
 ]

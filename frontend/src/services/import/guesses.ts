@@ -35,7 +35,18 @@ export function prepopulateFieldGuesses(
     tax_currency: ['tax currency'],
     merchant_name: ['merchant', 'merchant name'],
     merchant_category: ['category', 'merchant category'],
-    interest_type: ['interest type', 'interest_type']
+    interest_type: ['interest type', 'interest_type'],
+    trade_side: ['side', 'trade side', 'direction', 'buy/sell'],
+    order_type: ['order type', 'order_type'],
+    order_status: ['order status', 'status'],
+    limit_price: ['limit price', 'limit_price'],
+    stop_price: ['stop price', 'stop_price'],
+    execution_price: ['execution price', 'fill price', 'avg price'],
+    order_placed_at: ['order date', 'placed at', 'order_placed_at'],
+    filled_at: ['fill date', 'filled at', 'filled_at'],
+    expense_category: ['expense category', 'expense_category'],
+    revenue_category: ['revenue category', 'revenue_category', 'income type'],
+    payment_method: ['payment method', 'payment_method', 'payment type']
   };
 
   Object.entries(matches).forEach(([dbKey, keys]) => {
@@ -68,8 +79,8 @@ export function prepopulateOpTypeGuesses(uniqueOperationTypes: string[]): Record
   const operationTypeMappings: Record<string, string> = {};
   uniqueOperationTypes.forEach(val => {
     const lower = val.toLowerCase();
-    if (lower.includes('buy')) operationTypeMappings[val] = 'buy';
-    else if (lower.includes('sell')) operationTypeMappings[val] = 'sell';
+    if (lower.includes('buy')) operationTypeMappings[val] = 'trade';
+    else if (lower.includes('sell')) operationTypeMappings[val] = 'trade';
     else if (lower.includes('dividend')) operationTypeMappings[val] = 'dividend';
     else if (lower.includes('interest')) operationTypeMappings[val] = 'interest';
     else if (lower.includes('deposit')) operationTypeMappings[val] = 'transfer_in';

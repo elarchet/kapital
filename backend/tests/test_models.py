@@ -20,39 +20,42 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from src.models import (
     AssetType,
-    BuyOperation,
     DividendOperation,
+    ExpenseCategory,
+    ExpenseOperation,
     FeeOperation,
     FxRateChangeOperation,
     Institution,
     InterestOperation,
     InterestType,
-    LimitBuyOperation,
-    LimitSellOperation,
     Operation,
+    OrderType,
+    PaymentMethod,
+    RevenueCategory,
+    RevenueOperation,
     SABase,
-    SellOperation,
     StockSplitOperation,
     TaxOperation,
+    TradeOperation,
+    TradeSide,
     TransferInOperation,
     TransferOutOperation,
     User,
 )
 from tests.factories import (
-    BuyOperationFactory,
     DividendOperationFactory,
+    ExpenseOperationFactory,
     FeeOperationFactory,
     FinancialAccountFactory,
     FxRateChangeOperationFactory,
     InstitutionFactory,
     InterestOperationFactory,
-    LimitBuyOperationFactory,
-    LimitSellOperationFactory,
     PortfolioFactory,
     PositionFactory,
-    SellOperationFactory,
+    RevenueOperationFactory,
     StockSplitOperationFactory,
     TaxOperationFactory,
+    TradeOperationFactory,
     TransferInOperationFactory,
     TransferOutOperationFactory,
     UserFactory,
@@ -191,11 +194,12 @@ class TestRelationships:
         assert seed["position"].portfolio_id == seed["portfolio"].id
 
     def test_operation_position_fk(self, session, seed):
-        buy: BuyOperation = BuyOperationFactory(  # type: ignore[assignment]
+        buy: TradeOperation = TradeOperationFactory(  # type: ignore[assignment]
             position=seed["position"],
             financial_account=seed["account"],
             quantity=Decimal(10),
             unit_price=Decimal("95.50"),
+            trade_side=TradeSide.BUY,
         )
         session.commit()
         session.refresh(buy)
@@ -209,17 +213,18 @@ class TestRelationships:
         assert seed["portfolio"].positions[0].ticker == seed["position"].ticker
 
     def test_navigate_position_operations(self, session, seed):
-        BuyOperationFactory(
+        TradeOperationFactory(
             position=seed["position"],
             financial_account=seed["account"],
             quantity=Decimal(5),
             unit_price=Decimal(100),
+            trade_side=TradeSide.BUY,
         )
         session.commit()
 
         session.refresh(seed["position"])
         assert len(seed["position"].operations) == 1
-        assert seed["position"].operations[0].operation_type == "buy"
+        assert seed["position"].operations[0].operation_type == "trade"
 
     def test_navigate_institution_accounts(self, session, seed):
         session.refresh(seed["institution"])
@@ -239,8 +244,7 @@ class TestPolymorphicDispatch:
     """Querying ``Operation`` must return the correct subclass instances."""
 
     ALL_SUBCLASSES: list[tuple[str, type[Operation]]] = [
-        ("BuyOperation", BuyOperation),
-        ("SellOperation", SellOperation),
+        ("TradeOperation", TradeOperation),
         ("DividendOperation", DividendOperation),
         ("FeeOperation", FeeOperation),
         ("TaxOperation", TaxOperation),
@@ -249,38 +253,38 @@ class TestPolymorphicDispatch:
         ("TransferOutOperation", TransferOutOperation),
         ("StockSplitOperation", StockSplitOperation),
         ("FxRateChangeOperation", FxRateChangeOperation),
-        ("LimitBuyOperation", LimitBuyOperation),
-        ("LimitSellOperation", LimitSellOperation),
+        ("ExpenseOperation", ExpenseOperation),
+        ("RevenueOperation", RevenueOperation),
     ]
 
     @pytest.fixture(name="ops_map")
     def fixture_ops_map(self, session, seed):
-        """Insert all 12 operation types and return a {class_name: instance} map."""
+        """Insert all operation types and return a {class_name: instance} map."""
         common = dict(
             position=seed["position"],
             financial_account=seed["account"],
             total_amount=Decimal(100),
         )
 
-        [
-            BuyOperationFactory(**common),
-            SellOperationFactory(**common),
-            DividendOperationFactory(**common),
-            FeeOperationFactory(**common),
-            TaxOperationFactory(**common),
-            InterestOperationFactory(**common),
-            TransferInOperationFactory(**common),
-            TransferOutOperationFactory(**common),
-            StockSplitOperationFactory(**common),
-            FxRateChangeOperationFactory(**common),
-            LimitBuyOperationFactory(**common),
-            LimitSellOperationFactory(**common),
-        ]
+        TradeOperationFactory(
+            trade_side=TradeSide.BUY,
+            order_type=OrderType.LIMIT,
+            limit_price=Decimal("89.50"),
+            **common,
+        )
+        DividendOperationFactory(**common)
+        FeeOperationFactory(**common)
+        TaxOperationFactory(**common)
+        InterestOperationFactory(**common)
+        TransferInOperationFactory(**common)
+        TransferOutOperationFactory(**common)
+        StockSplitOperationFactory(**common)
+        FxRateChangeOperationFactory(**common)
+        ExpenseOperationFactory(**common)
+        RevenueOperationFactory(**common)
+
         session.commit()
 
-        # NOTE: Use execute().scalars() — Operation is a pure SQLAlchemy
-        # model (SABase), and SQLModel's exec() returns Rows instead of
-        # mapped instances for non-SQLModel classes.
         results = (
             session.execute(
                 select(Operation).where(
@@ -294,7 +298,7 @@ class TestPolymorphicDispatch:
         return {type(op).__name__: op for op in results}
 
     def test_total_count(self, ops_map):
-        assert len(ops_map) == 12
+        assert len(ops_map) == 11
 
     @pytest.mark.parametrize(
         "class_name,cls",
@@ -314,7 +318,7 @@ class TestPolymorphicDispatch:
         assert ops_map["StockSplitOperation"].split_ratio == Decimal("4.0")
 
     def test_limit_price_roundtrip(self, ops_map):
-        assert ops_map["LimitBuyOperation"].limit_price == Decimal("89.50")
+        assert ops_map["TradeOperation"].limit_price == Decimal("89.50")
 
     def test_fee_category_roundtrip(self, ops_map):
         assert ops_map["FeeOperation"].fee_category == "custody"
@@ -328,6 +332,16 @@ class TestPolymorphicDispatch:
 
     def test_interest_type_roundtrip(self, ops_map):
         assert ops_map["InterestOperation"].interest_type == InterestType.CASH_INTEREST
+
+    def test_expense_fields_roundtrip(self, ops_map):
+        exp = ops_map["ExpenseOperation"]
+        assert exp.expense_category == ExpenseCategory.SHOPPING
+        assert exp.payment_method == PaymentMethod.CARD
+
+    def test_revenue_fields_roundtrip(self, ops_map):
+        rev = ops_map["RevenueOperation"]
+        assert rev.revenue_category == RevenueCategory.SALARY
+        assert rev.payment_method == PaymentMethod.BANK_TRANSFER
 
 
 # ---------------------------------------------------------------------------

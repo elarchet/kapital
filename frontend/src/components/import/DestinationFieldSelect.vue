@@ -34,8 +34,8 @@ const isFieldRelevant = (fieldKey: string, opType: string) => {
   const universal = ['executed_at', 'name', 'total_amount', 'currency', 'transaction_id', 'exchange_rate', 'notes'];
   if (universal.includes(fieldKey)) return true;
 
-  if (opType === 'buy' || opType === 'sell' || opType === 'limit_buy' || opType === 'limit_sell') {
-    return ['ticker', 'isin', 'quantity', 'unit_price', 'price_currency', 'fee_amount', 'fee_currency', 'fee_type', 'tax_amount', 'tax_currency', 'limit_price'].includes(fieldKey);
+  if (opType === 'trade') {
+    return ['ticker', 'isin', 'quantity', 'unit_price', 'price_currency', 'fee_amount', 'fee_currency', 'fee_type', 'tax_amount', 'tax_currency', 'trade_side', 'order_type', 'order_status', 'limit_price', 'stop_price', 'execution_price', 'order_placed_at', 'filled_at'].includes(fieldKey);
   }
   if (opType === 'dividend') {
     return ['ticker', 'isin', 'unit_price', 'price_currency', 'tax_amount', 'tax_currency'].includes(fieldKey);
@@ -49,8 +49,11 @@ const isFieldRelevant = (fieldKey: string, opType: string) => {
   if (opType === 'transfer_out') {
     return ['destination_reference', 'fee_amount', 'fee_currency', 'fee_type'].includes(fieldKey);
   }
-  if (opType === 'expense' || opType === 'revenue') {
-    return ['merchant_name', 'merchant_category', 'tax_amount', 'tax_currency'].includes(fieldKey);
+  if (opType === 'expense') {
+    return ['merchant_name', 'merchant_category', 'tax_amount', 'tax_currency', 'expense_category', 'payment_method'].includes(fieldKey);
+  }
+  if (opType === 'revenue') {
+    return ['merchant_name', 'merchant_category', 'tax_amount', 'tax_currency', 'revenue_category', 'payment_method'].includes(fieldKey);
   }
   if (opType === 'fx_rate_change') {
     return ['source_currency', 'target_currency', 'source_reference', 'destination_reference'].includes(fieldKey);

@@ -8,22 +8,27 @@ from factory.alchemy import SQLAlchemyModelFactory
 
 from src.models import (
     AssetType,
-    BuyOperation,
     DividendOperation,
+    ExpenseCategory,
+    ExpenseOperation,
     FeeOperation,
     FinancialAccount,
     FxRateChangeOperation,
     Institution,
     InterestOperation,
     InterestType,
-    LimitBuyOperation,
-    LimitSellOperation,
     Operation,
+    OrderStatus,
+    OrderType,
+    PaymentMethod,
     Portfolio,
     Position,
-    SellOperation,
+    RevenueCategory,
+    RevenueOperation,
     StockSplitOperation,
     TaxOperation,
+    TradeOperation,
+    TradeSide,
     TransferInOperation,
     TransferOutOperation,
     User,
@@ -113,20 +118,15 @@ class BaseOperationFactory(BaseFactory):
     financial_account = factory.SubFactory(FinancialAccountFactory)
 
 
-class BuyOperationFactory(BaseOperationFactory):
+class TradeOperationFactory(BaseOperationFactory):
     class Meta:
-        model = BuyOperation
+        model = TradeOperation
 
-    quantity = factory.LazyFunction(lambda: Decimal("1.00"))
+    quantity = factory.LazyFunction(lambda: Decimal("10.00"))
     unit_price = factory.LazyFunction(lambda: Decimal("100.00"))
-
-
-class SellOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = SellOperation
-
-    quantity = factory.LazyFunction(lambda: Decimal("1.00"))
-    unit_price = factory.LazyFunction(lambda: Decimal("100.00"))
+    trade_side = TradeSide.BUY
+    order_type = OrderType.MARKET
+    order_status = OrderStatus.FILLED
 
 
 class DividendOperationFactory(BaseOperationFactory):
@@ -187,19 +187,21 @@ class FxRateChangeOperationFactory(BaseOperationFactory):
     exchange_rate = factory.LazyFunction(lambda: Decimal("0.9200000000"))
 
 
-class LimitBuyOperationFactory(BaseOperationFactory):
+class ExpenseOperationFactory(BaseOperationFactory):
     class Meta:
-        model = LimitBuyOperation
+        model = ExpenseOperation
 
-    quantity = factory.LazyFunction(lambda: Decimal("5.00"))
-    unit_price = factory.LazyFunction(lambda: Decimal("90.00"))
-    limit_price = factory.LazyFunction(lambda: Decimal("89.50"))
+    merchant_name = factory.Faker("company")
+    merchant_category = "shopping"
+    expense_category = ExpenseCategory.SHOPPING
+    payment_method = PaymentMethod.CARD
 
 
-class LimitSellOperationFactory(BaseOperationFactory):
+class RevenueOperationFactory(BaseOperationFactory):
     class Meta:
-        model = LimitSellOperation
+        model = RevenueOperation
 
-    quantity = factory.LazyFunction(lambda: Decimal("5.00"))
-    unit_price = factory.LazyFunction(lambda: Decimal("110.00"))
-    limit_price = factory.LazyFunction(lambda: Decimal("111.00"))
+    merchant_name = factory.Faker("company")
+    merchant_category = "salary"
+    revenue_category = RevenueCategory.SALARY
+    payment_method = PaymentMethod.BANK_TRANSFER

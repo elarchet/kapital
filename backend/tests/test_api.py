@@ -284,9 +284,10 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
 
     h = get_auth_headers(client, user.email)
 
-    # 1. Successful Buy Operation creation
+    # 1. Successful Buy Operation creation (as trade with trade_side=buy)
     buy_payload = {
-        "operation_type": "buy",
+        "operation_type": "trade",
+        "trade_side": "buy",
         "quantity": "50.0",
         "unit_price": "145.50",
         "total_amount": "7275.00",
@@ -299,12 +300,15 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
     response = client.post("/api/operations/", json=buy_payload, headers=h)
     assert response.status_code == status.HTTP_201_CREATED
     op_data = response.json()
-    assert op_data["operation_type"] == "buy"
+    assert op_data["operation_type"] == "trade"
+    assert op_data["trade_side"] == "buy"
     assert Decimal(op_data["quantity"]) == Decimal(50)
 
     # 2. Limit Buy Operation fails if limit_price is missing
     limit_buy_bad_payload = {
-        "operation_type": "limit_buy",
+        "operation_type": "trade",
+        "trade_side": "buy",
+        "order_type": "limit",
         "quantity": "10",
         "unit_price": "90",
         "total_amount": "900",
@@ -320,7 +324,8 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
     limit_buy_good_payload["limit_price"] = "89.50"
     response = client.post("/api/operations/", json=limit_buy_good_payload, headers=h)
     assert response.status_code == status.HTTP_201_CREATED
-    assert response.json()["operation_type"] == "limit_buy"
+    assert response.json()["operation_type"] == "trade"
+    assert response.json()["order_type"] == "limit"
     assert Decimal(response.json()["limit_price"]) == Decimal("89.50")
 
     # 4. Successful Dividend Operation with dividend_per_share

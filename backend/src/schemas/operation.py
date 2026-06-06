@@ -6,7 +6,15 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from src.models import InterestType
+from src.models.operation import (
+    ExpenseCategory,
+    InterestType,
+    OrderStatus,
+    OrderType,
+    PaymentMethod,
+    RevenueCategory,
+    TradeSide,
+)
 from src.schemas.fee import FeeCreate, FeeRead
 
 
@@ -20,8 +28,17 @@ class OperationBase(BaseModel):
     executed_at: datetime
     notes: str | None = None
 
-    # Specific subclass fields
+    # Trade-specific fields
+    trade_side: TradeSide | None = None
+    order_type: OrderType | None = None
+    order_status: OrderStatus | None = None
     limit_price: Decimal | None = None
+    stop_price: Decimal | None = None
+    execution_price: Decimal | None = None
+    order_placed_at: datetime | None = None
+    filled_at: datetime | None = None
+
+    # Subclass-specific fields
     dividend_per_share: Decimal | None = None
     fee_category: str | None = Field(default=None, max_length=100)
     tax_category: str | None = Field(default=None, max_length=100)
@@ -36,6 +53,11 @@ class OperationBase(BaseModel):
     merchant_category: str | None = Field(default=None, max_length=100)
     interest_type: InterestType | None = None
 
+    # Everyday finance fields
+    expense_category: ExpenseCategory | None = None
+    revenue_category: RevenueCategory | None = None
+    payment_method: PaymentMethod | None = None
+
 
 class OperationCreate(OperationBase):
     position_id: int
@@ -46,9 +68,15 @@ class OperationCreate(OperationBase):
     def validate_polymorphic_fields(self) -> Self:
         op_type = self.operation_type
 
-        if op_type in ("limit_buy", "limit_sell"):
-            if self.limit_price is None:
-                raise ValueError(f"limit_price is required for operation type '{op_type}'")
+        if op_type == "trade":
+            if self.trade_side is None:
+                raise ValueError("trade_side is required for operation type 'trade'")
+            if self.order_type is None:
+                self.order_type = OrderType.MARKET
+            if self.order_type in (OrderType.LIMIT, OrderType.STOP_LIMIT) and self.limit_price is None:
+                raise ValueError(f"limit_price is required for order_type '{self.order_type}'")
+            if self.order_type in (OrderType.STOP, OrderType.STOP_LIMIT) and self.stop_price is None:
+                raise ValueError(f"stop_price is required for order_type '{self.order_type}'")
         elif op_type == "dividend":
             if self.dividend_per_share is None:
                 raise ValueError("dividend_per_share is required for operation type 'dividend'")
@@ -75,6 +103,10 @@ class OperationCreate(OperationBase):
             )
         elif op_type == "interest" and self.interest_type is None:
             self.interest_type = InterestType.CASH_INTEREST
+        elif op_type == "expense" and self.expense_category is None:
+            self.expense_category = ExpenseCategory.OTHER
+        elif op_type == "revenue" and self.revenue_category is None:
+            self.revenue_category = RevenueCategory.OTHER
 
         return self
 
@@ -88,7 +120,17 @@ class OperationUpdate(BaseModel):
     executed_at: datetime | None = None
     notes: str | None = None
 
+    # Trade fields
+    trade_side: TradeSide | None = None
+    order_type: OrderType | None = None
+    order_status: OrderStatus | None = None
     limit_price: Decimal | None = None
+    stop_price: Decimal | None = None
+    execution_price: Decimal | None = None
+    order_placed_at: datetime | None = None
+    filled_at: datetime | None = None
+
+    # Subclass fields
     dividend_per_share: Decimal | None = None
     fee_category: str | None = Field(default=None, max_length=100)
     tax_category: str | None = Field(default=None, max_length=100)
@@ -102,6 +144,9 @@ class OperationUpdate(BaseModel):
     merchant_name: str | None = Field(default=None, max_length=200)
     merchant_category: str | None = Field(default=None, max_length=100)
     interest_type: InterestType | None = None
+    expense_category: ExpenseCategory | None = None
+    revenue_category: RevenueCategory | None = None
+    payment_method: PaymentMethod | None = None
     fees: list[FeeCreate] | None = None
 
 

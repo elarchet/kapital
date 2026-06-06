@@ -239,6 +239,14 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
         if not op_type:
             continue
 
+        # Backward-compatible mapping: old buy/sell/limit_buy/limit_sell → trade
+        trade_side = None
+        order_type_val = None
+        if op_type in ("buy", "sell", "limit_buy", "limit_sell"):
+            trade_side = "buy" if op_type in ("buy", "limit_buy") else "sell"
+            order_type_val = "limit" if op_type in ("limit_buy", "limit_sell") else "market"
+            op_type = "trade"
+
         # Extract values
         ticker = row.get(_get_mapped_col(columns, "ticker", op_type))
         isin = row.get(_get_mapped_col(columns, "isin", op_type))
@@ -270,13 +278,11 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             factor = Decimal(str(scaling["unit_price"][price_currency]))
             if unit_price:
                 unit_price *= factor
-            # Change currency symbol if scaled
             if price_currency == "GBX":
                 price_currency = "GBP"
         if currency in scaling.get("total_amount", {}):
             factor = Decimal(str(scaling["total_amount"][currency]))
             total_amount *= factor
-            # Change currency symbol if scaled
             if currency == "GBX":
                 currency = "GBP"
 
@@ -295,7 +301,6 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             if fee_val and fee_val > 0:
                 fee_curr = row.get(_get_mapped_col(columns, "fee_currency", op_type)) or currency
 
-                # Resolve fee_type if mapped
                 resolved_fee_type = "conversion"
                 fee_type_col = _get_mapped_col(columns, "fee_type", op_type)
                 if fee_type_col:
@@ -328,7 +333,6 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             if tax_val and tax_val > 0:
                 tax_curr = row.get(_get_mapped_col(columns, "tax_currency", op_type)) or currency
 
-                # Resolve tax type
                 resolved_tax_type = "withholding_tax"
                 fee_type_col = _get_mapped_col(columns, "fee_type", op_type)
                 if fee_type_col:
@@ -374,10 +378,124 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
         if op_type == "dividend":
             dividend_per_share = unit_price
 
-        # Limit price
+        # Trade-specific field extraction from CSV
+        if op_type == "trade":
+            # Resolve trade_side from mapped CSV column if not already set from legacy mapping
+            if not trade_side:
+                trade_side_col = _get_mapped_col(columns, "trade_side", op_type)
+                raw_trade_side = row.get(trade_side_col) if trade_side_col else None
+                if raw_trade_side:
+                    trade_side_mappings = schema_mappings.get("enum_mappings", {}).get("trade_side", {})
+                    for key, val_list in trade_side_mappings.items():
+                        if raw_trade_side in val_list or raw_trade_side == key:
+                            trade_side = key
+                            break
+                if not trade_side:
+                    trade_side = "buy"
+
+            # Resolve order_type from mapped CSV column if not already set
+            if not order_type_val:
+                order_type_col = _get_mapped_col(columns, "order_type", op_type)
+                raw_order_type = row.get(order_type_col) if order_type_col else None
+                if raw_order_type:
+                    order_type_mappings = schema_mappings.get("enum_mappings", {}).get("order_type", {})
+                    for key, val_list in order_type_mappings.items():
+                        if raw_order_type in val_list or raw_order_type == key:
+                            order_type_val = key
+                            break
+                if not order_type_val:
+                    order_type_val = "market"
+
+        # Limit price for limit/stop_limit orders
         limit_price = None
-        if op_type in ("limit_buy", "limit_sell"):
-            limit_price = unit_price
+        if op_type == "trade" and order_type_val in ("limit", "stop_limit"):
+            lp_col = _get_mapped_col(columns, "limit_price", op_type)
+            if lp_col:
+                limit_price = parse_decimal_safe(row.get(lp_col), decimal_separator)
+            if limit_price is None:
+                limit_price = unit_price
+
+        # Stop price for stop/stop_limit orders
+        stop_price = None
+        if op_type == "trade" and order_type_val in ("stop", "stop_limit"):
+            sp_col = _get_mapped_col(columns, "stop_price", op_type)
+            if sp_col:
+                stop_price = parse_decimal_safe(row.get(sp_col), decimal_separator)
+
+        # Execution price
+        execution_price = None
+        if op_type == "trade":
+            ep_col = _get_mapped_col(columns, "execution_price", op_type)
+            if ep_col:
+                execution_price = parse_decimal_safe(row.get(ep_col), decimal_separator)
+
+        # Order status
+        order_status = None
+        if op_type == "trade":
+            os_col = _get_mapped_col(columns, "order_status", op_type)
+            raw_order_status = row.get(os_col) if os_col else None
+            if raw_order_status:
+                os_mappings = schema_mappings.get("enum_mappings", {}).get("order_status", {})
+                for key, val_list in os_mappings.items():
+                    if raw_order_status in val_list or raw_order_status == key:
+                        order_status = key
+                        break
+            if not order_status:
+                order_status = "filled"
+
+        # Order placed at / filled at
+        order_placed_at = None
+        filled_at = None
+        if op_type == "trade":
+            op_col = _get_mapped_col(columns, "order_placed_at", op_type)
+            if op_col:
+                op_str = row.get(op_col)
+                if op_str:
+                    op_fmt = _get_date_format(date_formats, "order_placed_at", op_type)
+                    order_placed_at = parse_datetime_safe(op_str, op_fmt)
+            fa_col = _get_mapped_col(columns, "filled_at", op_type)
+            if fa_col:
+                fa_str = row.get(fa_col)
+                if fa_str:
+                    fa_fmt = _get_date_format(date_formats, "filled_at", op_type)
+                    filled_at = parse_datetime_safe(fa_str, fa_fmt)
+
+        # Expense / revenue category and payment method
+        expense_category = None
+        revenue_category = None
+        payment_method = None
+        if op_type == "expense":
+            ec_col = _get_mapped_col(columns, "expense_category", op_type)
+            raw_ec = row.get(ec_col) if ec_col else None
+            if raw_ec:
+                ec_mappings = schema_mappings.get("enum_mappings", {}).get("expense_category", {})
+                for key, val_list in ec_mappings.items():
+                    if raw_ec in val_list or raw_ec == key:
+                        expense_category = key
+                        break
+            if not expense_category:
+                expense_category = "other"
+        elif op_type == "revenue":
+            rc_col = _get_mapped_col(columns, "revenue_category", op_type)
+            raw_rc = row.get(rc_col) if rc_col else None
+            if raw_rc:
+                rc_mappings = schema_mappings.get("enum_mappings", {}).get("revenue_category", {})
+                for key, val_list in rc_mappings.items():
+                    if raw_rc in val_list or raw_rc == key:
+                        revenue_category = key
+                        break
+            if not revenue_category:
+                revenue_category = "other"
+
+        if op_type in ("expense", "revenue"):
+            pm_col = _get_mapped_col(columns, "payment_method", op_type)
+            raw_pm = row.get(pm_col) if pm_col else None
+            if raw_pm:
+                pm_mappings = schema_mappings.get("enum_mappings", {}).get("payment_method", {})
+                for key, val_list in pm_mappings.items():
+                    if raw_pm in val_list or raw_pm == key:
+                        payment_method = key
+                        break
 
         # Fee / tax categories
         fee_category = None
@@ -433,7 +551,6 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 target_currency = currency
             if not exchange_rate:
                 exchange_rate = Decimal("1.0")
-        # Factorized conversion fields for other operation types
         elif price_currency and price_currency != currency:
             source_currency = currency
             target_currency = price_currency
@@ -465,6 +582,16 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 "source_currency": source_currency,
                 "target_currency": target_currency,
                 "csv_action": csv_action,
+                "trade_side": trade_side,
+                "order_type": order_type_val,
+                "order_status": order_status,
+                "stop_price": stop_price,
+                "execution_price": execution_price,
+                "order_placed_at": order_placed_at,
+                "filled_at": filled_at,
+                "expense_category": expense_category,
+                "revenue_category": revenue_category,
+                "payment_method": payment_method,
             },
         )
 
@@ -639,6 +766,16 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             tax_category=op_info.get("tax_category"),
             source_currency=op_info.get("source_currency"),
             target_currency=op_info.get("target_currency"),
+            trade_side=op_info.get("trade_side"),
+            order_type=op_info.get("order_type"),
+            order_status=op_info.get("order_status"),
+            stop_price=op_info.get("stop_price"),
+            execution_price=op_info.get("execution_price"),
+            order_placed_at=op_info.get("order_placed_at"),
+            filled_at=op_info.get("filled_at"),
+            expense_category=op_info.get("expense_category"),
+            revenue_category=op_info.get("revenue_category"),
+            payment_method=op_info.get("payment_method"),
         )
 
         db_op = operation_crud.create(db, obj_in=op_in)
@@ -656,23 +793,22 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             db.commit()
 
         # Update Position quantity
-        if op_info["op_type"] in ("buy", "limit_buy"):
+        is_buy_trade = op_info["op_type"] == "trade" and op_info.get("trade_side") == "buy"
+        is_sell_trade = op_info["op_type"] == "trade" and op_info.get("trade_side") == "sell"
+
+        if is_buy_trade:
             position.quantity += op_info["quantity"]
-        elif op_info["op_type"] in ("sell", "limit_sell"):
+        elif is_sell_trade:
             position.quantity -= op_info["quantity"]
         elif op_info["op_type"] == "stock_split":
-            # For split, net quantity is added/removed
             position.quantity += op_info["quantity"]
         elif is_cash_op:
-            # Interest, Card debits, Deposits directly update cash balance
-            # For Expense/Revenue, total_amount is already signed
-            # (Interest/Deposits are positive, Card debits are negative)
             position.quantity += op_info["total_amount"]
 
         db.add(position)
         db.commit()
 
-        # Update Cash Position balance for stock buys/sells
+        # Update Cash Position balance for stock trades/dividends
         if not is_cash_op:
             cash_currency = op_info["currency"]
             cash_pos = db.exec(
@@ -697,14 +833,9 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 summary["positions_created"] += 1
 
             if cash_pos and cash_pos.id is not None:
-                if op_info["op_type"] in ("buy", "limit_buy"):
-                    # Buys decrease cash (total_amount is positive cost)
+                if is_buy_trade:
                     cash_pos.quantity -= op_info["total_amount"]
-                elif op_info["op_type"] in ("sell", "limit_sell"):
-                    # Sells increase cash (total_amount is positive gain)
-                    cash_pos.quantity += op_info["total_amount"]
-                elif op_info["op_type"] == "dividend":
-                    # Dividends increase cash
+                elif is_sell_trade or op_info["op_type"] == "dividend":
                     cash_pos.quantity += op_info["total_amount"]
 
                 db.add(cash_pos)

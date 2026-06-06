@@ -2,7 +2,7 @@
 
 Import everything from here for convenience::
 
-    from src.models import User, Portfolio, Position, BuyOperation, ...
+    from src.models import User, Portfolio, Position, TradeOperation, ...
 """
 
 from __future__ import annotations
@@ -13,20 +13,23 @@ from src.models.financial_account import FinancialAccount
 from src.models.import_file_schema import ImportFileSchema
 from src.models.institution import Institution
 from src.models.operation import (
-    BuyOperation,
     DividendOperation,
+    ExpenseCategory,
     ExpenseOperation,
     FeeOperation,
     FxRateChangeOperation,
     InterestOperation,
     InterestType,
-    LimitBuyOperation,
-    LimitSellOperation,
     Operation,
+    OrderStatus,
+    OrderType,
+    PaymentMethod,
+    RevenueCategory,
     RevenueOperation,
-    SellOperation,
     StockSplitOperation,
     TaxOperation,
+    TradeOperation,
+    TradeSide,
     TransferInOperation,
     TransferOutOperation,
 )
@@ -36,8 +39,8 @@ from src.models.user import User
 
 __all__ = [
     "AssetType",
-    "BuyOperation",
     "DividendOperation",
+    "ExpenseCategory",
     "ExpenseOperation",
     "Fee",
     "FeeOperation",
@@ -48,18 +51,21 @@ __all__ = [
     "Institution",
     "InterestOperation",
     "InterestType",
-    "LimitBuyOperation",
-    "LimitSellOperation",
     "Operation",
+    "OrderStatus",
+    "OrderType",
+    "PaymentMethod",
     "Portfolio",
     "Position",
+    "RevenueCategory",
     "RevenueOperation",
     "SABase",
-    "SellOperation",
     "SoftDeleteMixin",
     "StockSplitOperation",
     "TaxOperation",
     "TimestampMixin",
+    "TradeOperation",
+    "TradeSide",
     "TransferInOperation",
     "TransferOutOperation",
     "User",

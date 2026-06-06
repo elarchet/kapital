@@ -75,8 +75,7 @@ def get_import_metadata(
                 "is_required": True,
                 "type": "enum",
                 "enum_values": [
-                    "buy",
-                    "sell",
+                    "trade",
                     "dividend",
                     "interest",
                     "expense",
@@ -87,8 +86,6 @@ def get_import_metadata(
                     "stock_split",
                     "fee",
                     "tax",
-                    "limit_buy",
-                    "limit_sell",
                 ],
             },
             {
@@ -157,6 +154,59 @@ def get_import_metadata(
                 "is_required": False,
                 "type": "numeric",
             },
+            # -- Trade-specific fields --
+            {
+                "key": "trade_side",
+                "label": "Trade Side (Buy/Sell)",
+                "is_required": False,
+                "type": "enum",
+                "enum_values": ["buy", "sell"],
+            },
+            {
+                "key": "order_type",
+                "label": "Order Type",
+                "is_required": False,
+                "type": "enum",
+                "enum_values": ["market", "limit", "stop", "stop_limit"],
+            },
+            {
+                "key": "order_status",
+                "label": "Order Status",
+                "is_required": False,
+                "type": "enum",
+                "enum_values": ["pending", "partially_filled", "filled", "cancelled", "expired"],
+            },
+            {
+                "key": "limit_price",
+                "label": "Limit Price",
+                "is_required": False,
+                "type": "numeric",
+            },
+            {
+                "key": "stop_price",
+                "label": "Stop Price",
+                "is_required": False,
+                "type": "numeric",
+            },
+            {
+                "key": "execution_price",
+                "label": "Execution Price",
+                "is_required": False,
+                "type": "numeric",
+            },
+            {
+                "key": "order_placed_at",
+                "label": "Order Placed Date",
+                "is_required": False,
+                "type": "datetime",
+            },
+            {
+                "key": "filled_at",
+                "label": "Order Filled Date",
+                "is_required": False,
+                "type": "datetime",
+            },
+            # -- Fee / Tax fields --
             {
                 "key": "fee_amount",
                 "label": "Fee Amount",
@@ -188,6 +238,7 @@ def get_import_metadata(
                 "is_required": False,
                 "type": "string",
             },
+            # -- Everyday finance fields --
             {
                 "key": "merchant_name",
                 "label": "Merchant Name",
@@ -200,6 +251,56 @@ def get_import_metadata(
                 "is_required": False,
                 "type": "string",
             },
+            {
+                "key": "expense_category",
+                "label": "Expense Category",
+                "is_required": False,
+                "type": "enum",
+                "enum_values": [
+                    "groceries",
+                    "dining",
+                    "transport",
+                    "utilities",
+                    "entertainment",
+                    "healthcare",
+                    "education",
+                    "shopping",
+                    "travel",
+                    "subscription",
+                    "rent",
+                    "insurance",
+                    "other",
+                ],
+            },
+            {
+                "key": "revenue_category",
+                "label": "Revenue Category",
+                "is_required": False,
+                "type": "enum",
+                "enum_values": [
+                    "salary",
+                    "freelance",
+                    "rental_income",
+                    "refund",
+                    "gift",
+                    "other",
+                ],
+            },
+            {
+                "key": "payment_method",
+                "label": "Payment Method",
+                "is_required": False,
+                "type": "enum",
+                "enum_values": [
+                    "card",
+                    "bank_transfer",
+                    "cash",
+                    "mobile_payment",
+                    "crypto",
+                    "other",
+                ],
+            },
+            # -- Transfer fields --
             {
                 "key": "source_reference",
                 "label": "Source Reference",

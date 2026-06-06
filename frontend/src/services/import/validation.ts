@@ -50,14 +50,11 @@ export function isFieldRequiredForOpType(fieldKey: string, opType: string): bool
   if (globalRequired.includes(fieldKey)) return true;
   if (!opType) return false;
 
-  if (opType === 'buy' || opType === 'sell') {
-    return ['ticker', 'quantity', 'unit_price'].includes(fieldKey);
-  }
-  if (opType === 'limit_buy' || opType === 'limit_sell') {
-    return ['ticker', 'quantity', 'unit_price'].includes(fieldKey);
+  if (opType === 'trade') {
+    return ['ticker', 'quantity', 'unit_price', 'trade_side'].includes(fieldKey);
   }
   if (opType === 'dividend') {
-    return ['ticker', 'unit_price'].includes(fieldKey); // unit_price maps to dividend_per_share
+    return ['ticker', 'unit_price'].includes(fieldKey);
   }
   if (opType === 'interest') {
     return fieldKey === 'interest_type';
@@ -80,7 +77,10 @@ export function isFieldRequiredForOpType(fieldKey: string, opType: string): bool
   if (opType === 'tax') {
     return ['tax_amount'].includes(fieldKey);
   }
-  if (opType === 'expense' || opType === 'revenue') {
+  if (opType === 'expense') {
+    return fieldKey === 'merchant_name';
+  }
+  if (opType === 'revenue') {
     return fieldKey === 'merchant_name';
   }
   return false;

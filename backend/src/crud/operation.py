@@ -5,19 +5,16 @@ from sqlmodel import Session, select
 from src.crud.base import CRUDBase
 from src.models.fee import Fee
 from src.models.operation import (
-    BuyOperation,
     DividendOperation,
     ExpenseOperation,
     FeeOperation,
     FxRateChangeOperation,
     InterestOperation,
-    LimitBuyOperation,
-    LimitSellOperation,
     Operation,
     RevenueOperation,
-    SellOperation,
     StockSplitOperation,
     TaxOperation,
+    TradeOperation,
     TransferInOperation,
     TransferOutOperation,
 )
@@ -27,10 +24,7 @@ from src.schemas.operation import OperationCreate, OperationUpdate
 
 # Map string discriminator to actual polymorphic STI model subclass
 OPERATION_TYPE_MAP: dict[str, type[Operation]] = {
-    "buy": BuyOperation,
-    "sell": SellOperation,
-    "limit_buy": LimitBuyOperation,
-    "limit_sell": LimitSellOperation,
+    "trade": TradeOperation,
     "dividend": DividendOperation,
     "fee": FeeOperation,
     "tax": TaxOperation,

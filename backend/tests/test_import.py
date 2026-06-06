@@ -224,7 +224,7 @@ def test_import_portfolio_transactions(session):  # noqa: PLR0915
     assert brk_pos is not None
 
     brk_buy_op = session.exec(
-        select(Operation).where(Operation.position_id == brk_pos.id, Operation.operation_type == "buy"),
+        select(Operation).where(Operation.position_id == brk_pos.id, Operation.operation_type == "trade"),
     ).first()
     assert brk_buy_op is not None
     assert len(brk_buy_op.fees) > 0
@@ -302,7 +302,7 @@ def test_get_import_metadata(client, session):
     op_type_field = next(f for f in fields if f["key"] == "operation_type")
     assert op_type_field["is_required"] is True
     assert op_type_field["type"] == "enum"
-    assert "buy" in op_type_field["enum_values"]
+    assert "trade" in op_type_field["enum_values"]
 
     executed_at_field = next(f for f in fields if f["key"] == "executed_at")
     assert executed_at_field["is_required"] is True
