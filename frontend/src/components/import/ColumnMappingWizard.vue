@@ -21,6 +21,7 @@ const props = defineProps<{
     enum_values?: string[];
   }>;
   activeOpType: string;
+  activeOpTypes?: string[];
   delimiter: string;
   decimalSeparator: string;
   uniqueCsvValues: string[];
@@ -281,8 +282,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="show" class="fixed inset-0 w-screen h-screen bg-slate-900/20 backdrop-blur-[2px] flex items-start justify-center z-[200] overflow-y-auto py-16 px-4 animate-[fadeIn_0.15s_ease-out_forwards]" @click.self="attemptClose">
-    <div class="w-full max-w-[600px] bg-bg-secondary border border-border-color rounded-md shadow-lg flex flex-col overflow-visible animate-[slideUp_0.2s_ease-out]" style="position: relative;">
+  <div v-if="show" class="fixed inset-0 w-screen h-screen bg-slate-900/20 backdrop-blur-[2px] flex items-center justify-center z-[200] px-2 sm:px-4 animate-[fadeIn_0.15s_ease-out_forwards]" @click.self="attemptClose">
+    <div class="w-full max-w-[650px] max-h-[92vh] bg-bg-secondary border border-border-color rounded-md shadow-lg flex flex-col overflow-hidden animate-[slideUp_0.2s_ease-out]" style="position: relative;">
       
       <!-- Custom exit confirmation dialog -->
       <DiscardChangesConfirmModal 
@@ -291,14 +292,14 @@ onBeforeUnmount(() => {
         @confirm="emit('close')" 
       />
 
-      <div class="py-4 px-6 border-b border-border-color flex justify-between items-center bg-bg-secondary rounded-t-md">
+      <div class="py-4 px-6 border-b border-border-color flex justify-between items-center bg-bg-secondary rounded-t-md shrink-0">
         <h4 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary);">
           {{ activeOpType ? `Configure Mapping for "${activeOpType}"` : 'Configure Global Mapping' }}
         </h4>
         <button @click="attemptClose" class="bg-transparent border-0 cursor-pointer text-2xl text-text-secondary leading-none hover:text-text-primary">&times;</button>
       </div>
 
-      <div class="p-6 overflow-visible min-h-[280px]">
+      <div class="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0">
         <!-- Read-only Column Info -->
         <div class="grid grid-cols-2 gap-4 bg-bg-primary py-3 px-4 rounded-sm border border-border-color">
           <div>
@@ -318,6 +319,7 @@ onBeforeUnmount(() => {
           v-model:selectedDbKey="selectedDbKey"
           :importFields="importFields"
           :activeOpType="activeOpType"
+          :activeOpTypes="activeOpTypes"
         />
 
         <!-- Dynamic options based on target type -->
@@ -353,7 +355,7 @@ onBeforeUnmount(() => {
 
       </div>
 
-      <div class="py-4 px-6 border-t border-border-color flex justify-end gap-3 bg-bg-primary">
+      <div class="py-4 px-6 border-t border-border-color flex justify-end gap-3 bg-bg-primary shrink-0">
         <button v-if="initialMapping && initialMapping.dbKey" @click="handleClear" class="btn btn-sm btn-danger-icon" title="Remove mapping">
           <Trash2 style="width: 14px; height: 14px; color: var(--color-danger);" />
           <span>Clear Mapping</span>

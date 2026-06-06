@@ -45,6 +45,47 @@ export function parseDateTimeWithFormat(val: string, format?: string): Date | nu
   return isNaN(fallback.getTime()) ? null : fallback;
 }
 
+export function isFieldRequiredForOpType(fieldKey: string, opType: string): boolean {
+  const globalRequired = ['executed_at', 'total_amount', 'currency'];
+  if (globalRequired.includes(fieldKey)) return true;
+  if (!opType) return false;
+
+  if (opType === 'buy' || opType === 'sell') {
+    return ['ticker', 'quantity', 'unit_price'].includes(fieldKey);
+  }
+  if (opType === 'limit_buy' || opType === 'limit_sell') {
+    return ['ticker', 'quantity', 'unit_price'].includes(fieldKey);
+  }
+  if (opType === 'dividend') {
+    return ['ticker', 'unit_price'].includes(fieldKey); // unit_price maps to dividend_per_share
+  }
+  if (opType === 'interest') {
+    return fieldKey === 'interest_type';
+  }
+  if (opType === 'transfer_in') {
+    return fieldKey === 'source_reference';
+  }
+  if (opType === 'transfer_out') {
+    return fieldKey === 'destination_reference';
+  }
+  if (opType === 'stock_split') {
+    return ['ticker', 'quantity'].includes(fieldKey);
+  }
+  if (opType === 'fx_rate_change') {
+    return ['source_currency', 'target_currency', 'exchange_rate'].includes(fieldKey);
+  }
+  if (opType === 'fee') {
+    return ['fee_amount'].includes(fieldKey);
+  }
+  if (opType === 'tax') {
+    return ['tax_amount'].includes(fieldKey);
+  }
+  if (opType === 'expense' || opType === 'revenue') {
+    return fieldKey === 'merchant_name';
+  }
+  return false;
+}
+
 export function getMappedColIdxForField(
   dbKey: string,
   opType: string,
@@ -115,7 +156,9 @@ export function validateLiveStats(params: {
       const isMapped = colIdx !== -1;
       const rawValue = isMapped ? row[colIdx] : '';
 
-      if (field.is_required && !isMapped) {
+      const isRequired = field.is_required || isFieldRequiredForOpType(field.key, opType);
+
+      if (isRequired && !isMapped) {
         rowErrors.push({
           fieldKey: field.key,
           fieldLabel: field.label,
@@ -170,7 +213,7 @@ export function validateLiveStats(params: {
             });
           }
         }
-      } else if (field.is_required && (!rawValue || !rawValue.trim())) {
+      } else if (isRequired && (!rawValue || !rawValue.trim())) {
         rowErrors.push({
           fieldKey: field.key,
           fieldLabel: field.label,
@@ -223,7 +266,8 @@ export function getValidationErrors(params: {
 
   params.activeDbOpTypes.forEach(opType => {
     params.importFields.forEach(f => {
-      if (f.is_required) {
+      const isRequired = f.is_required || isFieldRequiredForOpType(f.key, opType);
+      if (isRequired) {
         const colIdx = getMappedColIdxForField(f.key, opType, params.columnConfigMap);
         if (colIdx === -1) {
           errors.push(`Required database field "${f.label}" is not mapped for "${opType}" transactions.`);

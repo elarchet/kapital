@@ -35,16 +35,38 @@ const searchQuery = ref('');
 const buttonRef = ref<HTMLButtonElement | null>(null);
 const dropdownStyle = ref<Record<string, string>>({});
 
+const optionsMaxHeight = ref('300px');
+
 const updatePosition = () => {
   if (!buttonRef.value) return;
   const rect = buttonRef.value.getBoundingClientRect();
-  dropdownStyle.value = {
-    position: 'fixed',
-    top: `${rect.bottom}px`,
-    left: `${rect.left}px`,
-    width: `${rect.width}px`,
-    zIndex: '9999'
-  };
+  const estimatedHeight = 350; // Total estimated height of search + list
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+
+  if (spaceBelow < estimatedHeight && spaceAbove > spaceBelow) {
+    // Show above the button
+    const maxAvailable = Math.max(100, spaceAbove - 60);
+    optionsMaxHeight.value = `${Math.min(300, maxAvailable - 60)}px`;
+    dropdownStyle.value = {
+      position: 'fixed',
+      bottom: `${window.innerHeight - rect.top + 4}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+      zIndex: '9999'
+    };
+  } else {
+    // Show below the button
+    const maxAvailable = Math.max(100, spaceBelow - 60);
+    optionsMaxHeight.value = `${Math.min(300, maxAvailable - 60)}px`;
+    dropdownStyle.value = {
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+      zIndex: '9999'
+    };
+  }
 };
 
 watch(isDropdownOpen, (isOpen) => {
@@ -138,7 +160,10 @@ const selectOption = (val: string) => {
             :placeholder="searchPlaceholder"
             @click.stop
           />
-          <div class="max-h-[300px] overflow-y-auto flex flex-col gap-0.5">
+          <div 
+            :style="{ maxHeight: optionsMaxHeight }"
+            class="overflow-y-auto flex flex-col gap-0.5"
+          >
             <div 
               v-if="showClear"
               @click="selectOption('')" 

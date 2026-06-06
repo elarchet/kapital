@@ -34,7 +34,8 @@ export function prepopulateFieldGuesses(
     tax_amount: ['tax', 'withholding tax'],
     tax_currency: ['tax currency'],
     merchant_name: ['merchant', 'merchant name'],
-    merchant_category: ['category', 'merchant category']
+    merchant_category: ['category', 'merchant category'],
+    interest_type: ['interest type', 'interest_type']
   };
 
   Object.entries(matches).forEach(([dbKey, keys]) => {

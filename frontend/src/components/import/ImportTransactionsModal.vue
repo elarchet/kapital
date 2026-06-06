@@ -788,6 +788,7 @@ onBeforeUnmount(() => {
     :exampleValue="wizardExampleValue"
     :importFields="importFields"
     :activeOpType="wizardActiveOpType"
+    :activeOpTypes="activeDbOpTypes"
     :delimiter="importDelimiter"
     :decimalSeparator="importDecimalSep"
     :uniqueCsvValues="wizardUniqueValues"

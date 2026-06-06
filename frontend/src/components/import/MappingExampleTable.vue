@@ -140,10 +140,12 @@ const openWizardForSelected = () => {
     return { colIdx: parseInt(c), opType: o };
   });
 
+  const isGlobal = targets.length > 1;
+
   emit('open-wizard', {
     colIdx: primary.colIdx,
-    opType: primary.opType,
-    targets
+    opType: isGlobal ? null : primary.opType,
+    targets: isGlobal ? [{ colIdx: primary.colIdx, opType: null }] : targets
   });
 };
 
