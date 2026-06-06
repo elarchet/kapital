@@ -378,7 +378,9 @@ const openWizard = (colIdx: number, opType: string | null, targets?: Array<{ col
     importFileHeaders: importFileHeaders.value,
     exampleTransactions: exampleTransactions.value,
     allRawRows: allRawRows.value,
-    columnConfigMap: columnConfigMap.value
+    columnConfigMap: columnConfigMap.value,
+    matchingRowsByType: matchingRowsByType.value,
+    targets: wizardTargetCells.value
   });
 
   if (targets && targets.length > 1) {

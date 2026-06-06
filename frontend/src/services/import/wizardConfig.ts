@@ -56,6 +56,8 @@ export function getWizardSetup(params: {
   exampleTransactions: any[];
   allRawRows: string[][];
   columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  matchingRowsByType?: Record<string, { csvRow: string[]; rowIdx: number }[]>;
+  targets?: Array<{ colIdx: number; opType: string | null }>;
 }) {
   const csvHeaderName = params.importFileHeaders[params.colIdx];
 
@@ -72,12 +74,38 @@ export function getWizardSetup(params: {
   }
 
   const uniqueSet = new Set<string>();
-  params.allRawRows.forEach(row => {
-    const v = row[params.colIdx];
-    if (v && v.trim()) {
-      uniqueSet.add(v.trim());
+  const hasGlobalTarget = params.targets?.some(t => t.opType === null);
+  const isGlobal = hasGlobalTarget || (!params.opType && (!params.targets || params.targets.length === 0));
+
+  if (isGlobal || !params.matchingRowsByType) {
+    params.allRawRows.forEach(row => {
+      const v = row[params.colIdx];
+      if (v && v.trim()) {
+        uniqueSet.add(v.trim());
+      }
+    });
+  } else {
+    const opTypesToCollect = new Set<string>();
+    if (params.targets && params.targets.length > 0) {
+      params.targets.forEach(t => {
+        if (t.opType) opTypesToCollect.add(t.opType);
+      });
+    } else if (params.opType) {
+      opTypesToCollect.add(params.opType);
     }
-  });
+
+    opTypesToCollect.forEach(opType => {
+      const matches = params.matchingRowsByType![opType];
+      if (matches) {
+        matches.forEach(item => {
+          const v = item.csvRow[params.colIdx];
+          if (v && v.trim()) {
+            uniqueSet.add(v.trim());
+          }
+        });
+      }
+    });
+  }
   const uniqueValues = Array.from(uniqueSet);
 
   const conf = params.columnConfigMap[params.colIdx];
