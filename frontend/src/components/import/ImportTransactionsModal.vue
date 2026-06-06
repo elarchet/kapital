@@ -368,7 +368,6 @@ const goToStep2 = () => {
 };
 
 const openWizard = (colIdx: number, opType: string | null, targets?: Array<{ colIdx: number; opType: string | null }>) => {
-  if (colIdx === operationTypeColumnIdx.value) return; // Already configured in Step 1
   wizardColIdx.value = colIdx;
   wizardActiveOpType.value = opType || '';
   wizardTargetCells.value = targets && targets.length > 0 ? targets : [{ colIdx, opType }];

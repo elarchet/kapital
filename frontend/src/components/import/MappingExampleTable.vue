@@ -105,8 +105,6 @@ const selectCell = (colIdx: number, opType: string, multiSelect: boolean) => {
 };
 
 const selectColumn = (colIdx: number) => {
-  if (colIdx === props.operationTypeColumnIdx) return;
-
   selectedCells.value.clear();
   props.exampleTransactions.forEach(example => {
     selectedCells.value.add(`${colIdx}-${example.opType}`);
@@ -150,8 +148,6 @@ const openWizardForSelected = () => {
 };
 
 const handleCellClick = (colIdx: number, opType: string, event: MouseEvent) => {
-  if (colIdx === props.operationTypeColumnIdx) return;
-
   const isCtrl = event.ctrlKey || event.metaKey;
   const isAlreadySelected = isSelected(colIdx, opType);
 
@@ -186,7 +182,6 @@ const copyMapping = (colIdx: number, opType: string) => {
 
 const canPaste = (colIdx: number, opType: string): boolean => {
   if (!copiedMapping.value) return false;
-  if (colIdx === props.operationTypeColumnIdx) return false;
   if (copiedMapping.value.colIdx === colIdx && copiedMapping.value.opType === opType) return false;
   return true;
 };
@@ -251,15 +246,11 @@ const navigateGrid = (key: string) => {
   let nextRowIdx = rowIdx;
 
   if (key === 'ArrowLeft') {
-    do {
-      nextCol = nextCol - 1;
-      if (nextCol < 0) nextCol = numCols - 1;
-    } while (nextCol === props.operationTypeColumnIdx);
+    nextCol = nextCol - 1;
+    if (nextCol < 0) nextCol = numCols - 1;
   } else if (key === 'ArrowRight') {
-    do {
-      nextCol = nextCol + 1;
-      if (nextCol >= numCols) nextCol = 0;
-    } while (nextCol === props.operationTypeColumnIdx);
+    nextCol = nextCol + 1;
+    if (nextCol >= numCols) nextCol = 0;
   } else if (key === 'ArrowUp') {
     nextRowIdx = rowIdx - 1;
     if (nextRowIdx < 0) nextRowIdx = numRows - 1;
@@ -353,12 +344,9 @@ const nextExampleForType = (opType: string) => {
               v-for="(h, idx) in importFileHeaders" 
               :key="idx"
               @click="selectColumn(idx)"
-              @dblclick="idx !== operationTypeColumnIdx ? (selectColumn(idx), openWizardForSelected()) : null"
-              :style="{ cursor: idx !== operationTypeColumnIdx ? 'pointer' : 'default' }"
-              :class="[
-                idx !== operationTypeColumnIdx ? 'hover:bg-slate-50 dark:hover:bg-slate-800/40 select-none' : ''
-              ]"
-              style="min-width: 120px; padding: 0.2rem 0.35rem; vertical-align: top; transition: background-color 0.15s ease;"
+              @dblclick="selectColumn(idx), openWizardForSelected()"
+              style="min-width: 120px; padding: 0.2rem 0.35rem; vertical-align: top; transition: background-color 0.15s ease; cursor: pointer;"
+              class="hover:bg-slate-50 dark:hover:bg-slate-800/40 select-none"
             >
               <div style="font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="h">
                 {{ h }}
@@ -372,7 +360,7 @@ const nextExampleForType = (opType: string) => {
             <td style="vertical-align: middle; text-align: left; padding: 0.15rem 0.3rem;">
               <div style="display: flex; align-items: center; gap: 0.35rem; padding: 0.05rem; white-space: nowrap;">
                 <span class="badge" :class="'badge-' + example.opType" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; min-width: 85px; text-align: center; display: inline-block;">
-                  {{ example.opType }}
+                   {{ example.opType }}
                 </span>
                 
                 <!-- Compact Switcher Controls -->
@@ -394,18 +382,15 @@ const nextExampleForType = (opType: string) => {
               v-for="(cell, idx) in example.csvRow" 
               :key="idx" 
               :id="`cell-${example.opType}-${idx}`"
-              :tabindex="idx !== operationTypeColumnIdx ? 0 : -1"
-              @click="idx !== operationTypeColumnIdx ? handleCellClick(idx, example.opType, $event) : null" 
-              @dblclick="idx !== operationTypeColumnIdx ? openWizardForSelected() : null"
+              tabindex="0"
+              @click="handleCellClick(idx, example.opType, $event)" 
+              @dblclick="openWizardForSelected()"
               :style="{ 
-                cursor: idx !== operationTypeColumnIdx ? 'pointer' : 'default',
                 outline: getCellOutlineStyle(idx, example.opType),
                 outlineOffset: '-2px'
               }" 
-              :class="[
-                idx !== operationTypeColumnIdx ? 'group focus:outline-none focus:bg-slate-100/50 dark:focus:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-150' : '',
-                recentlyFlashed[`${idx}-${example.opType}`] || ''
-              ]"
+              class="group focus:outline-none focus:bg-slate-100/50 dark:focus:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-150 cursor-pointer"
+              :class="recentlyFlashed[`${idx}-${example.opType}`] || ''"
               style="vertical-align: middle; position: relative; padding: 0.15rem 0.3rem; max-width: 160px;"
             >
               <div style="display: flex; flex-direction: column; gap: 0.05rem; overflow: hidden;">
