@@ -340,11 +340,11 @@ const nextExampleForType = (opType: string) => {
 
 <template>
   <div>
-    <div style="overflow-x: auto; max-width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.5rem;">
+    <div style="overflow: auto; max-height: 400px; max-width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.5rem; position: relative;">
       <table class="preview-table" style="margin-top: 0; min-width: 100%;">
         <thead>
           <tr>
-            <th style="min-width: 180px; background-color: var(--bg-tertiary); font-weight: 700; color: var(--text-secondary); text-align: center;">
+            <th style="min-width: 140px; padding: 0.35rem 0.5rem; background-color: var(--bg-tertiary); font-weight: 700; color: var(--text-secondary); text-align: center;">
               Context & Stats
             </th>
             <th 
@@ -356,7 +356,7 @@ const nextExampleForType = (opType: string) => {
               :class="[
                 idx !== operationTypeColumnIdx ? 'hover:bg-slate-50 dark:hover:bg-slate-800/40 select-none' : ''
               ]"
-              style="min-width: 180px; padding: 0.75rem; vertical-align: top; transition: background-color 0.15s ease;"
+              style="min-width: 140px; padding: 0.35rem 0.5rem; vertical-align: top; transition: background-color 0.15s ease;"
             >
               <div style="font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="h">
                 {{ h }}
@@ -367,10 +367,10 @@ const nextExampleForType = (opType: string) => {
         <tbody>
           <!-- Example rows per type -->
           <tr v-for="example in exampleTransactions" :key="example.opType">
-            <td style="vertical-align: middle; text-align: left; padding: 0.35rem 0.5rem;">
-              <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 0.15rem;">
+            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.4rem;">
+              <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 0.1rem;">
                 <div style="display: flex; align-items: center; gap: 0.35rem; width: 100%;">
-                  <span class="badge" :class="'badge-' + example.opType" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; min-width: 110px; text-align: center; display: inline-block;">
+                  <span class="badge" :class="'badge-' + example.opType" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; min-width: 95px; text-align: center; display: inline-block;">
                     {{ example.opType }}
                   </span>
                   
@@ -408,11 +408,11 @@ const nextExampleForType = (opType: string) => {
               ]"
               style="vertical-align: middle; position: relative;"
             >
-              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <span style="font-family: monospace; font-size: 0.75rem; color: var(--text-secondary);">
+              <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+                <span style="font-family: monospace; font-size: 0.7rem; color: var(--text-secondary);">
                   {{ cell || '—' }}
                 </span>
-                <div v-if="getResolvedKeyForCell(idx, example.opType)" style="font-size: 0.65rem; color: var(--accent-color); font-weight: 600; margin-top: 0.1rem;">
+                <div v-if="getResolvedKeyForCell(idx, example.opType)" style="font-size: 0.65rem; color: var(--accent-color); font-weight: 600; margin-top: 0.05rem;">
                   → {{ importFields.find(f => f.key === getResolvedKeyForCell(idx, example.opType))?.label || getResolvedKeyForCell(idx, example.opType) }}
                 </div>
               </div>

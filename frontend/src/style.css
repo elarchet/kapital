@@ -483,13 +483,20 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Common Import Preview Tables */
 .preview-table {
-  @apply w-full border-collapse text-[0.75rem] mt-2 border border-border-color;
+  @apply w-full border-collapse text-[0.7rem] mt-2 border border-border-color;
 }
 .preview-table th, .preview-table td {
-  @apply border border-border-color py-1.5 px-2 text-left;
+  @apply border border-border-color py-1 px-1.5 text-left;
 }
 .preview-table th {
   @apply bg-bg-tertiary font-semibold text-text-secondary;
+}
+
+/* Sticky top header for scrolling */
+.preview-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 /* Sticky first column in step 2 preview tables */
@@ -499,6 +506,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 .preview-table th:first-child {
   @apply z-[6] bg-bg-tertiary;
+}
+.preview-table thead th:first-child {
+  z-index: 12;
 }
 
 /* Polymorphic Action Badges */
