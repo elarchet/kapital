@@ -15,6 +15,7 @@ from src.models import (
     FxRateChangeOperation,
     Institution,
     InterestOperation,
+    InterestType,
     LimitBuyOperation,
     LimitSellOperation,
     Operation,
@@ -152,6 +153,8 @@ class TaxOperationFactory(BaseOperationFactory):
 class InterestOperationFactory(BaseOperationFactory):
     class Meta:
         model = InterestOperation
+
+    interest_type = InterestType.CASH_INTEREST
 
 
 class TransferInOperationFactory(BaseOperationFactory):

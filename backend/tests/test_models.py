@@ -26,6 +26,7 @@ from src.models import (
     FxRateChangeOperation,
     Institution,
     InterestOperation,
+    InterestType,
     LimitBuyOperation,
     LimitSellOperation,
     Operation,
@@ -324,6 +325,9 @@ class TestPolymorphicDispatch:
     def test_transfer_references_roundtrip(self, ops_map):
         assert ops_map["TransferInOperation"].source_reference == "BANK-REF-001"
         assert ops_map["TransferOutOperation"].destination_reference == "EXT-REF-002"
+
+    def test_interest_type_roundtrip(self, ops_map):
+        assert ops_map["InterestOperation"].interest_type == InterestType.CASH_INTEREST
 
 
 # ---------------------------------------------------------------------------
