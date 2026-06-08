@@ -12,7 +12,6 @@ const props = defineProps<{
 const delimiter = defineModel<string>('delimiter', { required: true });
 const decimalSeparator = defineModel<string>('decimalSeparator', { required: true });
 const operationTypeColumnIdx = defineModel<number | null>('operationTypeColumnIdx', { required: true });
-const operationTypeMappings = defineModel<Record<string, string>>('operationTypeMappings', { required: true });
 
 const emit = defineEmits<{
   (e: 'column-change'): void;
@@ -58,21 +57,13 @@ const decimalSeparatorOptions = [
   { value: '.', label: 'Dot (.)' },
   { value: ',', label: 'Comma (,)' }
 ];
-
-const dbOpOptions = computed(() => {
-  const enumVals = props.importFields.find(f => f.key === 'operation_type')?.enum_values || [];
-  return enumVals.map((opt: string) => ({
-    value: opt,
-    label: opt
-  }));
-});
 </script>
 
 <template>
   <div>
     <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: start; width: 100%; min-height: auto;">
-      <!-- Left Column: Delimiter details and Transaction Type column select -->
-      <div style="flex: 1 1 350px; min-width: 0;">
+      <!-- Main Content: Delimiter details and Transaction Type column select -->
+      <div style="flex: 1 1 100%; min-width: 0; max-width: 500px; margin: 0 auto;">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
           <div style="margin-bottom: 0;">
             <CustomDropdown
@@ -109,40 +100,13 @@ const dbOpOptions = computed(() => {
           </p>
         </div>
       </div>
-
-      <!-- Right Column: Map File Actions to Database Transaction Types -->
-      <div style="flex: 1 1 350px; min-width: 0;">
-        <div v-if="operationTypeColumnIdx !== null && uniqueOperationTypes.length > 0">
-          <h5 style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 0.35rem;">
-            Map File Actions to Database Transaction Types
-          </h5>
-          <div style="display: flex; flex-direction: column; gap: 0.35rem; border: 1px solid var(--border-color); padding: 0.5rem; border-radius: var(--radius-sm); background-color: var(--bg-secondary); max-height: 240px; overflow-y: auto;">
-            <div v-for="val in uniqueOperationTypes" :key="val" style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 0.5rem; align-items: center;">
-              <span style="font-size: 0.75rem; font-family: monospace; background-color: var(--bg-primary); padding: 0.2rem 0.4rem; border-radius: var(--radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="val">
-                {{ val }}
-              </span>
-              <div style="margin-bottom: 0;">
-                <CustomDropdown
-                  v-model="operationTypeMappings[val]"
-                  :options="dbOpOptions"
-                  :searchable="false"
-                  :showClear="true"
-                  :compact="true"
-                  clearLabel="-- Choose DB Operation --"
-                  placeholder="-- Choose DB Operation --"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
       <button 
         @click="goToStep2" 
         class="btn btn-primary" 
-        :disabled="operationTypeColumnIdx === null || activeDbOpTypes.length === 0"
+        :disabled="operationTypeColumnIdx === null"
       >
         Next: Configure Column Mappings &rarr;
       </button>

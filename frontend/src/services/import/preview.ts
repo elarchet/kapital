@@ -7,7 +7,8 @@ export function parsePreviewRows(params: {
   importDecimalSep: string;
   operationTypeColumnIdx: number | null;
   operationTypeMappings: Record<string, string>;
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  uiColumns: Array<{ id: string; colIdx: number }>;
   importFields: any[];
 }) {
   if (!params.fileText || !params.importDelimiter || params.operationTypeColumnIdx === null) return [];
@@ -15,13 +16,16 @@ export function parsePreviewRows(params: {
   const lines = params.fileText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length <= 1) return [];
 
-  const getColumnConfig = (colIdx: number, opType: string) => {
-    const conf = params.columnConfigMap[colIdx];
-    if (!conf) return null;
-    if (conf.typeSpecific[opType]?.dbKey) {
-      return conf.typeSpecific[opType];
-    }
-    return conf.global;
+  const getColumnConfigForField = (fieldKey: string, opType: string) => {
+    let foundConf: ColMapping | null = null;
+    Object.entries(params.columnConfigMap).forEach(([_, conf]) => {
+      if (conf.typeSpecific[opType]?.dbKey === fieldKey) {
+        foundConf = conf.typeSpecific[opType];
+      } else if (conf.global.dbKey === fieldKey && !conf.typeSpecific[opType]?.dbKey) {
+        foundConf = conf.global;
+      }
+    });
+    return foundConf;
   };
 
   const previewLines = lines.slice(1, 6);
@@ -33,7 +37,7 @@ export function parsePreviewRows(params: {
     const opType = params.operationTypeMappings[rawAction] || 'unknown';
 
     const getMappedVal = (dbKey: string) => {
-      const idx = getMappedColIdxForField(dbKey, opType, params.columnConfigMap);
+      const idx = getMappedColIdxForField(dbKey, opType, params.columnConfigMap, params.uiColumns);
       return getVal(idx);
     };
 
@@ -41,9 +45,9 @@ export function parsePreviewRows(params: {
       let num = parseFloat(rawVal.replace(params.importDecimalSep === '.' ? ',' : '.', '').replace(params.importDecimalSep, '.'));
       if (isNaN(num)) return rawVal;
 
-      const idx = getMappedColIdxForField(dbKey, opType, params.columnConfigMap);
+      const idx = getMappedColIdxForField(dbKey, opType, params.columnConfigMap, params.uiColumns);
       if (idx !== -1) {
-        const conf = getColumnConfig(idx, opType);
+        const conf = getColumnConfigForField(dbKey, opType) as ColMapping | null;
         if (conf?.divisor) num /= conf.divisor;
         if (conf?.multiplier) num *= conf.multiplier;
       }
@@ -75,9 +79,9 @@ export function parsePreviewRows(params: {
       const rawFeeType = getMappedVal('fee_type');
       let resolvedFeeType = 'conversion';
       if (rawFeeType) {
-        const idx = getMappedColIdxForField('fee_type', opType, params.columnConfigMap);
+        const idx = getMappedColIdxForField('fee_type', opType, params.columnConfigMap, params.uiColumns);
         if (idx !== -1) {
-          const conf = getColumnConfig(idx, opType);
+          const conf = getColumnConfigForField('fee_type', opType) as ColMapping | null;
           resolvedFeeType = conf?.enumMappings?.[rawFeeType] || 'conversion';
         }
       }

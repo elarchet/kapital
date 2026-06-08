@@ -24,23 +24,23 @@ export function groupRowsByOpType(
 }
 
 export function getExampleTransactions(
-  activeDbOpTypes: string[],
-  matchingRowsByType: Record<string, { csvRow: string[]; rowIdx: number }[]>,
+  uniqueOperationTypes: string[],
+  matchingRowsByRawAction: Record<string, { csvRow: string[]; rowIdx: number }[]>,
   selectedExampleOffset: Record<string, number>
 ) {
-  return activeDbOpTypes.map(type => {
-    const matches = matchingRowsByType[type] || [];
+  return uniqueOperationTypes.map(rawAction => {
+    const matches = matchingRowsByRawAction[rawAction] || [];
     if (matches.length === 0) {
-      return { opType: type, csvRow: [], rowIdx: -1, totalMatches: 0, currentOffset: 0 };
+      return { opType: rawAction, csvRow: [], rowIdx: -1, totalMatches: 0, currentOffset: 0 };
     }
 
-    let offset = selectedExampleOffset[type] || 0;
+    let offset = selectedExampleOffset[rawAction] || 0;
     if (offset >= matches.length) {
       offset = 0;
     }
     const match = matches[offset];
     return {
-      opType: type,
+      opType: rawAction,
       csvRow: match.csvRow,
       rowIdx: match.rowIdx,
       totalMatches: matches.length,
@@ -50,20 +50,22 @@ export function getExampleTransactions(
 }
 
 export function getWizardSetup(params: {
+  colId: string;
   colIdx: number;
   opType: string | null;
+  rawAction: string | null;
   importFileHeaders: string[];
   exampleTransactions: any[];
   allRawRows: string[][];
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
   matchingRowsByType?: Record<string, { csvRow: string[]; rowIdx: number }[]>;
-  targets?: Array<{ colIdx: number; opType: string | null }>;
+  targets?: Array<{ colId: string; colIdx: number; opType: string | null }>;
 }) {
   const csvHeaderName = params.importFileHeaders[params.colIdx];
 
   let exampleValue = '';
-  if (params.opType) {
-    const example = params.exampleTransactions.find(e => e.opType === params.opType);
+  if (params.rawAction) {
+    const example = params.exampleTransactions.find(e => e.opType === params.rawAction);
     if (example && example.csvRow) {
       exampleValue = example.csvRow[params.colIdx] || '';
     }
@@ -108,19 +110,30 @@ export function getWizardSetup(params: {
   }
   const uniqueValues = Array.from(uniqueSet);
 
-  const conf = params.columnConfigMap[params.colIdx];
+  const conf = params.columnConfigMap[params.colId];
   let initialMapping: any = null;
-  if (params.opType) {
-    const specific = conf.typeSpecific[params.opType];
-    if (specific?.dbKey) {
-      initialMapping = {
-        dbKey: specific.dbKey,
-        scope: 'type',
-        divisor: specific.divisor,
-        multiplier: specific.multiplier,
-        enumMappings: specific.enumMappings,
-        dateFormat: specific.dateFormat
-      };
+  if (conf) {
+    if (params.opType) {
+      const specific = conf.typeSpecific[params.opType];
+      if (specific?.dbKey) {
+        initialMapping = {
+          dbKey: specific.dbKey,
+          scope: 'type',
+          divisor: specific.divisor,
+          multiplier: specific.multiplier,
+          enumMappings: specific.enumMappings,
+          dateFormat: specific.dateFormat
+        };
+      } else {
+        initialMapping = {
+          dbKey: conf.global.dbKey,
+          scope: 'global',
+          divisor: conf.global.divisor,
+          multiplier: conf.global.multiplier,
+          enumMappings: conf.global.enumMappings,
+          dateFormat: conf.global.dateFormat
+        };
+      }
     } else {
       initialMapping = {
         dbKey: conf.global.dbKey,
@@ -131,15 +144,6 @@ export function getWizardSetup(params: {
         dateFormat: conf.global.dateFormat
       };
     }
-  } else {
-    initialMapping = {
-      dbKey: conf.global.dbKey,
-      scope: 'global',
-      divisor: conf.global.divisor,
-      multiplier: conf.global.multiplier,
-      enumMappings: conf.global.enumMappings,
-      dateFormat: conf.global.dateFormat
-    };
   }
 
   return {
@@ -151,8 +155,8 @@ export function getWizardSetup(params: {
 }
 
 export function saveWizardConfig(
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
-  colIdx: number,
+  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
+  colId: string,
   opType: string | null,
   payload: {
     dbKey: string;
@@ -163,7 +167,7 @@ export function saveWizardConfig(
     dateFormat?: string;
   }
 ) {
-  const conf = columnConfigMap[colIdx];
+  const conf = columnConfigMap[colId];
   if (!conf) return;
 
   const mapEntry = {
@@ -174,12 +178,10 @@ export function saveWizardConfig(
     dateFormat: payload.dateFormat
   };
 
-  // Always save to typeSpecific when opType is provided; fall back to global only when explicitly absent
   if (opType) {
     if (payload.dbKey) {
       conf.typeSpecific[opType] = mapEntry;
     } else {
-      // "Ignore column" — remove any existing type-specific mapping
       delete conf.typeSpecific[opType];
     }
   } else {
@@ -188,11 +190,11 @@ export function saveWizardConfig(
 }
 
 export function clearWizardConfig(
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
-  colIdx: number,
+  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
+  colId: string,
   opType: string | null
 ) {
-  const conf = columnConfigMap[colIdx];
+  const conf = columnConfigMap[colId];
   if (!conf) return;
 
   if (opType) {

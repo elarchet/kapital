@@ -5,9 +5,12 @@ import VerificationPanel from './VerificationPanel.vue';
 
 defineProps<{
   importFileHeaders: string[];
+  uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
   operationTypeColumnIdx: number | null;
-  columnConfigMap: Record<number, { global: any; typeSpecific: Record<string, any> }>;
+  columnConfigMap: Record<string, { global: any; typeSpecific: Record<string, any> }>;
   activeDbOpTypes: string[];
+  uniqueOperationTypes: string[];
+  operationTypeMappings: Record<string, string>;
   importFields: any[];
   exampleTransactions: any[];
   liveValidationStats: any;
@@ -20,10 +23,13 @@ const emit = defineEmits<{
   (e: 'update:saveMappingTemplate', val: boolean): void;
   (e: 'update:mappingTemplateName', val: string): void;
   (e: 'back'): void;
-  (e: 'open-wizard', payload: { colIdx: number; opType: string | null; targets?: Array<{ colIdx: number; opType: string | null }> }): void;
+  (e: 'open-wizard', payload: { colId: string; opType: string | null; targets?: Array<{ colId: string; opType: string | null }> }): void;
   (e: 'prev-example', opType: string): void;
   (e: 'next-example', opType: string): void;
-  (e: 'update-mapping', payload: { colIdx: number; opType: string | null; mapping: any }): void;
+  (e: 'update-mapping', payload: { colId: string; opType: string | null; mapping: any }): void;
+  (e: 'update-optype-mapping', payload: { rawAction: string; dbOpType: string }): void;
+  (e: 'duplicate-column', colId: string): void;
+  (e: 'delete-column', colId: string): void;
 }>();
 </script>
 
@@ -38,16 +44,22 @@ const emit = defineEmits<{
 
     <MappingExampleTable
       :importFileHeaders="importFileHeaders"
+      :uiColumns="uiColumns"
       :operationTypeColumnIdx="operationTypeColumnIdx"
       :columnConfigMap="columnConfigMap"
       :activeDbOpTypes="activeDbOpTypes"
+      :uniqueOperationTypes="uniqueOperationTypes"
+      :operationTypeMappings="operationTypeMappings"
       :importFields="importFields"
       :exampleTransactions="exampleTransactions"
       :liveValidationStats="liveValidationStats"
-      @open-wizard="(payload) => emit('open-wizard', payload)"
-      @prev-example="(opType) => emit('prev-example', opType)"
-      @next-example="(opType) => emit('next-example', opType)"
-      @update-mapping="(payload) => emit('update-mapping', payload)"
+      @open-wizard="(payload: any) => emit('open-wizard', payload)"
+      @prev-example="(opType: string) => emit('prev-example', opType)"
+      @next-example="(opType: string) => emit('next-example', opType)"
+      @update-mapping="(payload: any) => emit('update-mapping', payload)"
+      @update-optype-mapping="(payload: any) => emit('update-optype-mapping', payload)"
+      @duplicate-column="(colId: string) => emit('duplicate-column', colId)"
+      @delete-column="(colId: string) => emit('delete-column', colId)"
     />
 
     <!-- Verification Panel -->

@@ -89,15 +89,23 @@ export function isFieldRequiredForOpType(fieldKey: string, opType: string): bool
 export function getMappedColIdxForField(
   dbKey: string,
   opType: string,
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>
+  columnConfigMap: Record<string | number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
+  uiColumns?: Array<{ id: string; colIdx: number }>
 ): number {
   let mappedIdx = -1;
-  Object.entries(columnConfigMap).forEach(([idxStr, conf]) => {
-    const idx = Number(idxStr);
-    if (conf.typeSpecific[opType]?.dbKey === dbKey) {
-      mappedIdx = idx;
-    } else if (conf.global.dbKey === dbKey && !conf.typeSpecific[opType]?.dbKey) {
-      mappedIdx = idx;
+  Object.entries(columnConfigMap).forEach(([idOrIdxStr, conf]) => {
+    if (conf.typeSpecific[opType]?.dbKey === dbKey || (conf.global.dbKey === dbKey && !conf.typeSpecific[opType]?.dbKey)) {
+      if (uiColumns) {
+        const col = uiColumns.find(c => c.id === idOrIdxStr);
+        if (col) {
+          mappedIdx = col.colIdx;
+        }
+      } else {
+        const idx = Number(idOrIdxStr);
+        if (!isNaN(idx)) {
+          mappedIdx = idx;
+        }
+      }
     }
   });
   return mappedIdx;
@@ -107,7 +115,8 @@ export function validateLiveStats(params: {
   importFields: any[];
   importDelimiter: string;
   importDecimalSep: string;
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  uiColumns: Array<{ id: string; colIdx: number }>;
   activeDbOpTypes: string[];
   allRawRows: string[][];
   operationTypeColumnIdx: number | null;
@@ -131,13 +140,16 @@ export function validateLiveStats(params: {
 
   if (params.operationTypeColumnIdx === null) return stats;
 
-  const getColumnConfig = (colIdx: number, opType: string) => {
-    const conf = params.columnConfigMap[colIdx];
-    if (!conf) return null;
-    if (conf.typeSpecific[opType]?.dbKey) {
-      return conf.typeSpecific[opType];
-    }
-    return conf.global;
+  const getColumnConfigForField = (fieldKey: string, opType: string) => {
+    let foundConf: ColMapping | null = null;
+    Object.entries(params.columnConfigMap).forEach(([_, conf]) => {
+      if (conf.typeSpecific[opType]?.dbKey === fieldKey) {
+        foundConf = conf.typeSpecific[opType];
+      } else if (conf.global.dbKey === fieldKey && !conf.typeSpecific[opType]?.dbKey) {
+        foundConf = conf.global;
+      }
+    });
+    return foundConf;
   };
 
   params.allRawRows.forEach((row, rowIdx) => {
@@ -152,7 +164,7 @@ export function validateLiveStats(params: {
     const rowErrors: { fieldKey: string; fieldLabel: string; rawValue: string; errorMessage: string }[] = [];
 
     params.importFields.forEach(field => {
-      const colIdx = getMappedColIdxForField(field.key, opType, params.columnConfigMap);
+      const colIdx = getMappedColIdxForField(field.key, opType, params.columnConfigMap, params.uiColumns);
       const isMapped = colIdx !== -1;
       const rawValue = isMapped ? row[colIdx] : '';
 
@@ -170,7 +182,7 @@ export function validateLiveStats(params: {
 
       if (isMapped && rawValue && rawValue.trim()) {
         const val = rawValue.trim();
-        const mappingConf = getColumnConfig(colIdx, opType);
+        const mappingConf = getColumnConfigForField(field.key, opType) as ColMapping | null;
 
         if (field.type === 'numeric') {
           let cleaned = val;
@@ -247,7 +259,8 @@ export function getValidationErrors(params: {
   operationTypeMappings: Record<string, string>;
   activeDbOpTypes: string[];
   importFields: any[];
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  uiColumns: Array<{ id: string; colIdx: number }>;
   liveValidationStats: Record<string, { failed: number }>;
 }): string[] {
   const errors: string[] = [];
@@ -268,7 +281,7 @@ export function getValidationErrors(params: {
     params.importFields.forEach(f => {
       const isRequired = f.is_required || isFieldRequiredForOpType(f.key, opType);
       if (isRequired) {
-        const colIdx = getMappedColIdxForField(f.key, opType, params.columnConfigMap);
+        const colIdx = getMappedColIdxForField(f.key, opType, params.columnConfigMap, params.uiColumns);
         if (colIdx === -1) {
           errors.push(`Required database field "${f.label}" is not mapped for "${opType}" transactions.`);
         }

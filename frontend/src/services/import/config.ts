@@ -16,7 +16,8 @@ export function getEnumMappingsForField(dbKey: string, mappings: any): Record<st
 export function buildCustomMappingPayload(params: {
   operationTypeColumnIdx: number | null;
   importFileHeaders: string[];
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  uiColumns: Array<{ id: string; colIdx: number }>;
   operationTypeMappings: Record<string, string>;
   importFields: any[];
 }) {
@@ -32,8 +33,10 @@ export function buildCustomMappingPayload(params: {
     }
   });
 
-  Object.entries(params.columnConfigMap).forEach(([colIdxStr, conf]) => {
-    const colIdx = Number(colIdxStr);
+  Object.entries(params.columnConfigMap).forEach(([colId, conf]) => {
+    const col = params.uiColumns.find(c => c.id === colId);
+    if (!col) return;
+    const colIdx = col.colIdx;
     const headerName = params.importFileHeaders[colIdx];
 
     if (conf.global.dbKey) {
@@ -147,18 +150,66 @@ export function parseSchemaMappings(
 ): {
   operationTypeColumnIdx: number | null;
   operationTypeMappings: Record<string, string>;
-  columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
 } {
   let operationTypeColumnIdx: number | null = null;
   const operationTypeMappings: Record<string, string> = {};
-  const columnConfigMap: Record<number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }> = {};
+  const columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }> = {};
+  const uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }> = [];
 
-  importFileHeaders.forEach((_, idx) => {
-    columnConfigMap[idx] = {
+  importFileHeaders.forEach((h, idx) => {
+    const colId = `col-${idx}`;
+    uiColumns.push({
+      id: colId,
+      colIdx: idx,
+      name: h,
+      label: h
+    });
+    columnConfigMap[colId] = {
       global: { dbKey: '' },
       typeSpecific: {}
     };
   });
+
+  const getOrCreateColIdForMapping = (idx: number, dbKey: string, opType: string | null) => {
+    let foundColId = '';
+    for (const col of uiColumns) {
+      if (col.colIdx === idx) {
+        const conf = columnConfigMap[col.id];
+        if (!conf) continue;
+
+        const isUnmapped = !conf.global.dbKey && Object.keys(conf.typeSpecific).length === 0;
+        const isMappedToThis = opType
+          ? conf.typeSpecific[opType]?.dbKey === dbKey
+          : conf.global.dbKey === dbKey;
+
+        if (isUnmapped || isMappedToThis) {
+          foundColId = col.id;
+          break;
+        }
+      }
+    }
+
+    if (!foundColId) {
+      const headerName = importFileHeaders[idx];
+      const dupCount = uiColumns.filter(c => c.colIdx === idx).length;
+      foundColId = `col-${idx}_dup_${dupCount}`;
+      uiColumns.push({
+        id: foundColId,
+        colIdx: idx,
+        name: headerName,
+        label: `${headerName} (Copy)`,
+        isDuplicate: true
+      });
+      columnConfigMap[foundColId] = {
+        global: { dbKey: '' },
+        typeSpecific: {}
+      };
+    }
+
+    return foundColId;
+  };
 
   try {
     const mappings = JSON.parse(mappingsJson);
@@ -171,6 +222,11 @@ export function parseSchemaMappings(
       const idx = importFileHeaders.indexOf(opTypeHeader);
       if (idx >= 0) {
         operationTypeColumnIdx = idx;
+        const colId = `col-${idx}`;
+        columnConfigMap[colId].global = {
+          dbKey: 'operation_type',
+          enumMappings: getEnumMappingsForField('operation_type', mappings)
+        };
       }
     }
 
@@ -191,6 +247,7 @@ export function parseSchemaMappings(
       if (typeof val === 'string') {
         const idx = importFileHeaders.indexOf(val);
         if (idx >= 0) {
+          const colId = getOrCreateColIdForMapping(idx, dbKey, null);
           let globalDateFormat = 'auto';
           const dfVal = dateFormats[dbKey];
           if (dfVal) {
@@ -201,7 +258,7 @@ export function parseSchemaMappings(
             }
           }
 
-          columnConfigMap[idx].global = {
+          columnConfigMap[colId].global = {
             dbKey,
             divisor: mappings.transformations?.[dbKey]?.divisor,
             multiplier: mappings.transformations?.[dbKey]?.multiplier,
@@ -214,6 +271,7 @@ export function parseSchemaMappings(
         Object.entries(valObj).forEach(([opType, headerName]) => {
           const idx = importFileHeaders.indexOf(headerName);
           if (idx >= 0) {
+            const colId = getOrCreateColIdForMapping(idx, dbKey, opType === 'global' ? null : opType);
             let specDateFormat = 'auto';
             const dfVal = dateFormats[dbKey];
             if (dfVal) {
@@ -233,9 +291,9 @@ export function parseSchemaMappings(
             };
 
             if (opType === 'global') {
-              columnConfigMap[idx].global = mapEntry;
+              columnConfigMap[colId].global = mapEntry;
             } else {
-              columnConfigMap[idx].typeSpecific[opType] = mapEntry;
+              columnConfigMap[colId].typeSpecific[opType] = mapEntry;
             }
           }
         });
@@ -248,6 +306,7 @@ export function parseSchemaMappings(
   return {
     operationTypeColumnIdx,
     operationTypeMappings,
-    columnConfigMap
+    columnConfigMap,
+    uiColumns
   };
 }

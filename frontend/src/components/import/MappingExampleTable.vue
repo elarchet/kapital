@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { Plus, Trash2 } from '@lucide/vue';
 
 const props = defineProps<{
   importFileHeaders: string[];
+  uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
   operationTypeColumnIdx: number | null;
-  columnConfigMap: Record<number, {
+  columnConfigMap: Record<string, {
     global: { dbKey: string; divisor?: number; multiplier?: number; enumMappings?: Record<string, string>; dateFormat?: string };
     typeSpecific: Record<string, { dbKey: string; divisor?: number; multiplier?: number; enumMappings?: Record<string, string>; dateFormat?: string }>;
   }>;
   activeDbOpTypes: string[];
+  uniqueOperationTypes: string[];
+  operationTypeMappings: Record<string, string>;
   importFields: any[];
   exampleTransactions: Array<{
-    opType: string;
+    opType: string; // This holds the raw CSV action value
     csvRow: string[];
     rowIdx: number;
     totalMatches: number;
@@ -26,19 +30,22 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'open-wizard', payload: { colIdx: number; opType: string | null; targets?: Array<{ colIdx: number; opType: string | null }> }): void;
+  (e: 'open-wizard', payload: { colId: string; opType: string | null; targets?: Array<{ colId: string; opType: string | null }> }): void;
   (e: 'prev-example', opType: string): void;
   (e: 'next-example', opType: string): void;
-  (e: 'update-mapping', payload: { colIdx: number; opType: string | null; mapping: any }): void;
+  (e: 'update-mapping', payload: { colId: string; opType: string | null; mapping: any }): void;
+  (e: 'update-optype-mapping', payload: { rawAction: string; dbOpType: string }): void;
+  (e: 'duplicate-column', colId: string): void;
+  (e: 'delete-column', colId: string): void;
 }>();
 
 // Selected cells for keyboard selection & actions
 const selectedCells = ref<Set<string>>(new Set());
-const lastSelectedCell = ref<{ colIdx: number; opType: string } | null>(null);
+const lastSelectedCell = ref<{ colId: string; opType: string } | null>(null);
 
 // Clipboard state for copy-pasting mappings
 const copiedMapping = ref<{
-  colIdx: number;
+  colId: string;
   opType: string;
   dbKey: string;
   divisor?: number;
@@ -50,81 +57,81 @@ const copiedMapping = ref<{
 // Cell flashing state for visual shortcut feedback
 const recentlyFlashed = ref<Record<string, string>>({}); // cellKey -> CSS class
 
-const flashCell = (colIdx: number, opType: string, flashClass: string) => {
-  const key = `${colIdx}-${opType}`;
+const flashCell = (colId: string, opType: string, flashClass: string) => {
+  const key = `${colId}-${opType}`;
   recentlyFlashed.value[key] = flashClass;
   setTimeout(() => {
     delete recentlyFlashed.value[key];
   }, 1000);
 };
 
-const isSelected = (colIdx: number, opType: string): boolean => {
-  const key = `${colIdx}-${opType}`;
+const isSelected = (colId: string, opType: string): boolean => {
+  const key = `${colId}-${opType}`;
   return selectedCells.value.has(key);
 };
 
-const isCopiedSource = (colIdx: number, opType: string): boolean => {
+const isCopiedSource = (colId: string, opType: string): boolean => {
   return copiedMapping.value !== null &&
-         copiedMapping.value.colIdx === colIdx &&
+         copiedMapping.value.colId === colId &&
          copiedMapping.value.opType === opType;
 };
 
-const getCellOutlineStyle = (colIdx: number, opType: string) => {
-  if (isSelected(colIdx, opType)) {
+const getCellOutlineStyle = (colId: string, opType: string) => {
+  if (isSelected(colId, opType)) {
     return '2px solid var(--accent-color)';
   }
-  if (isCopiedSource(colIdx, opType)) {
+  if (isCopiedSource(colId, opType)) {
     return '2px dashed var(--accent-color)';
   }
   return undefined;
 };
 
-const selectCell = (colIdx: number, opType: string, multiSelect: boolean) => {
-  const key = `${colIdx}-${opType}`;
+const selectCell = (colId: string, opType: string, multiSelect: boolean) => {
+  const key = `${colId}-${opType}`;
   if (multiSelect) {
     if (selectedCells.value.has(key)) {
       selectedCells.value.delete(key);
-      if (lastSelectedCell.value?.colIdx === colIdx && lastSelectedCell.value?.opType === opType) {
+      if (lastSelectedCell.value?.colId === colId && lastSelectedCell.value?.opType === opType) {
         const remaining = Array.from(selectedCells.value);
         if (remaining.length > 0) {
           const [c, o] = remaining[remaining.length - 1].split('-');
-          lastSelectedCell.value = { colIdx: parseInt(c), opType: o };
+          lastSelectedCell.value = { colId: c, opType: o };
         } else {
           lastSelectedCell.value = null;
         }
       }
     } else {
       selectedCells.value.add(key);
-      lastSelectedCell.value = { colIdx, opType };
+      lastSelectedCell.value = { colId, opType };
     }
   } else {
     selectedCells.value.clear();
     selectedCells.value.add(key);
-    lastSelectedCell.value = { colIdx, opType };
+    lastSelectedCell.value = { colId, opType };
   }
 };
 
-const selectColumn = (colIdx: number) => {
+const selectColumn = (colId: string) => {
   selectedCells.value.clear();
   props.exampleTransactions.forEach(example => {
-    selectedCells.value.add(`${colIdx}-${example.opType}`);
+    selectedCells.value.add(`${colId}-${example.opType}`);
   });
   if (props.exampleTransactions.length > 0) {
     const firstOpType = props.exampleTransactions[0].opType;
-    lastSelectedCell.value = { colIdx, opType: firstOpType };
+    lastSelectedCell.value = { colId, opType: firstOpType };
     nextTick(() => {
-      const selector = `#cell-${firstOpType}-${colIdx}`;
+      const selector = `#cell-${sanitizeId(firstOpType)}-${colId}`;
       const el = document.querySelector(selector) as HTMLTableCellElement;
       if (el) el.focus();
     });
   }
 };
 
-const getFirstSelectedCell = (): { colIdx: number; opType: string } | null => {
+const getFirstSelectedCell = (): { colId: string; opType: string } | null => {
   const firstKey = Array.from(selectedCells.value)[0];
   if (!firstKey) return null;
   const [c, o] = firstKey.split('-');
-  return { colIdx: parseInt(c), opType: o };
+  return { colId: c, opType: o };
 };
 
 const openWizardForSelected = () => {
@@ -135,40 +142,43 @@ const openWizardForSelected = () => {
 
   const targets = Array.from(selectedCells.value).map(key => {
     const [c, o] = key.split('-');
-    return { colIdx: parseInt(c), opType: o };
+    return { colId: c, opType: o };
   });
 
   const isGlobal = targets.length > 1;
+  const dbOpType = primary.opType ? props.operationTypeMappings[primary.opType] : null;
 
   emit('open-wizard', {
-    colIdx: primary.colIdx,
-    opType: isGlobal ? null : primary.opType,
-    targets: isGlobal ? [{ colIdx: primary.colIdx, opType: null }] : targets
+    colId: primary.colId,
+    opType: isGlobal ? null : dbOpType,
+    targets: isGlobal
+      ? [{ colId: primary.colId, opType: null }]
+      : targets.map(t => ({ colId: t.colId, opType: t.opType ? props.operationTypeMappings[t.opType] : null }))
   });
 };
 
-const handleCellClick = (colIdx: number, opType: string, event: MouseEvent) => {
+const handleCellClick = (colId: string, opType: string, event: MouseEvent) => {
   const isCtrl = event.ctrlKey || event.metaKey;
-  const isAlreadySelected = isSelected(colIdx, opType);
+  const isAlreadySelected = isSelected(colId, opType);
 
   if (!isCtrl && isAlreadySelected && selectedCells.value.size === 1) {
     openWizardForSelected();
   } else {
-    selectCell(colIdx, opType, isCtrl);
-    // Focus the cell to receive keyboard events
+    selectCell(colId, opType, isCtrl);
     (event.currentTarget as HTMLTableCellElement).focus();
   }
 };
 
-const copyMapping = (colIdx: number, opType: string) => {
-  const conf = props.columnConfigMap[colIdx];
+const copyMapping = (colId: string, opType: string) => {
+  const conf = props.columnConfigMap[colId];
   if (!conf) return;
 
-  const mappingToCopy = conf.typeSpecific[opType];
+  const dbOpType = props.operationTypeMappings[opType];
+  const mappingToCopy = dbOpType ? conf.typeSpecific[dbOpType] : null;
 
   if (mappingToCopy && mappingToCopy.dbKey) {
     copiedMapping.value = {
-      colIdx,
+      colId,
       opType,
       dbKey: mappingToCopy.dbKey,
       divisor: mappingToCopy.divisor,
@@ -176,13 +186,13 @@ const copyMapping = (colIdx: number, opType: string) => {
       enumMappings: mappingToCopy.enumMappings ? { ...mappingToCopy.enumMappings } : undefined,
       dateFormat: mappingToCopy.dateFormat
     };
-    flashCell(colIdx, opType, 'bg-indigo-100/50 dark:bg-indigo-950/30 transition-all duration-300');
+    flashCell(colId, opType, 'bg-indigo-100/50 dark:bg-indigo-950/30 transition-all duration-300');
   }
 };
 
-const canPaste = (colIdx: number, opType: string): boolean => {
+const canPaste = (colId: string, opType: string): boolean => {
   if (!copiedMapping.value) return false;
-  if (copiedMapping.value.colIdx === colIdx && copiedMapping.value.opType === opType) return false;
+  if (copiedMapping.value.colId === colId && copiedMapping.value.opType === opType) return false;
   return true;
 };
 
@@ -190,14 +200,13 @@ const pasteMappingToSelected = () => {
   if (!copiedMapping.value || selectedCells.value.size === 0) return;
 
   selectedCells.value.forEach(key => {
-    const [cStr, oStr] = key.split('-');
-    const targetColIdx = parseInt(cStr);
-    const targetOpType = oStr;
+    const [targetColId, targetOpType] = key.split('-');
+    const targetDbOpType = props.operationTypeMappings[targetOpType];
 
-    if (canPaste(targetColIdx, targetOpType)) {
+    if (canPaste(targetColId, targetOpType) && targetDbOpType) {
       emit('update-mapping', {
-        colIdx: targetColIdx,
-        opType: targetOpType,
+        colId: targetColId,
+        opType: targetDbOpType,
         mapping: {
           dbKey: copiedMapping.value!.dbKey,
           divisor: copiedMapping.value!.divisor,
@@ -206,7 +215,7 @@ const pasteMappingToSelected = () => {
           dateFormat: copiedMapping.value!.dateFormat
         }
       });
-      flashCell(targetColIdx, targetOpType, 'bg-emerald-100/50 dark:bg-emerald-950/30 transition-all duration-300');
+      flashCell(targetColId, targetOpType, 'bg-emerald-100/50 dark:bg-emerald-950/30 transition-all duration-300');
     }
   });
 };
@@ -215,16 +224,15 @@ const clearMappingForSelected = () => {
   if (selectedCells.value.size === 0) return;
 
   selectedCells.value.forEach(key => {
-    const [cStr, oStr] = key.split('-');
-    const targetColIdx = parseInt(cStr);
-    const targetOpType = oStr;
+    const [targetColId, targetOpType] = key.split('-');
+    const targetDbOpType = props.operationTypeMappings[targetOpType];
 
     emit('update-mapping', {
-      colIdx: targetColIdx,
-      opType: targetOpType,
+      colId: targetColId,
+      opType: targetDbOpType || null,
       mapping: null
     });
-    flashCell(targetColIdx, targetOpType, 'bg-rose-100/50 dark:bg-rose-950/30 transition-all duration-300');
+    flashCell(targetColId, targetOpType, 'bg-rose-100/50 dark:bg-rose-950/30 transition-all duration-300');
   });
 };
 
@@ -232,25 +240,27 @@ const navigateGrid = (key: string) => {
   const primary = lastSelectedCell.value || getFirstSelectedCell();
   if (!primary) return;
 
-  const colIdx = primary.colIdx;
+  const colId = primary.colId;
   const opType = primary.opType;
 
-  // Find current row index
   const rowIdx = props.exampleTransactions.findIndex(e => e.opType === opType);
   if (rowIdx === -1) return;
 
-  const numCols = props.importFileHeaders.length;
+  const numCols = props.uiColumns.length;
   const numRows = props.exampleTransactions.length;
 
-  let nextCol = colIdx;
+  let currentColIdx = props.uiColumns.findIndex(c => c.id === colId);
+  if (currentColIdx === -1) currentColIdx = 0;
+
+  let nextColIdx = currentColIdx;
   let nextRowIdx = rowIdx;
 
   if (key === 'ArrowLeft') {
-    nextCol = nextCol - 1;
-    if (nextCol < 0) nextCol = numCols - 1;
+    nextColIdx = nextColIdx - 1;
+    if (nextColIdx < 0) nextColIdx = numCols - 1;
   } else if (key === 'ArrowRight') {
-    nextCol = nextCol + 1;
-    if (nextCol >= numCols) nextCol = 0;
+    nextColIdx = nextColIdx + 1;
+    if (nextColIdx >= numCols) nextColIdx = 0;
   } else if (key === 'ArrowUp') {
     nextRowIdx = rowIdx - 1;
     if (nextRowIdx < 0) nextRowIdx = numRows - 1;
@@ -259,15 +269,16 @@ const navigateGrid = (key: string) => {
     if (nextRowIdx >= numRows) nextRowIdx = 0;
   }
 
+  const nextColId = props.uiColumns[nextColIdx].id;
   const nextOpType = props.exampleTransactions[nextRowIdx].opType;
 
   selectedCells.value.clear();
-  const nextKey = `${nextCol}-${nextOpType}`;
+  const nextKey = `${nextColId}-${nextOpType}`;
   selectedCells.value.add(nextKey);
-  lastSelectedCell.value = { colIdx: nextCol, opType: nextOpType };
+  lastSelectedCell.value = { colId: nextColId, opType: nextOpType };
 
   nextTick(() => {
-    const selector = `#cell-${nextOpType}-${nextCol}`;
+    const selector = `#cell-${sanitizeId(nextOpType)}-${nextColId}`;
     const el = document.querySelector(selector) as HTMLTableCellElement;
     if (el) el.focus();
   });
@@ -275,7 +286,7 @@ const navigateGrid = (key: string) => {
 
 const handleKeyDown = (e: KeyboardEvent) => {
   const target = e.target as HTMLElement;
-  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+  if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
     return;
   }
 
@@ -291,7 +302,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
     e.preventDefault();
     const primary = lastSelectedCell.value || getFirstSelectedCell();
     if (primary) {
-      copyMapping(primary.colIdx, primary.opType);
+      copyMapping(primary.colId, primary.opType);
     }
   } else if (isPaste) {
     e.preventDefault();
@@ -316,10 +327,14 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown);
 });
 
-const getResolvedKeyForCell = (colIdx: number, opType: string) => {
-  const conf = props.columnConfigMap[colIdx];
+const getResolvedKeyForCell = (colId: string, opType: string) => {
+  const conf = props.columnConfigMap[colId];
   if (!conf) return '';
-  return conf.typeSpecific[opType]?.dbKey || '';
+  const dbOpType = props.operationTypeMappings[opType];
+  if (dbOpType && conf.typeSpecific[dbOpType]?.dbKey) {
+    return conf.typeSpecific[dbOpType].dbKey;
+  }
+  return conf.global?.dbKey || '';
 };
 
 const prevExampleForType = (opType: string) => {
@@ -329,6 +344,26 @@ const prevExampleForType = (opType: string) => {
 const nextExampleForType = (opType: string) => {
   emit('next-example', opType);
 };
+
+const duplicateCol = (colId: string) => {
+  emit('duplicate-column', colId);
+};
+
+const deleteCol = (colId: string) => {
+  emit('delete-column', colId);
+};
+
+const sanitizeId = (val: string) => {
+  return encodeURIComponent(val).replace(/%/g, '_');
+};
+
+const dbOpOptions = computed(() => {
+  const enumVals = props.importFields.find(f => f.key === 'operation_type')?.enum_values || [];
+  return enumVals.map((opt: string) => ({
+    value: opt,
+    label: opt
+  }));
+});
 </script>
 
 <template>
@@ -337,19 +372,38 @@ const nextExampleForType = (opType: string) => {
       <table class="preview-table" style="margin-top: 0; min-width: 100%;">
         <thead>
           <tr>
-            <th style="min-width: 120px; padding: 0.2rem 0.35rem; background-color: var(--bg-tertiary); font-weight: 700; color: var(--text-secondary); text-align: center;">
-              Context & Stats
+            <th style="min-width: 180px; padding: 0.2rem 0.35rem; background-color: var(--bg-tertiary); font-weight: 700; color: var(--text-secondary); text-align: center;">
+              Raw File Action & DB Type
             </th>
             <th 
-              v-for="(h, idx) in importFileHeaders" 
-              :key="idx"
-              @click="selectColumn(idx)"
-              @dblclick="selectColumn(idx), openWizardForSelected()"
-              style="min-width: 120px; padding: 0.2rem 0.35rem; vertical-align: top; transition: background-color 0.15s ease; cursor: pointer;"
-              class="hover:bg-slate-50 dark:hover:bg-slate-800/40 select-none"
+              v-for="col in uiColumns" 
+              :key="col.id"
+              style="min-width: 140px; padding: 0.2rem 0.35rem; vertical-align: top; transition: background-color 0.15s ease;"
+              class="group select-none"
             >
-              <div style="font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" :title="h">
-                {{ h }}
+              <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+                <div style="font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;" :title="col.label" @click="selectColumn(col.id)">
+                  {{ col.label }}
+                </div>
+                <div style="display: flex; gap: 0.25rem; margin-top: 0.15rem;">
+                  <button 
+                    @click="duplicateCol(col.id)" 
+                    type="button" 
+                    title="Duplicate Column mapping"
+                    class="bg-transparent border-0 p-0 text-text-secondary hover:text-accent-color cursor-pointer flex items-center justify-center transition-colors"
+                  >
+                    <Plus style="width: 12px; height: 12px;" />
+                  </button>
+                  <button 
+                    v-if="col.isDuplicate"
+                    @click="deleteCol(col.id)" 
+                    type="button" 
+                    title="Remove duplicate mapping"
+                    class="bg-transparent border-0 p-0 text-text-secondary hover:text-color-danger cursor-pointer flex items-center justify-center transition-colors"
+                  >
+                    <Trash2 style="width: 12px; height: 12px; color: var(--color-danger);" />
+                  </button>
+                </div>
               </div>
             </th>
           </tr>
@@ -357,48 +411,62 @@ const nextExampleForType = (opType: string) => {
         <tbody>
           <!-- Example rows per type -->
           <tr v-for="example in exampleTransactions" :key="example.opType">
-            <td style="vertical-align: middle; text-align: left; padding: 0.15rem 0.3rem;">
-              <div style="display: flex; align-items: center; gap: 0.35rem; padding: 0.05rem; white-space: nowrap;">
-                <span class="badge" :class="'badge-' + example.opType" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; min-width: 85px; text-align: center; display: inline-block;">
-                   {{ example.opType }}
-                </span>
-                
-                <!-- Compact Switcher Controls -->
-                <div v-if="example.totalMatches > 1" style="display: flex; align-items: center; gap: 0.15rem;">
-                  <button @click.stop="prevExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Previous Example">&larr;</button>
-                  <button @click.stop="nextExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Next Example">&rarr;</button>
+            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: 180px; background-color: var(--bg-secondary);">
+              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <div style="display: flex; align-items: center; gap: 0.35rem; padding: 0.05rem; white-space: nowrap;">
+                  <span class="badge" :class="'badge-' + (operationTypeMappings[example.opType] || 'unknown')" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; min-width: 85px; text-align: center; display: inline-block;">
+                     {{ example.opType }}
+                  </span>
+                  
+                  <!-- Compact Switcher Controls -->
+                  <div v-if="example.totalMatches > 1" style="display: flex; align-items: center; gap: 0.15rem;">
+                    <button @click.stop="prevExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Previous Example">&larr;</button>
+                    <button @click.stop="nextExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Next Example">&rarr;</button>
+                  </div>
+    
+                  <span v-if="liveValidationStats[operationTypeMappings[example.opType]]" :style="{
+                    fontSize: '0.65rem',
+                    fontWeight: 600,
+                    color: liveValidationStats[operationTypeMappings[example.opType]].failed > 0 ? 'var(--color-danger)' : 'var(--color-success)'
+                  }">
+                    ({{ liveValidationStats[operationTypeMappings[example.opType]].success }}/{{ liveValidationStats[operationTypeMappings[example.opType]].total }})
+                  </span>
                 </div>
- 
-                <span v-if="liveValidationStats[example.opType]" :style="{
-                  fontSize: '0.65rem',
-                  fontWeight: 600,
-                  color: liveValidationStats[example.opType].failed > 0 ? 'var(--color-danger)' : 'var(--color-success)'
-                }">
-                  ({{ liveValidationStats[example.opType].success }}/{{ liveValidationStats[example.opType].total }})
-                </span>
+                
+                <!-- Direct Database Type Dropdown Select -->
+                <select
+                  :value="operationTypeMappings[example.opType] || ''"
+                  @change="emit('update-optype-mapping', { rawAction: example.opType, dbOpType: ($event.target as HTMLSelectElement).value })"
+                  class="mt-1 block w-full bg-bg-primary text-text-primary border border-border-color rounded px-1.5 py-0.5 text-[0.7rem] focus:outline-none focus:ring-1 focus:ring-accent-color cursor-pointer"
+                >
+                  <option value="">-- Map to DB Transaction Type --</option>
+                  <option v-for="opt in dbOpOptions" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}
+                  </option>
+                </select>
               </div>
             </td>
             <td 
-              v-for="(cell, idx) in example.csvRow" 
-              :key="idx" 
-              :id="`cell-${example.opType}-${idx}`"
+              v-for="col in uiColumns" 
+              :key="col.id" 
+              :id="`cell-${sanitizeId(example.opType)}-${col.id}`"
               tabindex="0"
-              @click="handleCellClick(idx, example.opType, $event)" 
+              @click="handleCellClick(col.id, example.opType, $event)" 
               @dblclick="openWizardForSelected()"
               :style="{ 
-                outline: getCellOutlineStyle(idx, example.opType),
+                outline: getCellOutlineStyle(col.id, example.opType),
                 outlineOffset: '-2px'
               }" 
               class="group focus:outline-none focus:bg-slate-100/50 dark:focus:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-150 cursor-pointer"
-              :class="recentlyFlashed[`${idx}-${example.opType}`] || ''"
+              :class="recentlyFlashed[`${col.id}-${example.opType}`] || ''"
               style="vertical-align: middle; position: relative; padding: 0.15rem 0.3rem; max-width: 160px;"
             >
               <div style="display: flex; flex-direction: column; gap: 0.05rem; overflow: hidden;">
-                <span style="font-family: monospace; font-size: 0.7rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="cell || '—'">
-                  {{ cell || '—' }}
+                <span style="font-family: monospace; font-size: 0.7rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="example.csvRow[col.colIdx] || '—'">
+                  {{ example.csvRow[col.colIdx] || '—' }}
                 </span>
-                <span v-if="getResolvedKeyForCell(idx, example.opType)" style="font-size: 0.65rem; color: var(--accent-color); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="importFields.find(f => f.key === getResolvedKeyForCell(idx, example.opType))?.label || getResolvedKeyForCell(idx, example.opType)">
-                  → {{ importFields.find(f => f.key === getResolvedKeyForCell(idx, example.opType))?.label || getResolvedKeyForCell(idx, example.opType) }}
+                <span v-if="getResolvedKeyForCell(col.id, example.opType)" style="font-size: 0.65rem; color: var(--accent-color); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="importFields.find(f => f.key === getResolvedKeyForCell(col.id, example.opType))?.label || getResolvedKeyForCell(col.id, example.opType)">
+                  → {{ importFields.find(f => f.key === getResolvedKeyForCell(col.id, example.opType))?.label || getResolvedKeyForCell(col.id, example.opType) }}
                 </span>
               </div>
             </td>

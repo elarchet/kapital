@@ -77,20 +77,23 @@ interface ColMapping {
   multiplier?: number;
   enumMappings?: Record<string, string>;
 }
-const columnConfigMap = ref<Record<number, {
+const columnConfigMap = ref<Record<string, {
   global: ColMapping;
   typeSpecific: Record<string, ColMapping>;
 }>>({});
+
+const uiColumns = ref<Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>>([]);
 
 // Wizard modal popup states
 const isWizardOpen = ref(false);
 const wizardCsvHeaderName = ref('');
 const wizardExampleValue = ref('');
 const wizardActiveOpType = ref('');
+const wizardColId = ref<string | null>(null);
 const wizardColIdx = ref<number | null>(null);
 const wizardUniqueValues = ref<string[]>([]);
 const wizardInitialMapping = ref<any>(null);
-const wizardTargetCells = ref<Array<{ colIdx: number; opType: string | null }>>([]);
+const wizardTargetCells = ref<Array<{ colId: string; opType: string | null }>>([]);
 
 // Custom exit confirmation state
 const showExitConfirm = ref<boolean>(false);
@@ -227,6 +230,7 @@ const onSchemaSelect = () => {
       operationTypeColumnIdx.value = parsed.operationTypeColumnIdx;
       operationTypeMappings.value = parsed.operationTypeMappings;
       columnConfigMap.value = parsed.columnConfigMap;
+      uiColumns.value = parsed.uiColumns;
     }
   }
 };
@@ -245,6 +249,12 @@ const processFile = async (file: File) => {
     if (parsed.headers.length > 0) {
       importDelimiter.value = parsed.delimiter;
       importFileHeaders.value = parsed.headers;
+      uiColumns.value = parsed.headers.map((h, idx) => ({
+        id: `col-${idx}`,
+        colIdx: idx,
+        name: h,
+        label: h
+      }));
       allRawRows.value = parsed.rawRows;
       currentStep.value = 1;
 
@@ -273,9 +283,15 @@ const processFile = async (file: File) => {
 };
 
 const initializeConfigs = () => {
+  uiColumns.value = importFileHeaders.value.map((h, idx) => ({
+    id: `col-${idx}`,
+    colIdx: idx,
+    name: h,
+    label: h
+  }));
   columnConfigMap.value = {};
-  importFileHeaders.value.forEach((_, idx) => {
-    columnConfigMap.value[idx] = {
+  uiColumns.value.forEach(col => {
+    columnConfigMap.value[col.id] = {
       global: { dbKey: '' },
       typeSpecific: {}
     };
@@ -294,7 +310,12 @@ const prepopulateGuesses = (headers: string[]) => {
     prepopulateOpTypeGuesses();
   }
 
-  columnConfigMap.value = prepopulateFieldGuesses(headers, allRawRows.value, operationTypeColumnIdx.value);
+  const guesses = prepopulateFieldGuesses(headers, allRawRows.value, operationTypeColumnIdx.value);
+  const newConfigMap: Record<string, any> = {};
+  uiColumns.value.forEach(col => {
+    newConfigMap[col.id] = guesses[col.colIdx] || { global: { dbKey: '' }, typeSpecific: {} };
+  });
+  columnConfigMap.value = newConfigMap;
 };
 
 const uniqueOperationTypes = computed(() => {
@@ -321,6 +342,23 @@ const activeDbOpTypes = computed(() => {
   return Array.from(types);
 });
 
+const matchingRowsByRawAction = computed(() => {
+  const result: Record<string, { csvRow: string[]; rowIdx: number }[]> = {};
+  if (operationTypeColumnIdx.value === null) return result;
+
+  allRawRows.value.forEach((row, idx) => {
+    const rawAction = row[operationTypeColumnIdx.value!];
+    if (rawAction) {
+      const trimmed = rawAction.trim();
+      if (!result[trimmed]) {
+        result[trimmed] = [];
+      }
+      result[trimmed].push({ csvRow: row, rowIdx: idx });
+    }
+  });
+  return result;
+});
+
 const matchingRowsByType = computed(() => {
   return groupRowsByOpType(allRawRows.value, operationTypeColumnIdx.value, operationTypeMappings.value);
 });
@@ -328,20 +366,20 @@ const matchingRowsByType = computed(() => {
 const selectedExampleOffset = ref<Record<string, number>>({});
 
 const nextExampleForType = (opType: string) => {
-  const matches = matchingRowsByType.value[opType] || [];
+  const matches = matchingRowsByRawAction.value[opType] || [];
   if (matches.length <= 1) return;
   selectedExampleOffset.value[opType] = ((selectedExampleOffset.value[opType] || 0) + 1) % matches.length;
 };
 
 const prevExampleForType = (opType: string) => {
-  const matches = matchingRowsByType.value[opType] || [];
+  const matches = matchingRowsByRawAction.value[opType] || [];
   if (matches.length <= 1) return;
   selectedExampleOffset.value[opType] = ((selectedExampleOffset.value[opType] || 0) - 1 + matches.length) % matches.length;
 };
 
 const exampleTransactions = computed(() => {
   if (operationTypeColumnIdx.value === null) return [];
-  return getExampleTransactions(activeDbOpTypes.value, matchingRowsByType.value, selectedExampleOffset.value);
+  return getExampleTransactions(uniqueOperationTypes.value, matchingRowsByRawAction.value, selectedExampleOffset.value);
 });
 
 const liveValidationStats = computed(() => {
@@ -350,6 +388,7 @@ const liveValidationStats = computed(() => {
     importDelimiter: importDelimiter.value,
     importDecimalSep: importDecimalSep.value,
     columnConfigMap: columnConfigMap.value,
+    uiColumns: uiColumns.value,
     activeDbOpTypes: activeDbOpTypes.value,
     allRawRows: allRawRows.value,
     operationTypeColumnIdx: operationTypeColumnIdx.value,
@@ -359,28 +398,41 @@ const liveValidationStats = computed(() => {
 
 const goToStep2 = () => {
   if (operationTypeColumnIdx.value !== null) {
-    columnConfigMap.value[operationTypeColumnIdx.value].global = {
-      dbKey: 'operation_type',
-      enumMappings: { ...operationTypeMappings.value }
-    };
+    const opTypeCol = uiColumns.value.find(c => c.colIdx === operationTypeColumnIdx.value && !c.isDuplicate);
+    if (opTypeCol) {
+      columnConfigMap.value[opTypeCol.id] = {
+        global: {
+          dbKey: 'operation_type',
+          enumMappings: { ...operationTypeMappings.value }
+        },
+        typeSpecific: {}
+      };
+    }
   }
   currentStep.value = 2;
 };
 
-const openWizard = (colIdx: number, opType: string | null, targets?: Array<{ colIdx: number; opType: string | null }>) => {
+const openWizard = (colId: string, opType: string | null, targets?: Array<{ colId: string; opType: string | null }>, rawAction?: string | null) => {
+  const col = uiColumns.value.find(c => c.id === colId);
+  if (!col) return;
+  const colIdx = col.colIdx;
+
+  wizardColId.value = colId;
   wizardColIdx.value = colIdx;
   wizardActiveOpType.value = opType || '';
-  wizardTargetCells.value = targets && targets.length > 0 ? targets : [{ colIdx, opType }];
+  wizardTargetCells.value = targets && targets.length > 0 ? targets : [{ colId, opType }];
 
   const setup = getWizardSetup({
+    colId,
     colIdx,
     opType,
+    rawAction: rawAction || null,
     importFileHeaders: importFileHeaders.value,
     exampleTransactions: exampleTransactions.value,
     allRawRows: allRawRows.value,
     columnConfigMap: columnConfigMap.value,
     matchingRowsByType: matchingRowsByType.value,
-    targets: wizardTargetCells.value
+    targets: wizardTargetCells.value.map(t => ({ colId: t.colId, colIdx: uiColumns.value.find(c => c.id === t.colId)?.colIdx || 0, opType: t.opType }))
   });
 
   if (targets && targets.length > 1) {
@@ -399,7 +451,7 @@ const openWizard = (colIdx: number, opType: string | null, targets?: Array<{ col
 const handleWizardSave = (payload: any) => {
   if (wizardTargetCells.value.length > 0) {
     wizardTargetCells.value.forEach(target => {
-      saveWizardConfig(columnConfigMap.value, target.colIdx, target.opType, {
+      saveWizardConfig(columnConfigMap.value, target.colId, target.opType, {
         ...payload,
         scope: target.opType ? 'type' : 'global'
       });
@@ -411,17 +463,17 @@ const handleWizardSave = (payload: any) => {
 const handleWizardClear = () => {
   if (wizardTargetCells.value.length > 0) {
     wizardTargetCells.value.forEach(target => {
-      clearWizardConfig(columnConfigMap.value, target.colIdx, target.opType);
+      clearWizardConfig(columnConfigMap.value, target.colId, target.opType);
     });
   }
   isWizardOpen.value = false;
 };
 
-const handleUpdateMapping = ({ colIdx, opType, mapping }: { colIdx: number; opType: string | null; mapping: any }) => {
+const handleUpdateMapping = ({ colId, opType, mapping }: { colId: string; opType: string | null; mapping: any }) => {
   if (mapping === null) {
-    clearWizardConfig(columnConfigMap.value, colIdx, opType);
+    clearWizardConfig(columnConfigMap.value, colId, opType);
   } else {
-    saveWizardConfig(columnConfigMap.value, colIdx, opType, {
+    saveWizardConfig(columnConfigMap.value, colId, opType, {
       dbKey: mapping.dbKey,
       scope: opType ? 'type' : 'global',
       divisor: mapping.divisor,
@@ -441,6 +493,7 @@ const validationErrors = computed(() => {
     activeDbOpTypes: activeDbOpTypes.value,
     importFields: importFields.value,
     columnConfigMap: columnConfigMap.value,
+    uiColumns: uiColumns.value,
     liveValidationStats: liveValidationStats.value
   });
 });
@@ -456,6 +509,7 @@ const parsedPreviewRows = computed(() => {
     operationTypeColumnIdx: operationTypeColumnIdx.value,
     operationTypeMappings: operationTypeMappings.value,
     columnConfigMap: columnConfigMap.value,
+    uiColumns: uiColumns.value,
     importFields: importFields.value
   });
 });
@@ -465,10 +519,57 @@ const buildCustomMappingPayload = () => {
     operationTypeColumnIdx: operationTypeColumnIdx.value,
     importFileHeaders: importFileHeaders.value,
     columnConfigMap: columnConfigMap.value,
+    uiColumns: uiColumns.value,
     operationTypeMappings: operationTypeMappings.value,
     importFields: importFields.value
   });
-};;
+};
+
+const handleDuplicateColumn = (colId: string) => {
+  const baseCol = uiColumns.value.find(c => c.id === colId);
+  if (!baseCol) return;
+  const dupCount = uiColumns.value.filter(c => c.colIdx === baseCol.colIdx).length;
+  const newId = `${colId}_dup_${dupCount}`;
+  const newCol = {
+    id: newId,
+    colIdx: baseCol.colIdx,
+    name: baseCol.name,
+    label: `${baseCol.name} (Copy)`,
+    isDuplicate: true
+  };
+  const lastIndex = uiColumns.value.map(c => c.colIdx).lastIndexOf(baseCol.colIdx);
+  uiColumns.value.splice(lastIndex + 1, 0, newCol);
+  columnConfigMap.value[newId] = {
+    global: { dbKey: '' },
+    typeSpecific: {}
+  };
+};
+
+const handleDeleteColumn = (colId: string) => {
+  const index = uiColumns.value.findIndex(c => c.id === colId);
+  if (index !== -1 && uiColumns.value[index].isDuplicate) {
+    uiColumns.value.splice(index, 1);
+    delete columnConfigMap.value[colId];
+  }
+};
+
+const handleUpdateOpTypeMapping = ({ rawAction, dbOpType }: { rawAction: string; dbOpType: string }) => {
+  if (dbOpType === '') {
+    delete operationTypeMappings.value[rawAction];
+  } else {
+    operationTypeMappings.value[rawAction] = dbOpType;
+  }
+  
+  if (operationTypeColumnIdx.value !== null) {
+    const opTypeCol = uiColumns.value.find(c => c.colIdx === operationTypeColumnIdx.value && !c.isDuplicate);
+    if (opTypeCol) {
+      columnConfigMap.value[opTypeCol.id].global = {
+        dbKey: 'operation_type',
+        enumMappings: { ...operationTypeMappings.value }
+      };
+    }
+  }
+};
 
 const handleImport = async () => {
   if (!importFile.value || !props.portfolio.id) return;
@@ -712,18 +813,24 @@ onBeforeUnmount(() => {
                     v-model:saveMappingTemplate="saveMappingTemplate"
                     v-model:mappingTemplateName="mappingTemplateName"
                     :importFileHeaders="importFileHeaders"
+                    :uiColumns="uiColumns"
                     :operationTypeColumnIdx="operationTypeColumnIdx"
                     :columnConfigMap="columnConfigMap"
                     :activeDbOpTypes="activeDbOpTypes"
+                    :uniqueOperationTypes="uniqueOperationTypes"
+                    :operationTypeMappings="operationTypeMappings"
                     :importFields="importFields"
                     :exampleTransactions="exampleTransactions"
                     :liveValidationStats="liveValidationStats"
                     :validationErrors="validationErrors"
                     @back="currentStep = 1"
-                    @open-wizard="({ colIdx, opType, targets }) => openWizard(colIdx, opType, targets)"
+                    @open-wizard="(payload: any) => openWizard(payload.colId, payload.opType, payload.targets, payload.rawAction)"
                     @prev-example="prevExampleForType"
                     @next-example="nextExampleForType"
                     @update-mapping="handleUpdateMapping"
+                    @update-optype-mapping="handleUpdateOpTypeMapping"
+                    @duplicate-column="handleDuplicateColumn"
+                    @delete-column="handleDeleteColumn"
                   />
                 </div>
               </div>
