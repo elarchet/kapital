@@ -167,7 +167,9 @@ export function validateLiveStats(params: {
     const rowErrors: { fieldKey: string; fieldLabel: string; rawValue: string; errorMessage: string }[] = [];
 
     params.importFields.forEach(field => {
-      const colIdx = getMappedColIdxForField(field.key, opType, params.columnConfigMap, params.uiColumns);
+      const colIdx = field.key === 'operation_type'
+        ? (params.operationTypeColumnIdx ?? -1)
+        : getMappedColIdxForField(field.key, opType, params.columnConfigMap, params.uiColumns);
       const isMapped = colIdx !== -1;
       const rawValue = isMapped ? row[colIdx] : '';
 
@@ -284,7 +286,9 @@ export function getValidationErrors(params: {
     params.importFields.forEach(f => {
       const isRequired = f.is_required || isFieldRequiredForOpType(f.key, opType);
       if (isRequired) {
-        const colIdx = getMappedColIdxForField(f.key, opType, params.columnConfigMap, params.uiColumns);
+        const colIdx = f.key === 'operation_type'
+          ? (params.operationTypeColumnIdx ?? -1)
+          : getMappedColIdxForField(f.key, opType, params.columnConfigMap, params.uiColumns);
         if (colIdx === -1) {
           errors.push(`Required database field "${f.label}" is not mapped for "${opType}" transactions.`);
         }

@@ -222,11 +222,6 @@ export function parseSchemaMappings(
       const idx = importFileHeaders.indexOf(opTypeHeader);
       if (idx >= 0) {
         operationTypeColumnIdx = idx;
-        const colId = `col-${idx}`;
-        columnConfigMap[colId].global = {
-          dbKey: 'operation_type',
-          enumMappings: getEnumMappingsForField('operation_type', mappings)
-        };
       }
     }
 
@@ -302,6 +297,8 @@ export function parseSchemaMappings(
   } catch (err) {
     console.error('Failed to parse schema mappings:', err);
   }
+
+
 
   return {
     operationTypeColumnIdx,

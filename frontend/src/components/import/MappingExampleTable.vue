@@ -66,6 +66,8 @@ const flashCell = (colId: string, opType: string, flashClass: string) => {
   }, 1000);
 };
 
+
+
 const isSelected = (colId: string, opType: string): boolean => {
   const key = `${colId}:::${opType}`;
   return selectedCells.value.has(key);

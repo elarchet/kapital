@@ -300,6 +300,19 @@ const initializeConfigs = () => {
 
 const handleColumnChange = () => {
   operationTypeMappings.value = {};
+  uiColumns.value = importFileHeaders.value.map((h, idx) => ({
+    id: `col-${idx}`,
+    colIdx: idx,
+    name: h,
+    label: h
+  }));
+  columnConfigMap.value = {};
+  uiColumns.value.forEach(col => {
+    columnConfigMap.value[col.id] = {
+      global: { dbKey: '' },
+      typeSpecific: {}
+    };
+  });
 };
 
 const uniqueOperationTypes = computed(() => {
@@ -377,18 +390,6 @@ const liveValidationStats = computed(() => {
 });
 
 const goToStep2 = () => {
-  if (operationTypeColumnIdx.value !== null) {
-    const opTypeCol = uiColumns.value.find(c => c.colIdx === operationTypeColumnIdx.value && !c.isDuplicate);
-    if (opTypeCol) {
-      columnConfigMap.value[opTypeCol.id] = {
-        global: {
-          dbKey: 'operation_type',
-          enumMappings: { ...operationTypeMappings.value }
-        },
-        typeSpecific: {}
-      };
-    }
-  }
   currentStep.value = 2;
 };
 
@@ -539,16 +540,6 @@ const handleUpdateOpTypeMapping = ({ rawAction, dbOpType }: { rawAction: string;
     delete operationTypeMappings.value[rawAction];
   } else {
     operationTypeMappings.value[rawAction] = dbOpType;
-  }
-  
-  if (operationTypeColumnIdx.value !== null) {
-    const opTypeCol = uiColumns.value.find(c => c.colIdx === operationTypeColumnIdx.value && !c.isDuplicate);
-    if (opTypeCol) {
-      columnConfigMap.value[opTypeCol.id].global = {
-        dbKey: 'operation_type',
-        enumMappings: { ...operationTypeMappings.value }
-      };
-    }
   }
 };
 
