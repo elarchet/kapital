@@ -110,6 +110,20 @@ const selectOption = (val: string) => {
   selectedValue.value = val;
   isDropdownOpen.value = false;
 };
+
+const selectFirstOption = () => {
+  if (filteredOptions.value.length > 0) {
+    selectOption(filteredOptions.value[0].value);
+  }
+};
+
+const onButtonEnter = (e: KeyboardEvent) => {
+  if (isDropdownOpen.value) {
+    isDropdownOpen.value = false;
+  } else {
+    e.preventDefault(); // Prevent default activation click to allow form/wizard submit bubbling
+  }
+};
 </script>
 
 <template>
@@ -120,6 +134,7 @@ const selectOption = (val: string) => {
         ref="buttonRef"
         type="button" 
         @click="toggleDropdown" 
+        @keydown.enter="onButtonEnter"
         class="w-full border border-border-color rounded-sm bg-bg-secondary text-text-primary flex justify-between items-center cursor-pointer outline-none transition-all duration-150 ease-in-out text-left focus:border-accent focus:shadow-[0_0_0_3px] focus:shadow-accent-light"
         :class="compact ? 'py-1 px-2 text-[0.8rem]' : 'py-3 px-4 text-sm'"
       >
@@ -159,6 +174,7 @@ const selectOption = (val: string) => {
             :class="compact ? 'text-[0.8rem] py-1 px-2 mb-1' : 'text-sm p-2'"
             :placeholder="searchPlaceholder"
             @click.stop
+            @keydown.enter.prevent.stop="selectFirstOption"
           />
           <div 
             :style="{ maxHeight: optionsMaxHeight }"

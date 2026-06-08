@@ -257,6 +257,7 @@ const onEnterPress = () => {
 const handleKeyDown = (e: KeyboardEvent) => {
   if (e.key === 'Enter') {
     e.preventDefault();
+    e.stopPropagation();
     onEnterPress();
   } else if (e.key === 'Escape') {
     e.stopPropagation(); // Stop Escape from bubbling to parent modal

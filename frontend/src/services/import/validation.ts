@@ -94,7 +94,9 @@ export function getMappedColIdxForField(
 ): number {
   let mappedIdx = -1;
   Object.entries(columnConfigMap).forEach(([idOrIdxStr, conf]) => {
-    if (conf.typeSpecific[opType]?.dbKey === dbKey || (conf.global.dbKey === dbKey && !conf.typeSpecific[opType]?.dbKey)) {
+    const hasSpecific = conf.typeSpecific[opType] !== undefined;
+    const isMatch = (hasSpecific && conf.typeSpecific[opType].dbKey === dbKey) || (!hasSpecific && conf.global.dbKey === dbKey);
+    if (isMatch) {
       if (uiColumns) {
         const col = uiColumns.find(c => c.id === idOrIdxStr);
         if (col) {
@@ -143,9 +145,10 @@ export function validateLiveStats(params: {
   const getColumnConfigForField = (fieldKey: string, opType: string) => {
     let foundConf: ColMapping | null = null;
     Object.entries(params.columnConfigMap).forEach(([_, conf]) => {
-      if (conf.typeSpecific[opType]?.dbKey === fieldKey) {
+      const hasSpecific = conf.typeSpecific[opType] !== undefined;
+      if (hasSpecific && conf.typeSpecific[opType].dbKey === fieldKey) {
         foundConf = conf.typeSpecific[opType];
-      } else if (conf.global.dbKey === fieldKey && !conf.typeSpecific[opType]?.dbKey) {
+      } else if (!hasSpecific && conf.global.dbKey === fieldKey) {
         foundConf = conf.global;
       }
     });
@@ -156,7 +159,7 @@ export function validateLiveStats(params: {
     const rawAction = row[params.operationTypeColumnIdx!];
     if (!rawAction) return;
 
-    const opType = params.operationTypeMappings[rawAction];
+    const opType = params.operationTypeMappings[rawAction.trim()];
     if (!opType || !stats[opType]) return;
 
     stats[opType].total++;

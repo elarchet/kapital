@@ -30,7 +30,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (e: 'open-wizard', payload: { colId: string; opType: string | null; targets?: Array<{ colId: string; opType: string | null }> }): void;
+  (e: 'open-wizard', payload: { colId: string; opType: string | null; targets?: Array<{ colId: string; opType: string | null }>; rawAction?: string | null }): void;
   (e: 'prev-example', opType: string): void;
   (e: 'next-example', opType: string): void;
   (e: 'update-mapping', payload: { colId: string; opType: string | null; mapping: any }): void;
@@ -58,7 +58,7 @@ const copiedMapping = ref<{
 const recentlyFlashed = ref<Record<string, string>>({}); // cellKey -> CSS class
 
 const flashCell = (colId: string, opType: string, flashClass: string) => {
-  const key = `${colId}-${opType}`;
+  const key = `${colId}:::${opType}`;
   recentlyFlashed.value[key] = flashClass;
   setTimeout(() => {
     delete recentlyFlashed.value[key];
@@ -66,7 +66,7 @@ const flashCell = (colId: string, opType: string, flashClass: string) => {
 };
 
 const isSelected = (colId: string, opType: string): boolean => {
-  const key = `${colId}-${opType}`;
+  const key = `${colId}:::${opType}`;
   return selectedCells.value.has(key);
 };
 
@@ -87,15 +87,15 @@ const getCellOutlineStyle = (colId: string, opType: string) => {
 };
 
 const selectCell = (colId: string, opType: string, multiSelect: boolean) => {
-  const key = `${colId}-${opType}`;
+  const key = `${colId}:::${opType}`;
   if (multiSelect) {
     if (selectedCells.value.has(key)) {
       selectedCells.value.delete(key);
       if (lastSelectedCell.value?.colId === colId && lastSelectedCell.value?.opType === opType) {
         const remaining = Array.from(selectedCells.value);
         if (remaining.length > 0) {
-          const [c, o] = remaining[remaining.length - 1].split('-');
-          lastSelectedCell.value = { colId: c, opType: o };
+          const parts = remaining[remaining.length - 1].split(':::');
+          lastSelectedCell.value = { colId: parts[0], opType: parts[1] };
         } else {
           lastSelectedCell.value = null;
         }
@@ -114,7 +114,7 @@ const selectCell = (colId: string, opType: string, multiSelect: boolean) => {
 const selectColumn = (colId: string) => {
   selectedCells.value.clear();
   props.exampleTransactions.forEach(example => {
-    selectedCells.value.add(`${colId}-${example.opType}`);
+    selectedCells.value.add(`${colId}:::${example.opType}`);
   });
   if (props.exampleTransactions.length > 0) {
     const firstOpType = props.exampleTransactions[0].opType;
@@ -130,8 +130,8 @@ const selectColumn = (colId: string) => {
 const getFirstSelectedCell = (): { colId: string; opType: string } | null => {
   const firstKey = Array.from(selectedCells.value)[0];
   if (!firstKey) return null;
-  const [c, o] = firstKey.split('-');
-  return { colId: c, opType: o };
+  const parts = firstKey.split(':::');
+  return { colId: parts[0], opType: parts[1] };
 };
 
 const openWizardForSelected = () => {
@@ -141,8 +141,8 @@ const openWizardForSelected = () => {
   if (!primary) return;
 
   const targets = Array.from(selectedCells.value).map(key => {
-    const [c, o] = key.split('-');
-    return { colId: c, opType: o };
+    const parts = key.split(':::');
+    return { colId: parts[0], opType: parts[1] };
   });
 
   const isGlobal = targets.length > 1;
@@ -153,7 +153,8 @@ const openWizardForSelected = () => {
     opType: isGlobal ? null : dbOpType,
     targets: isGlobal
       ? [{ colId: primary.colId, opType: null }]
-      : targets.map(t => ({ colId: t.colId, opType: t.opType ? props.operationTypeMappings[t.opType] : null }))
+      : targets.map(t => ({ colId: t.colId, opType: t.opType })),
+    rawAction: primary.opType
   });
 };
 
@@ -173,8 +174,7 @@ const copyMapping = (colId: string, opType: string) => {
   const conf = props.columnConfigMap[colId];
   if (!conf) return;
 
-  const dbOpType = props.operationTypeMappings[opType];
-  const mappingToCopy = dbOpType ? conf.typeSpecific[dbOpType] : null;
+  const mappingToCopy = conf.typeSpecific[opType] || (props.operationTypeMappings[opType] ? conf.typeSpecific[props.operationTypeMappings[opType]] : null);
 
   if (mappingToCopy && mappingToCopy.dbKey) {
     copiedMapping.value = {
@@ -200,13 +200,14 @@ const pasteMappingToSelected = () => {
   if (!copiedMapping.value || selectedCells.value.size === 0) return;
 
   selectedCells.value.forEach(key => {
-    const [targetColId, targetOpType] = key.split('-');
-    const targetDbOpType = props.operationTypeMappings[targetOpType];
+    const parts = key.split(':::');
+    const targetColId = parts[0];
+    const targetOpType = parts[1];
 
-    if (canPaste(targetColId, targetOpType) && targetDbOpType) {
+    if (canPaste(targetColId, targetOpType)) {
       emit('update-mapping', {
         colId: targetColId,
-        opType: targetDbOpType,
+        opType: targetOpType,
         mapping: {
           dbKey: copiedMapping.value!.dbKey,
           divisor: copiedMapping.value!.divisor,
@@ -224,12 +225,13 @@ const clearMappingForSelected = () => {
   if (selectedCells.value.size === 0) return;
 
   selectedCells.value.forEach(key => {
-    const [targetColId, targetOpType] = key.split('-');
-    const targetDbOpType = props.operationTypeMappings[targetOpType];
+    const parts = key.split(':::');
+    const targetColId = parts[0];
+    const targetOpType = parts[1];
 
     emit('update-mapping', {
       colId: targetColId,
-      opType: targetDbOpType || null,
+      opType: targetOpType || null,
       mapping: null
     });
     flashCell(targetColId, targetOpType, 'bg-rose-100/50 dark:bg-rose-950/30 transition-all duration-300');
@@ -273,7 +275,7 @@ const navigateGrid = (key: string) => {
   const nextOpType = props.exampleTransactions[nextRowIdx].opType;
 
   selectedCells.value.clear();
-  const nextKey = `${nextColId}-${nextOpType}`;
+  const nextKey = `${nextColId}:::${nextOpType}`;
   selectedCells.value.add(nextKey);
   lastSelectedCell.value = { colId: nextColId, opType: nextOpType };
 
@@ -328,12 +330,22 @@ onBeforeUnmount(() => {
 });
 
 const getResolvedKeyForCell = (colId: string, opType: string) => {
+  const dbOpType = props.operationTypeMappings[opType];
+  if (!dbOpType) {
+    return '';
+  }
+
   const conf = props.columnConfigMap[colId];
   if (!conf) return '';
-  const dbOpType = props.operationTypeMappings[opType];
-  if (dbOpType && conf.typeSpecific[dbOpType]?.dbKey) {
-    return conf.typeSpecific[dbOpType].dbKey;
+  
+  if (conf.typeSpecific[opType] !== undefined) {
+    return conf.typeSpecific[opType].dbKey || '';
   }
+  
+  if (conf.typeSpecific[dbOpType] !== undefined) {
+    return conf.typeSpecific[dbOpType].dbKey || '';
+  }
+  
   return conf.global?.dbKey || '';
 };
 

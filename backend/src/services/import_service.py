@@ -103,28 +103,49 @@ def parse_datetime_safe(val: str, date_format: str | None = None) -> datetime:
         return datetime.now(UTC)
 
 
-def _get_date_format(date_formats: dict, db_key: str, op_type: str | None) -> str | None:
+def _get_date_format(
+    date_formats: dict,
+    db_key: str,
+    op_type: str | None,
+    raw_action: str | None = None,
+) -> str | None:
     val = date_formats.get(db_key)
     if isinstance(val, dict):
+        if raw_action and raw_action in val:
+            return val[raw_action]
         if op_type and op_type in val:
             return val[op_type]
         return val.get("global")
     return val
 
 
-def _get_mapped_col(columns: dict, db_key: str, op_type: str | None) -> str | None:
+def _get_mapped_col(
+    columns: dict,
+    db_key: str,
+    op_type: str | None,
+    raw_action: str | None = None,
+) -> str | None:
     val = columns.get(db_key)
     if isinstance(val, dict):
+        if raw_action and raw_action in val:
+            return val[raw_action]
         if op_type and op_type in val:
             return val[op_type]
         return val.get("global")
     return val
 
 
-def _get_transformation(transformations: dict, db_key: str, op_type: str | None) -> dict:
+def _get_transformation(
+    transformations: dict,
+    db_key: str,
+    op_type: str | None,
+    raw_action: str | None = None,
+) -> dict:
     val = transformations.get(db_key, {})
     if "divisor" in val or "multiplier" in val:
         return val
+    if raw_action and raw_action in val:
+        return val[raw_action]
     if op_type and op_type in val:
         return val[op_type]
     return val.get("global", {})
@@ -139,6 +160,10 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     custom_schema_config: dict | None = None,
 ) -> ImportSummary:
     """Parse uploaded file content and import operations/positions for a portfolio."""
+    _get_mapped_col_global = globals()["_get_mapped_col"]
+    _get_date_format_global = globals()["_get_date_format"]
+    _get_transformation_global = globals()["_get_transformation"]
+
     # 1. Resolve Import Schema
     schema_mappings = {}
     delimiter = ","
@@ -225,6 +250,27 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
         csv_action = row.get(columns.get("operation_type", "Action"))
         if not csv_action:
             continue
+        csv_action = csv_action.strip()
+
+        # shadow lookup functions locally to prioritize raw CSV action mapping lookup
+        _get_mapped_col = lambda cols, key, ot, ca=csv_action: _get_mapped_col_global(
+            cols,
+            key,
+            ot,
+            ca,
+        )
+        _get_date_format = lambda df, key, ot, ca=csv_action: _get_date_format_global(
+            df,
+            key,
+            ot,
+            ca,
+        )
+        _get_transformation = lambda tr, key, ot, ca=csv_action: _get_transformation_global(
+            tr,
+            key,
+            ot,
+            ca,
+        )
 
         # Resolve polymorphic operation type
         op_type = None

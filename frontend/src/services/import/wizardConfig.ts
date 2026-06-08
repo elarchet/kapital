@@ -11,7 +11,7 @@ export function groupRowsByOpType(
   allRawRows.forEach((row, idx) => {
     const rawAction = row[operationTypeColumnIdx];
     if (rawAction) {
-      const opType = operationTypeMappings[rawAction];
+      const opType = operationTypeMappings[rawAction.trim()];
       if (opType) {
         if (!result[opType]) {
           result[opType] = [];
@@ -59,6 +59,7 @@ export function getWizardSetup(params: {
   allRawRows: string[][];
   columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
   matchingRowsByType?: Record<string, { csvRow: string[]; rowIdx: number }[]>;
+  matchingRowsByRawAction?: Record<string, { csvRow: string[]; rowIdx: number }[]>;
   targets?: Array<{ colId: string; colIdx: number; opType: string | null }>;
 }) {
   const csvHeaderName = params.importFileHeaders[params.colIdx];
@@ -79,7 +80,7 @@ export function getWizardSetup(params: {
   const hasGlobalTarget = params.targets?.some(t => t.opType === null);
   const isGlobal = hasGlobalTarget || (!params.opType && (!params.targets || params.targets.length === 0));
 
-  if (isGlobal || !params.matchingRowsByType) {
+  if (isGlobal || (!params.matchingRowsByType && !params.matchingRowsByRawAction)) {
     params.allRawRows.forEach(row => {
       const v = row[params.colIdx];
       if (v && v.trim()) {
@@ -92,12 +93,15 @@ export function getWizardSetup(params: {
       params.targets.forEach(t => {
         if (t.opType) opTypesToCollect.add(t.opType);
       });
+    } else if (params.rawAction) {
+      opTypesToCollect.add(params.rawAction);
     } else if (params.opType) {
       opTypesToCollect.add(params.opType);
     }
 
-    opTypesToCollect.forEach(opType => {
-      const matches = params.matchingRowsByType![opType];
+    opTypesToCollect.forEach(key => {
+      const matches = (params.matchingRowsByRawAction && params.matchingRowsByRawAction[key]) ||
+                      (params.matchingRowsByType && params.matchingRowsByType[key]);
       if (matches) {
         matches.forEach(item => {
           const v = item.csvRow[params.colIdx];
@@ -107,33 +111,33 @@ export function getWizardSetup(params: {
         });
       }
     });
+
+    // Fallback to all values if type-specific collection yielded nothing
+    if (uniqueSet.size === 0) {
+      params.allRawRows.forEach(row => {
+        const v = row[params.colIdx];
+        if (v && v.trim()) {
+          uniqueSet.add(v.trim());
+        }
+      });
+    }
   }
   const uniqueValues = Array.from(uniqueSet);
 
   const conf = params.columnConfigMap[params.colId];
   let initialMapping: any = null;
   if (conf) {
-    if (params.opType) {
-      const specific = conf.typeSpecific[params.opType];
-      if (specific?.dbKey) {
-        initialMapping = {
-          dbKey: specific.dbKey,
-          scope: 'type',
-          divisor: specific.divisor,
-          multiplier: specific.multiplier,
-          enumMappings: specific.enumMappings,
-          dateFormat: specific.dateFormat
-        };
-      } else {
-        initialMapping = {
-          dbKey: conf.global.dbKey,
-          scope: 'global',
-          divisor: conf.global.divisor,
-          multiplier: conf.global.multiplier,
-          enumMappings: conf.global.enumMappings,
-          dateFormat: conf.global.dateFormat
-        };
-      }
+    const specific = (params.rawAction ? conf.typeSpecific[params.rawAction] : null) || 
+                     (params.opType ? conf.typeSpecific[params.opType] : null);
+    if (specific?.dbKey) {
+      initialMapping = {
+        dbKey: specific.dbKey,
+        scope: 'type',
+        divisor: specific.divisor,
+        multiplier: specific.multiplier,
+        enumMappings: specific.enumMappings,
+        dateFormat: specific.dateFormat
+      };
     } else {
       initialMapping = {
         dbKey: conf.global.dbKey,
@@ -179,7 +183,7 @@ export function saveWizardConfig(
   };
 
   if (opType) {
-    if (payload.dbKey) {
+    if (payload.dbKey !== undefined) {
       conf.typeSpecific[opType] = mapEntry;
     } else {
       delete conf.typeSpecific[opType];
@@ -198,7 +202,7 @@ export function clearWizardConfig(
   if (!conf) return;
 
   if (opType) {
-    delete conf.typeSpecific[opType];
+    conf.typeSpecific[opType] = { dbKey: '' };
   } else {
     conf.global = { dbKey: '' };
   }

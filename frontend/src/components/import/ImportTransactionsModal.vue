@@ -11,8 +11,6 @@ import CSVUploadZone from './CSVUploadZone.vue';
 import Step1DelimiterMapping from './Step1DelimiterMapping.vue';
 import ParsedPreviewTable from './ParsedPreviewTable.vue';
 import {
-  prepopulateFieldGuesses,
-  prepopulateOpTypeGuesses as prepopulateOpTypeGuessesHelper,
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
   validateLiveStats,
   parsePreviewRows,
@@ -211,7 +209,6 @@ const onSchemaSelect = () => {
     isCustomMapping.value = true;
     selectedSchemaId.value = null;
     initializeConfigs();
-    prepopulateGuesses(importFileHeaders.value);
   } else {
     const schema = availableSchemas.value.find(s => s.id === selectedSchemaId.value);
     if (schema) {
@@ -270,12 +267,12 @@ const processFile = async (file: File) => {
           autodetectedSchemaId.value = null;
           selectedSchemaId.value = null;
           isCustomMapping.value = true;
-          prepopulateGuesses(parsed.headers);
+          initializeConfigs();
         }
       } catch (err: any) {
         console.error('Failed to autodetect schema:', err);
         isCustomMapping.value = true;
-        prepopulateGuesses(parsed.headers);
+        initializeConfigs();
       }
     }
   };
@@ -301,21 +298,8 @@ const initializeConfigs = () => {
   currentStep.value = 1;
 };
 
-const prepopulateGuesses = (headers: string[]) => {
-  initializeConfigs();
-
-  const opIdx = headers.findIndex(h => ['action', 'type', 'transaction type'].some(k => h.toLowerCase().includes(k.toLowerCase())));
-  if (opIdx >= 0) {
-    operationTypeColumnIdx.value = opIdx;
-    prepopulateOpTypeGuesses();
-  }
-
-  const guesses = prepopulateFieldGuesses(headers, allRawRows.value, operationTypeColumnIdx.value);
-  const newConfigMap: Record<string, any> = {};
-  uiColumns.value.forEach(col => {
-    newConfigMap[col.id] = guesses[col.colIdx] || { global: { dbKey: '' }, typeSpecific: {} };
-  });
-  columnConfigMap.value = newConfigMap;
+const handleColumnChange = () => {
+  operationTypeMappings.value = {};
 };
 
 const uniqueOperationTypes = computed(() => {
@@ -329,10 +313,6 @@ const uniqueOperationTypes = computed(() => {
   });
   return Array.from(uniqueSet);
 });
-
-const prepopulateOpTypeGuesses = () => {
-  operationTypeMappings.value = prepopulateOpTypeGuessesHelper(uniqueOperationTypes.value);
-};
 
 const activeDbOpTypes = computed(() => {
   const types = new Set<string>();
@@ -420,7 +400,7 @@ const openWizard = (colId: string, opType: string | null, targets?: Array<{ colI
   wizardColId.value = colId;
   wizardColIdx.value = colIdx;
   wizardActiveOpType.value = opType || '';
-  wizardTargetCells.value = targets && targets.length > 0 ? targets : [{ colId, opType }];
+  wizardTargetCells.value = targets && targets.length > 0 ? targets : [{ colId, opType: rawAction || opType }];
 
   const setup = getWizardSetup({
     colId,
@@ -432,6 +412,7 @@ const openWizard = (colId: string, opType: string | null, targets?: Array<{ colI
     allRawRows: allRawRows.value,
     columnConfigMap: columnConfigMap.value,
     matchingRowsByType: matchingRowsByType.value,
+    matchingRowsByRawAction: matchingRowsByRawAction.value,
     targets: wizardTargetCells.value.map(t => ({ colId: t.colId, colIdx: uiColumns.value.find(c => c.id === t.colId)?.colIdx || 0, opType: t.opType }))
   });
 
@@ -803,7 +784,7 @@ onBeforeUnmount(() => {
                     :uniqueOperationTypes="uniqueOperationTypes"
                     :importFields="importFields"
                     :activeDbOpTypes="activeDbOpTypes"
-                    @column-change="prepopulateOpTypeGuesses"
+                    @column-change="handleColumnChange"
                     @next="goToStep2"
                   />
 

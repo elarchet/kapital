@@ -19,9 +19,10 @@ export function parsePreviewRows(params: {
   const getColumnConfigForField = (fieldKey: string, opType: string) => {
     let foundConf: ColMapping | null = null;
     Object.entries(params.columnConfigMap).forEach(([_, conf]) => {
-      if (conf.typeSpecific[opType]?.dbKey === fieldKey) {
+      const hasSpecific = conf.typeSpecific[opType] !== undefined;
+      if (hasSpecific && conf.typeSpecific[opType].dbKey === fieldKey) {
         foundConf = conf.typeSpecific[opType];
-      } else if (conf.global.dbKey === fieldKey && !conf.typeSpecific[opType]?.dbKey) {
+      } else if (!hasSpecific && conf.global.dbKey === fieldKey) {
         foundConf = conf.global;
       }
     });
@@ -34,7 +35,7 @@ export function parsePreviewRows(params: {
     const getVal = (idx: number) => (idx >= 0 && idx < cells.length ? cells[idx] : '');
 
     const rawAction = getVal(params.operationTypeColumnIdx!);
-    const opType = params.operationTypeMappings[rawAction] || 'unknown';
+    const opType = params.operationTypeMappings[rawAction.trim()] || 'unknown';
 
     const getMappedVal = (dbKey: string) => {
       const idx = getMappedColIdxForField(dbKey, opType, params.columnConfigMap, params.uiColumns);
