@@ -1,5 +1,8 @@
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue';
+import CustomDropdown from './CustomDropdown.vue';
+
+const props = defineProps<{
   selectedField: {
     key: string;
     label: string;
@@ -11,6 +14,13 @@ defineProps<{
 }>();
 
 const enumMappings = defineModel<Record<string, string>>('enumMappings', { required: true });
+
+const dropdownOptions = computed(() => {
+  return (props.selectedField.enum_values || []).map(opt => ({
+    value: opt,
+    label: opt
+  }));
+});
 </script>
 
 <template>
@@ -22,16 +32,15 @@ const enumMappings = defineModel<Record<string, string>>('enumMappings', { requi
     <div class="flex flex-col gap-2 max-h-[160px] overflow-y-auto border border-border-color rounded-sm p-2 bg-bg-secondary">
       <div v-for="val in uniqueCsvValues" :key="val" class="grid grid-cols-2 gap-3 items-center">
         <span class="text-[0.75rem] font-mono bg-bg-tertiary py-1 px-2 rounded-sm overflow-hidden text-ellipsis whitespace-nowrap border border-border-color" :title="val">{{ val || '—' }}</span>
-        <select 
-          v-model="enumMappings[val]" 
-          class="form-control" 
-          style="font-size: 0.75rem; padding: 0.25rem 0.5rem; height: auto;"
-        >
-          <option value="">-- Choose Option --</option>
-          <option v-for="opt in selectedField.enum_values || []" :key="opt" :value="opt">
-            {{ opt }}
-          </option>
-        </select>
+        <CustomDropdown
+          v-model="enumMappings[val]"
+          :options="dropdownOptions"
+          :searchable="false"
+          placeholder="-- Choose Option --"
+          :showClear="true"
+          clearLabel="-- Choose Option --"
+          :compact="true"
+        />
       </div>
       <div v-if="uniqueCsvValues.length === 0" style="text-align: center; padding: 1rem; color: var(--text-tertiary); font-size: 0.8rem;">
         No unique values found in this column.

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { Plus, Trash2 } from '@lucide/vue';
+import CustomDropdown from './CustomDropdown.vue';
 
 const props = defineProps<{
   importFileHeaders: string[];
@@ -446,16 +447,16 @@ const dbOpOptions = computed(() => {
                 </div>
                 
                 <!-- Direct Database Type Dropdown Select -->
-                <select
-                  :value="operationTypeMappings[example.opType] || ''"
-                  @change="emit('update-optype-mapping', { rawAction: example.opType, dbOpType: ($event.target as HTMLSelectElement).value })"
-                  class="mt-1 block w-full bg-bg-primary text-text-primary border border-border-color rounded px-1.5 py-0.5 text-[0.7rem] focus:outline-none focus:ring-1 focus:ring-accent-color cursor-pointer"
-                >
-                  <option value="">-- Map to DB Transaction Type --</option>
-                  <option v-for="opt in dbOpOptions" :key="opt.value" :value="opt.value">
-                    {{ opt.label }}
-                  </option>
-                </select>
+                <CustomDropdown
+                  :model-value="operationTypeMappings[example.opType] || ''"
+                  @update:model-value="dbOpType => emit('update-optype-mapping', { rawAction: example.opType, dbOpType })"
+                  :options="dbOpOptions"
+                  :searchable="false"
+                  placeholder="-- Map to DB Transaction Type --"
+                  :showClear="true"
+                  clearLabel="-- Map to DB Transaction Type --"
+                  :compact="true"
+                />
               </div>
             </td>
             <td 
