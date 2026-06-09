@@ -23,6 +23,23 @@ const store = useKapitalStore();
 
 const showCreatePosModal = ref(false);
 const showImportModal = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
+const initialImportFile = ref<File | null>(null);
+
+const triggerImportFile = () => {
+  if (fileInput.value) {
+    fileInput.value.value = '';
+    fileInput.value.click();
+  }
+};
+
+const onFileSelected = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    initialImportFile.value = target.files[0];
+    showImportModal.value = true;
+  }
+};
 
 const portfolioId = computed(() => Number(route.params.id));
 
@@ -161,7 +178,7 @@ const confirmDeletePortfolio = async () => {
             </button>
             <AddPositionButton 
               @open-manual="showCreatePosModal = true" 
-              @open-import="showImportModal = true" 
+              @open-import="triggerImportFile" 
             />
           </div>
         </header>
@@ -309,12 +326,22 @@ const confirmDeletePortfolio = async () => {
           @success="handleManualSuccess" 
         />
 
+        <!-- Hidden file input for direct upload -->
+        <input 
+          type="file" 
+          ref="fileInput" 
+          accept=".csv" 
+          style="display: none;" 
+          @change="onFileSelected" 
+        />
+
         <!-- Import Positions Modal -->
         <ImportTransactionsModal 
           v-if="showImportModal" 
           :portfolio="portfolio" 
-          @close="showImportModal = false" 
-          @success="store.fetchAllData" 
+          :initialFile="initialImportFile"
+          @close="() => { showImportModal = false; initialImportFile = null; }" 
+          @success="() => { store.fetchAllData(); showImportModal = false; initialImportFile = null; }" 
         />
 
         <!-- Delete Portfolio/Strategy Confirmation Modal -->

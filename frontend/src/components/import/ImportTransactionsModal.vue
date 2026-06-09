@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { api } from '../../services/api';
 import { Layers, Loader, Trash2 } from '@lucide/vue';
 import ColumnMappingWizard from './ColumnMappingWizard.vue';
@@ -25,12 +25,14 @@ import {
 } from '../../services/import';
 import Step2ColumnMapping from './Step2ColumnMapping.vue';
 import CustomDropdown from './CustomDropdown.vue';
+import RightPanelDrawer from '../RightPanelDrawer.vue';
 
 const props = defineProps<{
   portfolio: {
     id: number;
     name: string;
   };
+  initialFile?: File | null;
 }>();
 
 const emit = defineEmits<{
@@ -684,24 +686,44 @@ onMounted(async () => {
   } catch (err) {
     console.error('Failed to load import metadata:', err);
   }
-  loadSchemas();
+  await loadSchemas();
   window.addEventListener('keydown', handleKeyDown);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown);
 });
+
+// Auto-process initial file passed from parent
+watch(() => props.initialFile, (newFile) => {
+  if (newFile) {
+    processFile(newFile);
+  }
+}, { immediate: true });
+
+// Panel width coordinator
+const panelWidth = ref(550);
+watch(
+  () => importFile.value,
+  (newVal) => {
+    panelWidth.value = newVal ? Math.min(1400, window.innerWidth * 0.85) : 550;
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
-  <div class="modal-overlay" @click.self="requestClose">
-    <div class="modal-card flex flex-col transition-all duration-300" :class="importFile && !importSuccessSummary ? 'modal-card--wide' : 'w-full max-w-[550px]'">
-      <div class="modal-header !py-3 !px-4">
-        <h3 class="table-title !text-base !m-0">Import Transactions to "{{ portfolio.name }}"</h3>
-        <button @click="requestClose" class="bg-transparent border-0 cursor-pointer text-[1.25rem] text-text-secondary transition-colors duration-150 ease-in-out hover:text-text-primary">&times;</button>
-      </div>
-      
-      <div class="modal-body !p-4" style="overflow-y: auto; flex: 1;">
+  <RightPanelDrawer
+    :show="true"
+    :initialWidth="panelWidth"
+    :minWidth="500"
+    @close="requestClose"
+  >
+    <template #header>
+      <h3 class="table-title !text-base !m-0">Import Transactions to "{{ portfolio.name }}"</h3>
+    </template>
+
+    <template #body>
         <div v-if="importError" class="login-error" style="margin-bottom: 0.5rem;">
           {{ importError }}
         </div>
@@ -815,9 +837,9 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </template>
-      </div>
+    </template>
 
-      <div class="modal-footer !py-3 !px-4">
+    <template #footer>
         <button @click="requestClose" class="btn btn-sm">Cancel</button>
         <button 
           v-if="!importSuccessSummary && isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
@@ -848,9 +870,8 @@ onBeforeUnmount(() => {
         >
           Done
         </button>
-      </div>
-    </div>
-  </div>
+    </template>
+  </RightPanelDrawer>
 
   <!-- Custom exit confirmation dialog -->
   <DiscardChangesConfirmModal 
