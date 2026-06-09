@@ -17,7 +17,7 @@ export function parseDateTimeWithFormat(val: string, format?: string): Date | nu
       .replace('%H', '(?<hour>\\d{1,2})')
       .replace('%M', '(?<minute>\\d{1,2})')
       .replace('%S', '(?<second>\\d{1,2})');
-    
+
     if (regexStr.endsWith('(?<second>\\d{1,2})')) {
       regexStr += '(?<ms>\\.\\d+)?';
     }
@@ -31,7 +31,7 @@ export function parseDateTimeWithFormat(val: string, format?: string): Date | nu
       const hour = match.groups.hour ? parseInt(match.groups.hour, 10) : 0;
       const minute = match.groups.minute ? parseInt(match.groups.minute, 10) : 0;
       const second = match.groups.second ? parseInt(match.groups.second, 10) : 0;
-      
+
       const d = new Date(year, month, day, hour, minute, second);
       if (!isNaN(d.getTime())) {
         return d;
@@ -93,9 +93,12 @@ export function getMappedColIdxForField(
   uiColumns?: Array<{ id: string; colIdx: number }>
 ): number {
   let mappedIdx = -1;
+  if (!columnConfigMap) return mappedIdx;
+
   Object.entries(columnConfigMap).forEach(([idOrIdxStr, conf]) => {
-    const hasSpecific = conf.typeSpecific[opType] !== undefined;
-    const isMatch = (hasSpecific && conf.typeSpecific[opType].dbKey === dbKey) || (!hasSpecific && conf.global.dbKey === dbKey);
+    if (!conf) return;
+    const hasSpecific = conf.typeSpecific && conf.typeSpecific[opType] !== undefined;
+    const isMatch = (hasSpecific && conf.typeSpecific[opType]?.dbKey === dbKey) || (!hasSpecific && conf.global?.dbKey === dbKey);
     if (isMatch) {
       if (uiColumns) {
         const col = uiColumns.find(c => c.id === idOrIdxStr);
@@ -131,24 +134,36 @@ export function validateLiveStats(params: {
     errors: RowError[];
   }> = {};
 
-  params.activeDbOpTypes.forEach(type => {
-    stats[type] = {
-      total: 0,
-      success: 0,
-      failed: 0,
-      errors: []
-    };
-  });
+  if (params.operationTypeColumnIdx === null) {
+    console.log('validateLiveStats: operationTypeColumnIdx is null, returning empty stats');
+    return stats;
+  }
 
-  if (params.operationTypeColumnIdx === null) return stats;
+  params.allRawRows.forEach(row => {
+    const rawAction = row[params.operationTypeColumnIdx!];
+    if (rawAction) {
+      const trimmed = rawAction.trim();
+      if (!stats[trimmed]) {
+        stats[trimmed] = {
+          total: 0,
+          success: 0,
+          failed: 0,
+          errors: []
+        };
+      }
+    }
+  });
 
   const getColumnConfigForField = (fieldKey: string, opType: string) => {
     let foundConf: ColMapping | null = null;
+    if (!params.columnConfigMap) return foundConf;
+
     Object.entries(params.columnConfigMap).forEach(([_, conf]) => {
-      const hasSpecific = conf.typeSpecific[opType] !== undefined;
-      if (hasSpecific && conf.typeSpecific[opType].dbKey === fieldKey) {
+      if (!conf) return;
+      const hasSpecific = conf.typeSpecific && conf.typeSpecific[opType] !== undefined;
+      if (hasSpecific && conf.typeSpecific[opType]?.dbKey === fieldKey) {
         foundConf = conf.typeSpecific[opType];
-      } else if (!hasSpecific && conf.global.dbKey === fieldKey) {
+      } else if (!hasSpecific && conf.global?.dbKey === fieldKey) {
         foundConf = conf.global;
       }
     });
@@ -159,10 +174,13 @@ export function validateLiveStats(params: {
     const rawAction = row[params.operationTypeColumnIdx!];
     if (!rawAction) return;
 
-    const opType = params.operationTypeMappings[rawAction.trim()];
-    if (!opType || !stats[opType]) return;
+    const trimmedRaw = rawAction.trim();
+    if (!stats[trimmedRaw]) return;
 
-    stats[opType].total++;
+    const opType = params.operationTypeMappings[trimmedRaw];
+    if (!opType) return;
+
+    stats[trimmedRaw].total++;
 
     const rowErrors: { fieldKey: string; fieldLabel: string; rawValue: string; errorMessage: string }[] = [];
 
@@ -220,14 +238,26 @@ export function validateLiveStats(params: {
             });
           }
         } else if (field.type === 'enum') {
-          const mappedEnum = mappingConf?.enumMappings?.[val];
-          if (!mappedEnum) {
-            rowErrors.push({
-              fieldKey: field.key,
-              fieldLabel: field.label,
-              rawValue: val,
-              errorMessage: `Value "${val}" is not mapped to a database enum option.`
-            });
+          if (field.key === 'operation_type') {
+            const mappedEnum = params.operationTypeMappings[val];
+            if (!mappedEnum) {
+              rowErrors.push({
+                fieldKey: field.key,
+                fieldLabel: field.label,
+                rawValue: val,
+                errorMessage: `Value "${val}" is not mapped to a database enum option.`
+              });
+            }
+          } else {
+            const mappedEnum = mappingConf?.enumMappings?.[val];
+            if (!mappedEnum) {
+              rowErrors.push({
+                fieldKey: field.key,
+                fieldLabel: field.label,
+                rawValue: val,
+                errorMessage: `Value "${val}" is not mapped to a database enum option.`
+              });
+            }
           }
         }
       } else if (isRequired && (!rawValue || !rawValue.trim())) {
@@ -241,19 +271,20 @@ export function validateLiveStats(params: {
     });
 
     if (rowErrors.length > 0) {
-      stats[opType].failed++;
+      stats[trimmedRaw].failed++;
       rowErrors.forEach(err => {
-        stats[opType].errors.push({
+        stats[trimmedRaw].errors.push({
           rowNum: rowIdx + 2, // 1-based index (row 1 is header)
           rawRow: row,
           ...err
         });
       });
     } else {
-      stats[opType].success++;
+      stats[trimmedRaw].success++;
     }
   });
 
+  console.log('validateLiveStats output keys/totals:', Object.keys(stats).map(k => `${k}: total=${stats[k].total}, success=${stats[k].success}, failed=${stats[k].failed}`));
   return stats;
 }
 
@@ -279,6 +310,11 @@ export function getValidationErrors(params: {
   params.uniqueOperationTypes.forEach(val => {
     if (!params.operationTypeMappings[val]) {
       errors.push(`Action "${val}" from your file is not mapped to any database transaction type.`);
+    } else {
+      const stats = params.liveValidationStats[val];
+      if (stats && stats.failed > 0) {
+        errors.push(`There are ${stats.failed} parsing failures in "${val}" transactions.`);
+      }
     }
   });
 
@@ -294,11 +330,6 @@ export function getValidationErrors(params: {
         }
       }
     });
-
-    const stats = params.liveValidationStats[opType];
-    if (stats && stats.failed > 0) {
-      errors.push(`There are ${stats.failed} parsing failures in "${opType}" transactions. Expand the Verification Panel below to inspect.`);
-    }
   });
 
   return errors;

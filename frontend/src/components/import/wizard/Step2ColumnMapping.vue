@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { AlertTriangle } from '@lucide/vue';
+import { ref } from 'vue';
 import MappingExampleTable from './MappingExampleTable.vue';
-import VerificationPanel from './VerificationPanel.vue';
+import SimulationVerificationModal from '../modals/SimulationVerificationModal.vue';
 
-defineProps<{
+const props = defineProps<{
   importFileHeaders: string[];
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
   operationTypeColumnIdx: number | null;
@@ -31,6 +31,15 @@ const emit = defineEmits<{
   (e: 'duplicate-column', colId: string): void;
   (e: 'delete-column', colId: string): void;
 }>();
+
+// Verification modal state
+const showVerification = ref(false);
+const selectedVerificationType = ref('');
+
+const openVerificationModal = (dbOpType: string) => {
+  selectedVerificationType.value = dbOpType;
+  showVerification.value = true;
+};
 </script>
 
 <template>
@@ -42,6 +51,7 @@ const emit = defineEmits<{
       <button @click="emit('back')" class="btn btn-sm" style="flex-shrink: 0;">&larr; Back to Step 1</button>
     </div>
 
+    <!-- Step 2 Mapping Table -->
     <MappingExampleTable
       :importFileHeaders="importFileHeaders"
       :uiColumns="uiColumns"
@@ -60,27 +70,11 @@ const emit = defineEmits<{
       @update-optype-mapping="(payload: any) => emit('update-optype-mapping', payload)"
       @duplicate-column="(colId: string) => emit('duplicate-column', colId)"
       @delete-column="(colId: string) => emit('delete-column', colId)"
+      @show-verification="openVerificationModal"
     />
-
-    <!-- Verification Panel -->
-    <VerificationPanel
-      :activeDbOpTypes="activeDbOpTypes"
-      :liveValidationStats="liveValidationStats"
-    />
-
-    <!-- Validation Warnings Banner -->
-    <div v-if="validationErrors.length > 0" class="validation-alert" style="margin-bottom: 0.75rem; display: flex; gap: 0.5rem; background-color: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);">
-      <AlertTriangle style="color: #ef4444; width: 20px; height: 20px; flex-shrink: 0; margin-top: 0.15rem;" />
-      <div>
-        <div style="font-weight: 600; font-size: 0.85rem; color: #ef4444; margin-bottom: 0.25rem;">Template Validation Errors</div>
-        <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.75rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.15rem;">
-          <li v-for="err in validationErrors" :key="err">{{ err }}</li>
-        </ul>
-      </div>
-    </div>
 
     <!-- Save template options -->
-    <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem;">
+    <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem;">
       <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500; text-transform: none; font-size: 0.875rem;">
         <input 
           type="checkbox" 
@@ -102,5 +96,13 @@ const emit = defineEmits<{
         />
       </div>
     </div>
+
+    <!-- Simulation Verification Detail Modal Popup -->
+    <SimulationVerificationModal
+      :show="showVerification"
+      :dbOpType="selectedVerificationType"
+      :stats="liveValidationStats[selectedVerificationType]"
+      @close="showVerification = false"
+    />
   </div>
 </template>

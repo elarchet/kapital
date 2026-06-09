@@ -83,6 +83,7 @@ export function useWizardMapping(
       wizardTargetCells.value.forEach(target => {
         saveWizardConfig(columnConfigMap.value, target.colId, target.opType, { ...payload, scope: target.opType ? 'type' : 'global' });
       });
+      columnConfigMap.value = { ...columnConfigMap.value };
     }
     isWizardOpen.value = false;
   };
@@ -92,6 +93,7 @@ export function useWizardMapping(
       wizardTargetCells.value.forEach(target => {
         clearWizardConfig(columnConfigMap.value, target.colId, target.opType);
       });
+      columnConfigMap.value = { ...columnConfigMap.value };
     }
     isWizardOpen.value = false;
   };
@@ -109,6 +111,7 @@ export function useWizardMapping(
         dateFormat: mapping.dateFormat
       });
     }
+    columnConfigMap.value = { ...columnConfigMap.value };
   };
 
   const handleDuplicateColumn = (colId: string) => {
@@ -126,6 +129,7 @@ export function useWizardMapping(
     const lastIndex = uiColumns.value.map((c: any) => c.colIdx).lastIndexOf(baseCol.colIdx);
     uiColumns.value.splice(lastIndex + 1, 0, newCol);
     columnConfigMap.value[newId] = { global: { dbKey: '' }, typeSpecific: {} };
+    columnConfigMap.value = { ...columnConfigMap.value };
   };
 
   const handleDeleteColumn = (colId: string) => {
@@ -133,6 +137,7 @@ export function useWizardMapping(
     if (index !== -1 && uiColumns.value[index].isDuplicate) {
       uiColumns.value.splice(index, 1);
       delete columnConfigMap.value[colId];
+      columnConfigMap.value = { ...columnConfigMap.value };
     }
   };
 
@@ -142,6 +147,7 @@ export function useWizardMapping(
     } else {
       operationTypeMappings.value[rawAction] = dbOpType;
     }
+    operationTypeMappings.value = { ...operationTypeMappings.value };
   };
 
   return {

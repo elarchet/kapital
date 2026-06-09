@@ -102,9 +102,6 @@ export function buildCustomMappingPayload(params: {
   });
 
   const finalColumns: Record<string, any> = {};
-  if (params.operationTypeColumnIdx !== null) {
-    finalColumns['operation_type'] = params.importFileHeaders[params.operationTypeColumnIdx];
-  }
 
   dbKeyToCol.forEach((entry, dbKey) => {
     if (entry.typeSpecific && Object.keys(entry.typeSpecific).length > 0) {
@@ -134,6 +131,7 @@ export function buildCustomMappingPayload(params: {
   });
 
   return {
+    operation_type_column: params.operationTypeColumnIdx !== null ? params.importFileHeaders[params.operationTypeColumnIdx] : null,
     columns: finalColumns,
     type_mappings,
     enum_mappings,
@@ -214,7 +212,7 @@ export function parseSchemaMappings(
     const dateFormats = mappings.date_formats || {};
 
     // 1. Parse operation type column
-    const opTypeHeader = cols.operation_type;
+    const opTypeHeader = mappings.operation_type_column || cols.operation_type;
     if (opTypeHeader) {
       const idx = importFileHeaders.indexOf(opTypeHeader);
       if (idx >= 0) {
@@ -227,13 +225,14 @@ export function parseSchemaMappings(
     Object.entries(op_mappings).forEach(([targetEnum, rawVals]: [string, any]) => {
       if (Array.isArray(rawVals)) {
         rawVals.forEach(val => {
-          operationTypeMappings[val] = targetEnum;
+          operationTypeMappings[val.trim()] = targetEnum;
         });
       }
     });
 
     // 3. Parse other columns mappings
     Object.entries(cols).forEach(([dbKey, val]) => {
+      if (dbKey === 'operation_type') return;
 
       if (typeof val === 'string') {
         const idx = importFileHeaders.indexOf(val);

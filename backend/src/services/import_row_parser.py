@@ -24,7 +24,8 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
     schema_mappings: dict[str, Any],
     decimal_separator: str,
 ) -> dict[str, Any] | None:
-    csv_action = row.get(columns.get("operation_type", "Action"))
+    op_col = schema_mappings.get("operation_type_column") or columns.get("operation_type") or "Action"
+    csv_action = row.get(op_col)
     if not csv_action:
         return None
     csv_action = csv_action.strip()

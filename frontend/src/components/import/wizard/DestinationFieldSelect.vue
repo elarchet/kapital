@@ -71,7 +71,7 @@ const isFieldRelevant = (fieldKey: string, opType: string) => {
 };
 
 const filteredFields = computed(() => {
-  let fields = props.importFields;
+  let fields = props.importFields.filter(f => f.key !== 'operation_type');
   if (props.activeOpType) {
     fields = fields.filter(f => isFieldRelevant(f.key, props.activeOpType));
   }

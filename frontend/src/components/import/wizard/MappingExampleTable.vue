@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { computed } from 'vue';
 import { Plus, Trash2 } from '@lucide/vue';
 import CustomDropdown from '../../CustomDropdown.vue';
+import { useTableGridSelection } from './useTableGridSelection';
 
 const props = defineProps<{
   importFileHeaders: string[];
@@ -16,7 +17,7 @@ const props = defineProps<{
   operationTypeMappings: Record<string, string>;
   importFields: any[];
   exampleTransactions: Array<{
-    opType: string; // This holds the raw CSV action value
+    opType: string;
     csvRow: string[];
     rowIdx: number;
     totalMatches: number;
@@ -38,319 +39,20 @@ const emit = defineEmits<{
   (e: 'update-optype-mapping', payload: { rawAction: string; dbOpType: string }): void;
   (e: 'duplicate-column', colId: string): void;
   (e: 'delete-column', colId: string): void;
+  (e: 'show-verification', dbOpType: string): void;
 }>();
 
-// Selected cells for keyboard selection & actions
-const selectedCells = ref<Set<string>>(new Set());
-const lastSelectedCell = ref<{ colId: string; opType: string } | null>(null);
-
-// Clipboard state for copy-pasting mappings
-const copiedMapping = ref<{
-  colId: string;
-  opType: string;
-  dbKey: string;
-  divisor?: number;
-  multiplier?: number;
-  enumMappings?: Record<string, string>;
-  dateFormat?: string;
-} | null>(null);
-
-// Cell flashing state for visual shortcut feedback
-const recentlyFlashed = ref<Record<string, string>>({}); // cellKey -> CSS class
-
-const flashCell = (colId: string, opType: string, flashClass: string) => {
-  const key = `${colId}:::${opType}`;
-  recentlyFlashed.value[key] = flashClass;
-  setTimeout(() => {
-    delete recentlyFlashed.value[key];
-  }, 1000);
-};
-
-
-
-const isSelected = (colId: string, opType: string): boolean => {
-  const key = `${colId}:::${opType}`;
-  return selectedCells.value.has(key);
-};
-
-const isCopiedSource = (colId: string, opType: string): boolean => {
-  return copiedMapping.value !== null &&
-         copiedMapping.value.colId === colId &&
-         copiedMapping.value.opType === opType;
-};
-
-const getCellOutlineStyle = (colId: string, opType: string) => {
-  if (isSelected(colId, opType)) {
-    return '2px solid var(--accent-color)';
-  }
-  if (isCopiedSource(colId, opType)) {
-    return '2px dashed var(--accent-color)';
-  }
-  return undefined;
-};
-
-const selectCell = (colId: string, opType: string, multiSelect: boolean) => {
-  const key = `${colId}:::${opType}`;
-  if (multiSelect) {
-    if (selectedCells.value.has(key)) {
-      selectedCells.value.delete(key);
-      if (lastSelectedCell.value?.colId === colId && lastSelectedCell.value?.opType === opType) {
-        const remaining = Array.from(selectedCells.value);
-        if (remaining.length > 0) {
-          const parts = remaining[remaining.length - 1].split(':::');
-          lastSelectedCell.value = { colId: parts[0], opType: parts[1] };
-        } else {
-          lastSelectedCell.value = null;
-        }
-      }
-    } else {
-      selectedCells.value.add(key);
-      lastSelectedCell.value = { colId, opType };
-    }
-  } else {
-    selectedCells.value.clear();
-    selectedCells.value.add(key);
-    lastSelectedCell.value = { colId, opType };
-  }
-};
-
-const selectColumn = (colId: string) => {
-  selectedCells.value.clear();
-  props.exampleTransactions.forEach(example => {
-    selectedCells.value.add(`${colId}:::${example.opType}`);
-  });
-  if (props.exampleTransactions.length > 0) {
-    const firstOpType = props.exampleTransactions[0].opType;
-    lastSelectedCell.value = { colId, opType: firstOpType };
-    nextTick(() => {
-      const selector = `#cell-${sanitizeId(firstOpType)}-${colId}`;
-      const el = document.querySelector(selector) as HTMLTableCellElement;
-      if (el) el.focus();
-    });
-  }
-};
-
-const getFirstSelectedCell = (): { colId: string; opType: string } | null => {
-  const firstKey = Array.from(selectedCells.value)[0];
-  if (!firstKey) return null;
-  const parts = firstKey.split(':::');
-  return { colId: parts[0], opType: parts[1] };
-};
-
-const openWizardForSelected = () => {
-  if (selectedCells.value.size === 0) return;
-
-  const primary = lastSelectedCell.value || getFirstSelectedCell();
-  if (!primary) return;
-
-  const targets = Array.from(selectedCells.value).map(key => {
-    const parts = key.split(':::');
-    return { colId: parts[0], opType: parts[1] };
-  });
-
-  const isGlobal = targets.length > 1;
-  const dbOpType = primary.opType ? props.operationTypeMappings[primary.opType] : null;
-
-  emit('open-wizard', {
-    colId: primary.colId,
-    opType: isGlobal ? null : dbOpType,
-    targets: isGlobal
-      ? [{ colId: primary.colId, opType: null }]
-      : targets.map(t => ({ colId: t.colId, opType: t.opType })),
-    rawAction: primary.opType
-  });
-};
-
-const handleCellClick = (colId: string, opType: string, event: MouseEvent) => {
-  const isCtrl = event.ctrlKey || event.metaKey;
-  const isAlreadySelected = isSelected(colId, opType);
-
-  if (!isCtrl && isAlreadySelected && selectedCells.value.size === 1) {
-    openWizardForSelected();
-  } else {
-    selectCell(colId, opType, isCtrl);
-    (event.currentTarget as HTMLTableCellElement).focus();
-  }
-};
-
-const copyMapping = (colId: string, opType: string) => {
-  const conf = props.columnConfigMap[colId];
-  if (!conf) return;
-
-  const mappingToCopy = conf.typeSpecific[opType] || (props.operationTypeMappings[opType] ? conf.typeSpecific[props.operationTypeMappings[opType]] : null);
-
-  if (mappingToCopy && mappingToCopy.dbKey) {
-    copiedMapping.value = {
-      colId,
-      opType,
-      dbKey: mappingToCopy.dbKey,
-      divisor: mappingToCopy.divisor,
-      multiplier: mappingToCopy.multiplier,
-      enumMappings: mappingToCopy.enumMappings ? { ...mappingToCopy.enumMappings } : undefined,
-      dateFormat: mappingToCopy.dateFormat
-    };
-    flashCell(colId, opType, 'bg-indigo-100/50 dark:bg-indigo-950/30 transition-all duration-300');
-  }
-};
-
-const canPaste = (colId: string, opType: string): boolean => {
-  if (!copiedMapping.value) return false;
-  if (copiedMapping.value.colId === colId && copiedMapping.value.opType === opType) return false;
-  return true;
-};
-
-const pasteMappingToSelected = () => {
-  if (!copiedMapping.value || selectedCells.value.size === 0) return;
-
-  selectedCells.value.forEach(key => {
-    const parts = key.split(':::');
-    const targetColId = parts[0];
-    const targetOpType = parts[1];
-
-    if (canPaste(targetColId, targetOpType)) {
-      emit('update-mapping', {
-        colId: targetColId,
-        opType: targetOpType,
-        mapping: {
-          dbKey: copiedMapping.value!.dbKey,
-          divisor: copiedMapping.value!.divisor,
-          multiplier: copiedMapping.value!.multiplier,
-          enumMappings: copiedMapping.value!.enumMappings,
-          dateFormat: copiedMapping.value!.dateFormat
-        }
-      });
-      flashCell(targetColId, targetOpType, 'bg-emerald-100/50 dark:bg-emerald-950/30 transition-all duration-300');
-    }
-  });
-};
-
-const clearMappingForSelected = () => {
-  if (selectedCells.value.size === 0) return;
-
-  selectedCells.value.forEach(key => {
-    const parts = key.split(':::');
-    const targetColId = parts[0];
-    const targetOpType = parts[1];
-
-    emit('update-mapping', {
-      colId: targetColId,
-      opType: targetOpType || null,
-      mapping: null
-    });
-    flashCell(targetColId, targetOpType, 'bg-rose-100/50 dark:bg-rose-950/30 transition-all duration-300');
-  });
-};
-
-const navigateGrid = (key: string) => {
-  const primary = lastSelectedCell.value || getFirstSelectedCell();
-  if (!primary) return;
-
-  const colId = primary.colId;
-  const opType = primary.opType;
-
-  const rowIdx = props.exampleTransactions.findIndex(e => e.opType === opType);
-  if (rowIdx === -1) return;
-
-  const numCols = props.uiColumns.length;
-  const numRows = props.exampleTransactions.length;
-
-  let currentColIdx = props.uiColumns.findIndex(c => c.id === colId);
-  if (currentColIdx === -1) currentColIdx = 0;
-
-  let nextColIdx = currentColIdx;
-  let nextRowIdx = rowIdx;
-
-  if (key === 'ArrowLeft') {
-    nextColIdx = nextColIdx - 1;
-    if (nextColIdx < 0) nextColIdx = numCols - 1;
-  } else if (key === 'ArrowRight') {
-    nextColIdx = nextColIdx + 1;
-    if (nextColIdx >= numCols) nextColIdx = 0;
-  } else if (key === 'ArrowUp') {
-    nextRowIdx = rowIdx - 1;
-    if (nextRowIdx < 0) nextRowIdx = numRows - 1;
-  } else if (key === 'ArrowDown') {
-    nextRowIdx = rowIdx + 1;
-    if (nextRowIdx >= numRows) nextRowIdx = 0;
-  }
-
-  const nextColId = props.uiColumns[nextColIdx].id;
-  const nextOpType = props.exampleTransactions[nextRowIdx].opType;
-
-  selectedCells.value.clear();
-  const nextKey = `${nextColId}:::${nextOpType}`;
-  selectedCells.value.add(nextKey);
-  lastSelectedCell.value = { colId: nextColId, opType: nextOpType };
-
-  nextTick(() => {
-    const selector = `#cell-${sanitizeId(nextOpType)}-${nextColId}`;
-    const el = document.querySelector(selector) as HTMLTableCellElement;
-    if (el) el.focus();
-  });
-};
-
-const handleKeyDown = (e: KeyboardEvent) => {
-  const target = e.target as HTMLElement;
-  if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-    return;
-  }
-
-  if (selectedCells.value.size === 0) return;
-
-  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-  const isCopy = (isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'c';
-  const isPaste = (isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === 'v';
-  const isClear = e.key === 'Delete' || e.key === 'Backspace';
-  const isEnter = e.key === 'Enter' || e.key === ' ';
-
-  if (isCopy) {
-    e.preventDefault();
-    const primary = lastSelectedCell.value || getFirstSelectedCell();
-    if (primary) {
-      copyMapping(primary.colId, primary.opType);
-    }
-  } else if (isPaste) {
-    e.preventDefault();
-    pasteMappingToSelected();
-  } else if (isClear) {
-    e.preventDefault();
-    clearMappingForSelected();
-  } else if (isEnter) {
-    e.preventDefault();
-    openWizardForSelected();
-  } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-    e.preventDefault();
-    navigateGrid(e.key);
-  }
-};
-
-onMounted(() => {
-  window.addEventListener('keydown', handleKeyDown);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleKeyDown);
-});
-
-const getResolvedKeyForCell = (colId: string, opType: string) => {
-  const dbOpType = props.operationTypeMappings[opType];
-  if (!dbOpType) {
-    return '';
-  }
-
-  const conf = props.columnConfigMap[colId];
-  if (!conf) return '';
-  
-  if (conf.typeSpecific[opType] !== undefined) {
-    return conf.typeSpecific[opType].dbKey || '';
-  }
-  
-  if (conf.typeSpecific[dbOpType] !== undefined) {
-    return conf.typeSpecific[dbOpType].dbKey || '';
-  }
-  
-  return conf.global?.dbKey || '';
-};
+// Delegate selection, clipboard and keyboard navigation to the composable
+const {
+  copiedMapping,
+  recentlyFlashed,
+  getCellOutlineStyle,
+  handleCellClick,
+  openWizardForSelected,
+  selectColumn,
+  getResolvedKeyForCell,
+  sanitizeId,
+} = useTableGridSelection(props, emit);
 
 const prevExampleForType = (opType: string) => {
   emit('prev-example', opType);
@@ -368,10 +70,6 @@ const deleteCol = (colId: string) => {
   emit('delete-column', colId);
 };
 
-const sanitizeId = (val: string) => {
-  return encodeURIComponent(val).replace(/%/g, '_');
-};
-
 const dbOpOptions = computed(() => {
   const enumVals = props.importFields.find(f => f.key === 'operation_type')?.enum_values || [];
   return enumVals.map((opt: string) => ({
@@ -383,12 +81,16 @@ const dbOpOptions = computed(() => {
 
 <template>
   <div>
-    <div style="overflow: auto; max-height: 400px; max-width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.5rem; position: relative;">
-      <table class="preview-table" style="margin-top: 0; min-width: 100%;">
+    <!-- Table Wrapper Container with maximized height -->
+    <div style="overflow: auto; max-height: calc(100vh - 300px); min-height: 250px; max-width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.5rem; position: relative;">
+      <table class="preview-table preview-table-double-sticky" style="margin-top: 0; min-width: 100%;">
         <thead>
           <tr>
-            <th style="min-width: 180px; padding: 0.2rem 0.35rem; background-color: var(--bg-tertiary); font-weight: 700; color: var(--text-secondary); text-align: center;">
-              Raw File Action & DB Type
+            <th style="min-width: 190px; max-width: 190px; width: 190px; padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center;">
+              Raw Action
+            </th>
+            <th style="min-width: 170px; max-width: 170px; width: 170px; padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center;">
+              DB Transaction Type
             </th>
             <th 
               v-for="col in uiColumns" 
@@ -426,40 +128,61 @@ const dbOpOptions = computed(() => {
         <tbody>
           <!-- Example rows per type -->
           <tr v-for="example in exampleTransactions" :key="example.opType">
-            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: 180px; background-color: var(--bg-secondary);">
+            <!-- Column 1: Raw Action -->
+            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: 190px; max-width: 190px; width: 190px;">
               <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <div style="display: flex; align-items: center; gap: 0.35rem; padding: 0.05rem; white-space: nowrap;">
-                  <span class="badge" :class="'badge-' + (operationTypeMappings[example.opType] || 'unknown')" style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; min-width: 85px; text-align: center; display: inline-block;">
-                     {{ example.opType }}
-                  </span>
-                  
-                  <!-- Compact Switcher Controls -->
-                  <div v-if="example.totalMatches > 1" style="display: flex; align-items: center; gap: 0.15rem;">
-                    <button @click.stop="prevExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Previous Example">&larr;</button>
-                    <button @click.stop="nextExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Next Example">&rarr;</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.25rem; padding: 0.05rem; overflow: hidden; width: 100%;">
+                  <!-- Left: Transaction type value badge -->
+                  <div style="flex: 1; min-width: 0; display: flex; align-items: center; overflow: hidden;">
+                    <span 
+                      class="badge" 
+                      :class="'badge-' + (operationTypeMappings[example.opType] || 'unknown')" 
+                      style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; width: fit-content; max-width: 90px; text-align: left; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;"
+                      :title="example.opType"
+                    >
+                       {{ example.opType }}
+                    </span>
                   </div>
-    
-                  <span v-if="liveValidationStats[operationTypeMappings[example.opType]]" :style="{
-                    fontSize: '0.65rem',
-                    fontWeight: 600,
-                    color: liveValidationStats[operationTypeMappings[example.opType]].failed > 0 ? 'var(--color-danger)' : 'var(--color-success)'
-                  }">
-                    ({{ liveValidationStats[operationTypeMappings[example.opType]].success }}/{{ liveValidationStats[operationTypeMappings[example.opType]].total }})
-                  </span>
+                  
+                  <!-- Right: Switcher controls & Validation Count -->
+                  <div style="display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0;">
+                    <!-- Compact Switcher Controls -->
+                    <div v-if="example.totalMatches > 1" style="display: flex; align-items: center; gap: 0.15rem;">
+                      <button @click.stop="prevExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Previous Example">&larr;</button>
+                      <button @click.stop="nextExampleForType(example.opType)" style="background: none; border: none; padding: 0 2px; font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center;" title="Next Example">&rarr;</button>
+                    </div>
+      
+                    <!-- Clickable Simulation Stats Count -->
+                    <span 
+                      v-if="liveValidationStats[example.opType]" 
+                      @click.stop="emit('show-verification', example.opType)"
+                      :title="`Click to view simulation verification for ${example.opType}`"
+                      class="cursor-pointer hover:underline"
+                      :style="{
+                        fontSize: '0.65rem',
+                        fontWeight: 600,
+                        color: liveValidationStats[example.opType].failed > 0 ? 'var(--color-danger)' : 'var(--color-success)'
+                      }"
+                    >
+                      ({{ liveValidationStats[example.opType].success }}/{{ liveValidationStats[example.opType].total }})
+                    </span>
+                  </div>
                 </div>
-                
-                <!-- Direct Database Type Dropdown Select -->
-                <CustomDropdown
-                  :model-value="operationTypeMappings[example.opType] || ''"
-                  @update:model-value="dbOpType => emit('update-optype-mapping', { rawAction: example.opType, dbOpType })"
-                  :options="dbOpOptions"
-                  :searchable="false"
-                  placeholder="-- Map to DB Transaction Type --"
-                  :showClear="true"
-                  clearLabel="-- Map to DB Transaction Type --"
-                  :compact="true"
-                />
               </div>
+            </td>
+
+            <!-- Column 2: DB Transaction Type Dropdown Select -->
+            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: 170px; max-width: 170px; width: 170px;">
+              <CustomDropdown
+                :model-value="operationTypeMappings[example.opType] || ''"
+                @update:model-value="dbOpType => emit('update-optype-mapping', { rawAction: example.opType, dbOpType })"
+                :options="dbOpOptions"
+                :searchable="false"
+                placeholder="-- Map DB Type --"
+                :showClear="true"
+                clearLabel="-- Map DB Type --"
+                :compact="true"
+              />
             </td>
             <td 
               v-for="col in uiColumns" 
@@ -473,7 +196,7 @@ const dbOpOptions = computed(() => {
                 outlineOffset: '-2px'
               }" 
               class="group focus:outline-none focus:bg-slate-100/50 dark:focus:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-150 cursor-pointer"
-              :class="recentlyFlashed[`${col.id}-${example.opType}`] || ''"
+              :class="recentlyFlashed[`${col.id}:::${example.opType}`] || ''"
               style="vertical-align: middle; position: relative; padding: 0.15rem 0.3rem; max-width: 160px;"
             >
               <div style="display: flex; flex-direction: column; gap: 0.05rem; overflow: hidden;">
@@ -503,4 +226,3 @@ const dbOpOptions = computed(() => {
     </div>
   </div>
 </template>
-

@@ -74,7 +74,34 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         
         const parsed = parseSchemaMappings(schema.mappings, importFileHeaders.value);
         operationTypeColumnIdx.value = parsed.operationTypeColumnIdx;
-        operationTypeMappings.value = parsed.operationTypeMappings;
+        
+        // Normalize operationTypeMappings casing to match uniqueOperationTypes of this CSV file
+        const normalizedMappings: Record<string, string> = {};
+        if (parsed.operationTypeColumnIdx !== null) {
+          const uniqueSet = new Set<string>();
+          allRawRows.value.forEach(row => {
+            const val = row[parsed.operationTypeColumnIdx!];
+            if (val && val.trim()) uniqueSet.add(val.trim());
+          });
+          const fileUniqueOps = Array.from(uniqueSet);
+
+          Object.entries(parsed.operationTypeMappings).forEach(([rawAction, dbOpType]) => {
+            const matchedKey = fileUniqueOps.find(
+              k => k.toLowerCase() === rawAction.trim().toLowerCase()
+            );
+            if (matchedKey) {
+              normalizedMappings[matchedKey] = dbOpType;
+            } else {
+              normalizedMappings[rawAction.trim()] = dbOpType;
+            }
+          });
+        } else {
+          Object.entries(parsed.operationTypeMappings).forEach(([rawAction, dbOpType]) => {
+            normalizedMappings[rawAction.trim()] = dbOpType;
+          });
+        }
+
+        operationTypeMappings.value = normalizedMappings;
         columnConfigMap.value = parsed.columnConfigMap;
         uiColumns.value = parsed.uiColumns;
       }
