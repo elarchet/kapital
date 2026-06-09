@@ -28,9 +28,7 @@ export function buildCustomMappingPayload(params: {
   const dbKeyToCol = new Map<string, { global?: string; typeSpecific?: Record<string, string> }>();
 
   params.importFields.forEach(f => {
-    if (f.key !== 'operation_type') {
-      dbKeyToCol.set(f.key, {});
-    }
+    dbKeyToCol.set(f.key, {});
   });
 
   Object.entries(params.columnConfigMap).forEach(([colId, conf]) => {
@@ -172,7 +170,7 @@ export function parseSchemaMappings(
     };
   });
 
-  const getOrCreateColIdForMapping = (idx: number, dbKey: string, opType: string | null) => {
+  const getOrCreateColIdForMapping = (idx: number, dbKey: string) => {
     let foundColId = '';
     for (const col of uiColumns) {
       if (col.colIdx === idx) {
@@ -180,9 +178,8 @@ export function parseSchemaMappings(
         if (!conf) continue;
 
         const isUnmapped = !conf.global.dbKey && Object.keys(conf.typeSpecific).length === 0;
-        const isMappedToThis = opType
-          ? conf.typeSpecific[opType]?.dbKey === dbKey
-          : conf.global.dbKey === dbKey;
+        const isMappedToThis = conf.global.dbKey === dbKey ||
+          Object.values(conf.typeSpecific).some(spec => spec?.dbKey === dbKey);
 
         if (isUnmapped || isMappedToThis) {
           foundColId = col.id;
@@ -237,12 +234,11 @@ export function parseSchemaMappings(
 
     // 3. Parse other columns mappings
     Object.entries(cols).forEach(([dbKey, val]) => {
-      if (dbKey === 'operation_type') return;
 
       if (typeof val === 'string') {
         const idx = importFileHeaders.indexOf(val);
         if (idx >= 0) {
-          const colId = getOrCreateColIdForMapping(idx, dbKey, null);
+          const colId = getOrCreateColIdForMapping(idx, dbKey);
           let globalDateFormat = 'auto';
           const dfVal = dateFormats[dbKey];
           if (dfVal) {
@@ -266,7 +262,7 @@ export function parseSchemaMappings(
         Object.entries(valObj).forEach(([opType, headerName]) => {
           const idx = importFileHeaders.indexOf(headerName);
           if (idx >= 0) {
-            const colId = getOrCreateColIdForMapping(idx, dbKey, opType === 'global' ? null : opType);
+            const colId = getOrCreateColIdForMapping(idx, dbKey);
             let specDateFormat = 'auto';
             const dfVal = dateFormats[dbKey];
             if (dfVal) {
