@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { Trash2 } from '@lucide/vue';
-import DiscardChangesConfirmModal from './DiscardChangesConfirmModal.vue';
+import DiscardChangesConfirmModal from '../modals/DiscardChangesConfirmModal.vue';
 import DestinationFieldSelect from './DestinationFieldSelect.vue';
 import NumericTransformations from './NumericTransformations.vue';
 import EnumValueMapper from './EnumValueMapper.vue';
 import LiveConversionPreview from './LiveConversionPreview.vue';
 import DateFormatSelector from './DateFormatSelector.vue';
-import { parseDateTimeWithFormat } from '../../services/import/validation';
+import { parseDateTimeWithFormat } from '../../../services/import/validation';
 
 const props = defineProps<{
   show: boolean;

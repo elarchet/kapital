@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import CustomDropdown from './CustomDropdown.vue';
+import CustomDropdown from '../../CustomDropdown.vue';
 
 const props = defineProps<{
   selectedField: {

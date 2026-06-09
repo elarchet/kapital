@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import BaseConfirmModal from './BaseConfirmModal.vue';
+import BaseConfirmModal from '../../BaseConfirmModal.vue';
 
 withDefaults(defineProps<{
   show: boolean;

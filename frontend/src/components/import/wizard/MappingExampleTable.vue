@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { Plus, Trash2 } from '@lucide/vue';
-import CustomDropdown from './CustomDropdown.vue';
+import CustomDropdown from '../../CustomDropdown.vue';
 
 const props = defineProps<{
   importFileHeaders: string[];

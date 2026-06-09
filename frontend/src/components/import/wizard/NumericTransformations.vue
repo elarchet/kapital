@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import CustomDropdown from './CustomDropdown.vue';
+import CustomDropdown from '../../CustomDropdown.vue';
 
 const transformationType = defineModel<'none' | 'divisor' | 'multiplier'>('transformationType', { required: true });
 const transformationValue = defineModel<number | null>('transformationValue', { required: true });

@@ -1,31 +1,23 @@
 from __future__ import annotations
 
-import contextlib
 import csv
 import json
-from datetime import UTC, datetime
-from decimal import Decimal
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
-from sqlmodel import Session, select
+if TYPE_CHECKING:
+    from sqlmodel import Session
 
-from src.crud import (
-    import_file_schema_crud,
-    operation_crud,
-    position_crud,
-)
-from src.models import (
-    AssetType,
-    Fee,
-    FeeType,
-    FinancialAccount,
-    Institution,
-    Operation,
-    Position,
-)
-from src.schemas.fee import FeeCreate
+from src.crud import import_file_schema_crud, operation_crud
+from src.models import Fee
 from src.schemas.operation import OperationCreate
-from src.schemas.position import PositionCreate
+from src.services.import_db import (
+    check_duplicate_operation,
+    find_or_create_position,
+    get_or_create_cash_position,
+    get_or_create_institution_and_account,
+)
+from src.services.import_parsers import combine_stock_splits
+from src.services.import_row_parser import parse_csv_row
 
 
 class ImportSummary(TypedDict):
@@ -52,11 +44,9 @@ def autodetect_schema(db: Session, headers: list[str], user_id: int) -> int | No
             if not columns:
                 continue
 
-            # Count how many mapped column headers exist in the CSV headers
             mapped_headers = {str(val).strip().lower() for val in columns.values() if val}
             matches = len(headers_set.intersection(mapped_headers))
 
-            # Require at least 5 matching headers to avoid false positives
             if matches >= 5 and matches > max_matches:  # noqa: PLR2004
                 max_matches = matches
                 best_schema_id = schema.id
@@ -64,91 +54,6 @@ def autodetect_schema(db: Session, headers: list[str], user_id: int) -> int | No
             continue
 
     return best_schema_id
-
-
-def parse_decimal_safe(val: str | None, decimal_sep: str = ".") -> Decimal | None:
-    """Parse a string to Decimal safely, replacing decimal separator if needed."""
-    if not val or not val.strip():
-        return None
-    cleaned = val.strip()
-    if decimal_sep != ".":
-        cleaned = cleaned.replace(decimal_sep, ".")
-    # Remove any thousands separators (commas if decimal is dot, or dots/spaces)
-    cleaned = cleaned.replace(",", "") if decimal_sep == "." else cleaned.replace(".", "").replace(" ", "")
-
-    try:
-        return Decimal(cleaned)
-    except Exception:  # noqa: BLE001
-        return None
-
-
-def parse_datetime_safe(val: str, date_format: str | None = None) -> datetime:
-    """Parse string timestamp dynamically supporting ISO and common formats."""
-    cleaned = val.strip()
-    if date_format and date_format != "auto":
-        try:
-            return datetime.strptime(cleaned, date_format)  # noqa: DTZ007
-        except ValueError:
-            pass
-
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%fZ"):
-        try:
-            return datetime.strptime(cleaned, fmt)  # noqa: DTZ007
-        except ValueError:
-            continue
-    # Fallback to standard isoformat
-    try:
-        return datetime.fromisoformat(cleaned)
-    except ValueError:
-        return datetime.now(UTC)
-
-
-def _get_date_format(
-    date_formats: dict,
-    db_key: str,
-    op_type: str | None,
-    raw_action: str | None = None,
-) -> str | None:
-    val = date_formats.get(db_key)
-    if isinstance(val, dict):
-        if raw_action and raw_action in val:
-            return val[raw_action]
-        if op_type and op_type in val:
-            return val[op_type]
-        return val.get("global")
-    return val
-
-
-def _get_mapped_col(
-    columns: dict,
-    db_key: str,
-    op_type: str | None,
-    raw_action: str | None = None,
-) -> str | None:
-    val = columns.get(db_key)
-    if isinstance(val, dict):
-        if raw_action and raw_action in val:
-            return val[raw_action]
-        if op_type and op_type in val:
-            return val[op_type]
-        return val.get("global")
-    return val
-
-
-def _get_transformation(
-    transformations: dict,
-    db_key: str,
-    op_type: str | None,
-    raw_action: str | None = None,
-) -> dict:
-    val = transformations.get(db_key, {})
-    if "divisor" in val or "multiplier" in val:
-        return val
-    if raw_action and raw_action in val:
-        return val[raw_action]
-    if op_type and op_type in val:
-        return val[op_type]
-    return val.get("global", {})
 
 
 def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
@@ -160,10 +65,6 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     custom_schema_config: dict | None = None,
 ) -> ImportSummary:
     """Parse uploaded file content and import operations/positions for a portfolio."""
-    _get_mapped_col_global = globals()["_get_mapped_col"]
-    _get_date_format_global = globals()["_get_date_format"]
-    _get_transformation_global = globals()["_get_transformation"]
-
     # 1. Resolve Import Schema
     schema_mappings = {}
     delimiter = ","
@@ -192,494 +93,33 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     # 2. Setup Default Institution and Financial Account
     institution_name = schema_mappings.get("institution_name", "Trading 212")
     account_name = schema_mappings.get("account_name", "Trading 212 Account")
-
-    institution = db.exec(select(Institution).where(Institution.name == institution_name)).first()
-    if not institution:
-        institution = Institution(name=institution_name, country="GB")
-        db.add(institution)
-        db.commit()
-        db.refresh(institution)
-
-    if institution.id is None:
-        raise ValueError("Institution ID not resolved.")
-
-    financial_account = db.exec(
-        select(FinancialAccount).where(
-            FinancialAccount.name == account_name,
-            FinancialAccount.institution_id == institution.id,
-        ),
-    ).first()
-    if not financial_account:
-        financial_account = FinancialAccount(
-            name=account_name,
-            currency="EUR",
-            institution_id=institution.id,
-        )
-        db.add(financial_account)
-        db.commit()
-        db.refresh(financial_account)
-
-    if financial_account.id is None:
-        raise ValueError("Financial account ID not resolved.")
+    financial_account = get_or_create_institution_and_account(db, institution_name, account_name)
 
     # 3. Decode & Parse CSV rows
     decoded = file_content.decode("utf-8-sig")
     reader = csv.DictReader(decoded.splitlines(), delimiter=delimiter)
-
     raw_rows = list(reader)
 
     # 4. Process Rows Chronologically
-    # Map raw rows to parsed operations
-    def apply_transformation(col_name: str, val: Decimal | None, op_type: str | None) -> Decimal | None:
-        if val is None:
-            return None
-        trans = _get_transformation(transformations, col_name, op_type)
-        divisor_val = trans.get("divisor")
-        if divisor_val:
-            with contextlib.suppress(ArithmeticError, ValueError, TypeError):
-                val /= Decimal(str(divisor_val))
-        multiplier_val = trans.get("multiplier")
-        if multiplier_val:
-            with contextlib.suppress(ArithmeticError, ValueError, TypeError):
-                val *= Decimal(str(multiplier_val))
-        return val
-
     parsed_operations = []
     for row in raw_rows:
-        # Get transaction type from CSV action column
-        csv_action = row.get(columns.get("operation_type", "Action"))
-        if not csv_action:
-            continue
-        csv_action = csv_action.strip()
-
-        # shadow lookup functions locally to prioritize raw CSV action mapping lookup
-        _get_mapped_col = lambda cols, key, ot, ca=csv_action: _get_mapped_col_global(
-            cols,
-            key,
-            ot,
-            ca,
+        parsed_op = parse_csv_row(
+            row=row,
+            columns=columns,
+            type_mappings=type_mappings,
+            scaling=scaling,
+            transformations=transformations,
+            date_formats=date_formats,
+            schema_mappings=schema_mappings,
+            decimal_separator=decimal_separator,
         )
-        _get_date_format = lambda df, key, ot, ca=csv_action: _get_date_format_global(
-            df,
-            key,
-            ot,
-            ca,
-        )
-        _get_transformation = lambda tr, key, ot, ca=csv_action: _get_transformation_global(
-            tr,
-            key,
-            ot,
-            ca,
-        )
+        if parsed_op:
+            parsed_operations.append(parsed_op)
 
-        # Resolve polymorphic operation type
-        op_type = None
-        op_mappings = schema_mappings.get("enum_mappings", {}).get("operation_type")
-        if not op_mappings:
-            op_mappings = type_mappings
-        for key, val_list in op_mappings.items():
-            if csv_action in val_list:
-                op_type = key
-                break
-
-        if not op_type:
-            continue
-
-        # Backward-compatible mapping: old buy/sell/limit_buy/limit_sell → trade
-        trade_side = None
-        order_type_val = None
-        if op_type in ("buy", "sell", "limit_buy", "limit_sell"):
-            trade_side = "buy" if op_type in ("buy", "limit_buy") else "sell"
-            order_type_val = "limit" if op_type in ("limit_buy", "limit_sell") else "market"
-            op_type = "trade"
-
-        # Extract values
-        ticker = row.get(_get_mapped_col(columns, "ticker", op_type))
-        isin = row.get(_get_mapped_col(columns, "isin", op_type))
-        name = row.get(_get_mapped_col(columns, "name", op_type)) or ticker or isin or "Asset"
-        notes = row.get(_get_mapped_col(columns, "notes", op_type))
-        transaction_id = row.get(_get_mapped_col(columns, "transaction_id", op_type))
-        currency = row.get(_get_mapped_col(columns, "currency", op_type)) or "EUR"
-
-        executed_at_str = row.get(_get_mapped_col(columns, "executed_at", op_type))
-        if not executed_at_str:
-            continue
-        date_fmt = _get_date_format(date_formats, "executed_at", op_type)
-        executed_at = parse_datetime_safe(executed_at_str, date_fmt)
-
-        quantity = parse_decimal_safe(row.get(_get_mapped_col(columns, "quantity", op_type)), decimal_separator)
-        quantity = apply_transformation("quantity", quantity, op_type)
-
-        unit_price = parse_decimal_safe(row.get(_get_mapped_col(columns, "unit_price", op_type)), decimal_separator)
-        unit_price = apply_transformation("unit_price", unit_price, op_type)
-
-        total_amount = parse_decimal_safe(row.get(_get_mapped_col(columns, "total_amount", op_type)), decimal_separator)
-        total_amount = apply_transformation("total_amount", total_amount, op_type)
-        if total_amount is None:
-            total_amount = Decimal(0)
-
-        # Apply scaling based on currency (e.g. GBX to GBP)
-        price_currency = row.get(_get_mapped_col(columns, "price_currency", op_type)) or currency
-        if price_currency in scaling.get("unit_price", {}):
-            factor = Decimal(str(scaling["unit_price"][price_currency]))
-            if unit_price:
-                unit_price *= factor
-            if price_currency == "GBX":
-                price_currency = "GBP"
-        if currency in scaling.get("total_amount", {}):
-            factor = Decimal(str(scaling["total_amount"][currency]))
-            total_amount *= factor
-            if currency == "GBX":
-                currency = "GBP"
-
-        # Exchange rate
-        exchange_rate = parse_decimal_safe(
-            row.get(_get_mapped_col(columns, "exchange_rate", op_type)),
-            decimal_separator,
-        )
-
-        # Child Fees and Taxes
-        fees = []
-        fee_amt_col = _get_mapped_col(columns, "fee_amount", op_type)
-        if fee_amt_col:
-            fee_val = parse_decimal_safe(row.get(fee_amt_col), decimal_separator)
-            fee_val = apply_transformation("fee_amount", fee_val, op_type)
-            if fee_val and fee_val > 0:
-                fee_curr = row.get(_get_mapped_col(columns, "fee_currency", op_type)) or currency
-
-                resolved_fee_type = "conversion"
-                fee_type_col = _get_mapped_col(columns, "fee_type", op_type)
-                if fee_type_col:
-                    raw_fee_type = row.get(fee_type_col)
-                    if raw_fee_type:
-                        fee_type_mappings = schema_mappings.get("enum_mappings", {}).get("fee_type", {})
-                        for key, val_list in fee_type_mappings.items():
-                            if raw_fee_type in val_list or raw_fee_type == key:
-                                resolved_fee_type = key
-                                break
-
-                try:
-                    fee_type_enum = FeeType(resolved_fee_type)
-                except ValueError:
-                    fee_type_enum = FeeType.OTHER
-
-                fees.append(
-                    FeeCreate(
-                        amount=fee_val,
-                        currency=fee_curr,
-                        fee_type=fee_type_enum,
-                        notes="Currency conversion fee" if resolved_fee_type == "conversion" else "Fee",
-                    ),
-                )
-
-        tax_amt_col = _get_mapped_col(columns, "tax_amount", op_type)
-        if tax_amt_col:
-            tax_val = parse_decimal_safe(row.get(tax_amt_col), decimal_separator)
-            tax_val = apply_transformation("tax_amount", tax_val, op_type)
-            if tax_val and tax_val > 0:
-                tax_curr = row.get(_get_mapped_col(columns, "tax_currency", op_type)) or currency
-
-                resolved_tax_type = "withholding_tax"
-                fee_type_col = _get_mapped_col(columns, "fee_type", op_type)
-                if fee_type_col:
-                    raw_fee_type = row.get(fee_type_col)
-                    if raw_fee_type:
-                        fee_type_mappings = schema_mappings.get("enum_mappings", {}).get("fee_type", {})
-                        for key, val_list in fee_type_mappings.items():
-                            if raw_fee_type in val_list or raw_fee_type == key:
-                                resolved_tax_type = key
-                                break
-
-                try:
-                    tax_type_enum = FeeType(resolved_tax_type)
-                except ValueError:
-                    tax_type_enum = FeeType.WITHHOLDING_TAX
-
-                fees.append(
-                    FeeCreate(
-                        amount=tax_val,
-                        currency=tax_curr,
-                        fee_type=tax_type_enum,
-                        notes="Withholding tax",
-                    ),
-                )
-
-        # Merchant fields
-        merchant_name = row.get(_get_mapped_col(columns, "merchant_name", op_type))
-        merchant_category = row.get(_get_mapped_col(columns, "merchant_category", op_type))
-
-        # Source / destination reference for transfer_in / transfer_out
-        source_ref_col = _get_mapped_col(columns, "source_reference", op_type)
-        source_reference = row.get(source_ref_col) if source_ref_col else None
-        dest_ref_col = _get_mapped_col(columns, "destination_reference", op_type)
-        destination_reference = row.get(dest_ref_col) if dest_ref_col else None
-
-        if op_type == "transfer_in" and not source_reference:
-            source_reference = notes or "CSV Import"
-        if op_type == "transfer_out" and not destination_reference:
-            destination_reference = notes or "CSV Import"
-
-        # Dividend per share
-        dividend_per_share = None
-        if op_type == "dividend":
-            dividend_per_share = unit_price
-
-        # Trade-specific field extraction from CSV
-        if op_type == "trade":
-            # Resolve trade_side from mapped CSV column if not already set from legacy mapping
-            if not trade_side:
-                trade_side_col = _get_mapped_col(columns, "trade_side", op_type)
-                raw_trade_side = row.get(trade_side_col) if trade_side_col else None
-                if raw_trade_side:
-                    trade_side_mappings = schema_mappings.get("enum_mappings", {}).get("trade_side", {})
-                    for key, val_list in trade_side_mappings.items():
-                        if raw_trade_side in val_list or raw_trade_side == key:
-                            trade_side = key
-                            break
-                if not trade_side:
-                    trade_side = "buy"
-
-            # Resolve order_type from mapped CSV column if not already set
-            if not order_type_val:
-                order_type_col = _get_mapped_col(columns, "order_type", op_type)
-                raw_order_type = row.get(order_type_col) if order_type_col else None
-                if raw_order_type:
-                    order_type_mappings = schema_mappings.get("enum_mappings", {}).get("order_type", {})
-                    for key, val_list in order_type_mappings.items():
-                        if raw_order_type in val_list or raw_order_type == key:
-                            order_type_val = key
-                            break
-                if not order_type_val:
-                    order_type_val = "market"
-
-        # Limit price for limit/stop_limit orders
-        limit_price = None
-        if op_type == "trade" and order_type_val in ("limit", "stop_limit"):
-            lp_col = _get_mapped_col(columns, "limit_price", op_type)
-            if lp_col:
-                limit_price = parse_decimal_safe(row.get(lp_col), decimal_separator)
-            if limit_price is None:
-                limit_price = unit_price
-
-        # Stop price for stop/stop_limit orders
-        stop_price = None
-        if op_type == "trade" and order_type_val in ("stop", "stop_limit"):
-            sp_col = _get_mapped_col(columns, "stop_price", op_type)
-            if sp_col:
-                stop_price = parse_decimal_safe(row.get(sp_col), decimal_separator)
-
-        # Execution price
-        execution_price = None
-        if op_type == "trade":
-            ep_col = _get_mapped_col(columns, "execution_price", op_type)
-            if ep_col:
-                execution_price = parse_decimal_safe(row.get(ep_col), decimal_separator)
-
-        # Order status
-        order_status = None
-        if op_type == "trade":
-            os_col = _get_mapped_col(columns, "order_status", op_type)
-            raw_order_status = row.get(os_col) if os_col else None
-            if raw_order_status:
-                os_mappings = schema_mappings.get("enum_mappings", {}).get("order_status", {})
-                for key, val_list in os_mappings.items():
-                    if raw_order_status in val_list or raw_order_status == key:
-                        order_status = key
-                        break
-            if not order_status:
-                order_status = "filled"
-
-        # Order placed at / filled at
-        order_placed_at = None
-        filled_at = None
-        if op_type == "trade":
-            op_col = _get_mapped_col(columns, "order_placed_at", op_type)
-            if op_col:
-                op_str = row.get(op_col)
-                if op_str:
-                    op_fmt = _get_date_format(date_formats, "order_placed_at", op_type)
-                    order_placed_at = parse_datetime_safe(op_str, op_fmt)
-            fa_col = _get_mapped_col(columns, "filled_at", op_type)
-            if fa_col:
-                fa_str = row.get(fa_col)
-                if fa_str:
-                    fa_fmt = _get_date_format(date_formats, "filled_at", op_type)
-                    filled_at = parse_datetime_safe(fa_str, fa_fmt)
-
-        # Expense / revenue category and payment method
-        expense_category = None
-        revenue_category = None
-        payment_method = None
-        if op_type == "expense":
-            ec_col = _get_mapped_col(columns, "expense_category", op_type)
-            raw_ec = row.get(ec_col) if ec_col else None
-            if raw_ec:
-                ec_mappings = schema_mappings.get("enum_mappings", {}).get("expense_category", {})
-                for key, val_list in ec_mappings.items():
-                    if raw_ec in val_list or raw_ec == key:
-                        expense_category = key
-                        break
-            if not expense_category:
-                expense_category = "other"
-        elif op_type == "revenue":
-            rc_col = _get_mapped_col(columns, "revenue_category", op_type)
-            raw_rc = row.get(rc_col) if rc_col else None
-            if raw_rc:
-                rc_mappings = schema_mappings.get("enum_mappings", {}).get("revenue_category", {})
-                for key, val_list in rc_mappings.items():
-                    if raw_rc in val_list or raw_rc == key:
-                        revenue_category = key
-                        break
-            if not revenue_category:
-                revenue_category = "other"
-
-        if op_type in ("expense", "revenue"):
-            pm_col = _get_mapped_col(columns, "payment_method", op_type)
-            raw_pm = row.get(pm_col) if pm_col else None
-            if raw_pm:
-                pm_mappings = schema_mappings.get("enum_mappings", {}).get("payment_method", {})
-                for key, val_list in pm_mappings.items():
-                    if raw_pm in val_list or raw_pm == key:
-                        payment_method = key
-                        break
-
-        # Fee / tax categories
-        fee_category = None
-        if op_type == "fee":
-            fee_category = notes or "other"
-        tax_category = None
-        if op_type == "tax":
-            tax_category = notes or "withholding"
-
-        # FX rate change parsing (e.g. source_currency, target_currency, exchange_rate)
-        source_currency = None
-        target_currency = None
-        if op_type == "fx_rate_change":
-            if notes and " -> " in notes:
-                try:
-                    parts = notes.split(" -> ")
-                    from_part = parts[0].strip().split()
-                    to_part = parts[1].strip().split()
-                    if len(from_part) == 2 and len(to_part) == 2:  # noqa: PLR2004
-                        from_amt = parse_decimal_safe(from_part[0], decimal_separator)
-                        from_curr = from_part[1].strip()
-                        to_amt = parse_decimal_safe(to_part[0], decimal_separator)
-                        to_curr = to_part[1].strip()
-                        if from_amt and to_amt and from_amt > 0:
-                            source_currency = from_curr
-                            target_currency = to_curr
-                            exchange_rate = to_amt / from_amt
-                except Exception:  # noqa: BLE001, S110
-                    pass
-
-            if not source_currency or not target_currency:
-                source_currency = row.get(_get_mapped_col(columns, "source_currency", op_type))
-                target_currency = row.get(_get_mapped_col(columns, "target_currency", op_type))
-                if source_currency:
-                    source_currency = source_currency.strip()
-                if target_currency:
-                    target_currency = target_currency.strip()
-                if not exchange_rate:
-                    from_amt = parse_decimal_safe(
-                        row.get(_get_mapped_col(columns, "from_amount", op_type)),
-                        decimal_separator,
-                    )
-                    to_amt = parse_decimal_safe(
-                        row.get(_get_mapped_col(columns, "to_amount", op_type)),
-                        decimal_separator,
-                    )
-                    if from_amt and to_amt and from_amt > 0:
-                        exchange_rate = to_amt / from_amt
-
-            if not source_currency:
-                source_currency = currency
-            if not target_currency:
-                target_currency = currency
-            if not exchange_rate:
-                exchange_rate = Decimal("1.0")
-        elif price_currency and price_currency != currency:
-            source_currency = currency
-            target_currency = price_currency
-
-        parsed_operations.append(
-            {
-                "op_type": op_type,
-                "ticker": ticker,
-                "isin": isin,
-                "name": name,
-                "quantity": quantity,
-                "unit_price": unit_price,
-                "price_currency": price_currency,
-                "total_amount": total_amount,
-                "currency": currency,
-                "executed_at": executed_at,
-                "notes": notes,
-                "transaction_id": transaction_id,
-                "exchange_rate": exchange_rate,
-                "fees": fees,
-                "merchant_name": merchant_name,
-                "merchant_category": merchant_category,
-                "source_reference": source_reference,
-                "destination_reference": destination_reference,
-                "dividend_per_share": dividend_per_share,
-                "limit_price": limit_price,
-                "fee_category": fee_category,
-                "tax_category": tax_category,
-                "source_currency": source_currency,
-                "target_currency": target_currency,
-                "csv_action": csv_action,
-                "trade_side": trade_side,
-                "order_type": order_type_val,
-                "order_status": order_status,
-                "stop_price": stop_price,
-                "execution_price": execution_price,
-                "order_placed_at": order_placed_at,
-                "filled_at": filled_at,
-                "expense_category": expense_category,
-                "revenue_category": revenue_category,
-                "payment_method": payment_method,
-            },
-        )
-
-    # Sort operations chronologically
     parsed_operations.sort(key=lambda o: o["executed_at"])
+    processed_ops = combine_stock_splits(parsed_operations)
 
-    # 5. Group Stock Splits
-    # Trading 212 models stock splits as Stock split close and Stock split open
-    # We combine them if they occur on the same asset at the same second
-    processed_ops = []
-    skip_indices = set()
-
-    for i in range(len(parsed_operations)):
-        if i in skip_indices:
-            continue
-
-        op_data = parsed_operations[i]
-
-        # Check if this is a stock split close row and the next row is a stock split open for same asset
-        is_split_close = op_data["csv_action"] == "Stock split close"
-        if is_split_close and i + 1 < len(parsed_operations):
-            next_op = parsed_operations[i + 1]
-            if (
-                next_op["csv_action"] == "Stock split open"
-                and next_op["ticker"] == op_data["ticker"]
-                and abs((next_op["executed_at"] - op_data["executed_at"]).total_seconds()) <= 60  # noqa: PLR2004
-            ):
-                # We have a matching split pair! Combine them
-                close_qty = op_data["quantity"] or Decimal(1)
-                open_qty = next_op["quantity"] or Decimal(1)
-                split_ratio = open_qty / close_qty
-
-                # Merge into a single stock split operation
-                op_data["op_type"] = "stock_split"
-                op_data["split_ratio"] = split_ratio
-                op_data["quantity"] = open_qty - close_qty  # Net quantity added
-                op_data["notes"] = f"Stock split 1 to {split_ratio:.4f}"
-                skip_indices.add(i + 1)
-
-        processed_ops.append(op_data)
-
-    # 6. Execute DB insertions and update positions
+    # 5. Execute DB insertions and update positions
     summary: ImportSummary = {
         "positions_created": 0,
         "operations_imported": 0,
@@ -687,105 +127,23 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     }
 
     for op_info in processed_ops:
-        transaction_id = op_info["transaction_id"]
-
-        # Check if asset is stock/ETF vs. cash
         is_cash_op = (
             op_info["op_type"] in ("interest", "transfer_in", "transfer_out", "expense", "revenue")
             and not op_info["ticker"]
         )
 
         # Find or create Position
-        position = None
-        if not is_cash_op:
-            # Stock / ETF Position
-            # Search by ISIN or Ticker in portfolio
-            statement = select(Position).where(
-                Position.portfolio_id == portfolio_id,
-                Position.is_active == True,  # noqa: E712
-            )
-            if op_info["isin"]:
-                statement = statement.where(Position.isin == op_info["isin"])
-            elif op_info["ticker"]:
-                statement = statement.where(Position.ticker == op_info["ticker"])
-            else:
-                statement = statement.where(Position.name == op_info["name"])
+        position, pos_created = find_or_create_position(db, portfolio_id, op_info, is_cash_op=is_cash_op)
+        if pos_created:
+            summary["positions_created"] += 1
 
-            position = db.exec(statement).first()
-
-            if not position:
-                # Infer ETF vs Stock
-                asset_type = AssetType.STOCK
-                lower_name = op_info["name"].lower()
-                if (
-                    "etf" in lower_name
-                    or "ishares" in lower_name
-                    or "vanguard" in lower_name
-                    or "xtrackers" in lower_name
-                ):
-                    asset_type = AssetType.ETF
-
-                position_in = PositionCreate(
-                    portfolio_id=portfolio_id,
-                    asset_type=asset_type,
-                    ticker=op_info["ticker"],
-                    name=op_info["name"],
-                    isin=op_info["isin"],
-                    quantity=Decimal("0.0"),
-                    currency=op_info["currency"],
-                )
-                position = position_crud.create(db, obj_in=position_in)
-                summary["positions_created"] += 1
-        else:
-            # Cash Position
-            cash_currency = op_info["currency"]
-            cash_name = f"Cash ({cash_currency})"
-            position = db.exec(
-                select(Position).where(
-                    Position.portfolio_id == portfolio_id,
-                    Position.asset_type == AssetType.CASH,
-                    Position.currency == cash_currency,
-                    Position.is_active == True,  # noqa: E712
-                ),
-            ).first()
-
-            if not position:
-                position_in = PositionCreate(
-                    portfolio_id=portfolio_id,
-                    asset_type=AssetType.CASH,
-                    name=cash_name,
-                    quantity=Decimal("0.0"),
-                    currency=cash_currency,
-                )
-                position = position_crud.create(db, obj_in=position_in)
-                summary["positions_created"] += 1
-
-        # Skip if position not created/found (safety check)
         if not position or position.id is None:
             continue
 
-        # Duplicate Check: Check if transaction already exists (with composite check fallback)
-        if transaction_id:
-            existing_op = db.exec(select(Operation).where(Operation.transaction_id == transaction_id)).first()
-            if existing_op:
-                summary["operations_skipped"] += 1
-                continue
-        else:
-            statement = select(Operation).where(
-                Operation.position_id == position.id,
-                Operation.operation_type == op_info["op_type"],
-                Operation.executed_at == op_info["executed_at"],
-                Operation.total_amount == op_info["total_amount"],
-            )
-            if op_info["quantity"] is not None:
-                statement = statement.where(Operation.quantity == op_info["quantity"])
-            else:
-                statement = statement.where(Operation.quantity.is_(None))
-
-            existing_op = db.exec(statement).first()
-            if existing_op:
-                summary["operations_skipped"] += 1
-                continue
+        # Duplicate check
+        if check_duplicate_operation(db, position.id, op_info):
+            summary["operations_skipped"] += 1
+            continue
 
         # Create Operation
         op_in = OperationCreate(
@@ -799,7 +157,7 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             notes=op_info["notes"],
             position_id=position.id,
             financial_account_id=financial_account.id,
-            transaction_id=transaction_id,
+            transaction_id=op_info["transaction_id"],
             exchange_rate=op_info["exchange_rate"],
             split_ratio=op_info.get("split_ratio"),
             merchant_name=op_info.get("merchant_name"),
@@ -823,7 +181,6 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             revenue_category=op_info.get("revenue_category"),
             payment_method=op_info.get("payment_method"),
         )
-
         db_op = operation_crud.create(db, obj_in=op_in)
 
         # Create Child Fees
@@ -857,25 +214,8 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
         # Update Cash Position balance for stock trades/dividends
         if not is_cash_op:
             cash_currency = op_info["currency"]
-            cash_pos = db.exec(
-                select(Position).where(
-                    Position.portfolio_id == portfolio_id,
-                    Position.asset_type == AssetType.CASH,
-                    Position.currency == cash_currency,
-                    Position.is_active == True,  # noqa: E712
-                ),
-            ).first()
-
-            if not cash_pos:
-                cash_name = f"Cash ({cash_currency})"
-                position_in = PositionCreate(
-                    portfolio_id=portfolio_id,
-                    asset_type=AssetType.CASH,
-                    name=cash_name,
-                    quantity=Decimal("0.0"),
-                    currency=cash_currency,
-                )
-                cash_pos = position_crud.create(db, obj_in=position_in)
+            cash_pos, cash_created = get_or_create_cash_position(db, portfolio_id, cash_currency)
+            if cash_created:
                 summary["positions_created"] += 1
 
             if cash_pos and cash_pos.id is not None:

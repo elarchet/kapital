@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import CustomDropdown from './CustomDropdown.vue';
-import { isFieldRequiredForOpType } from '../../services/import/validation';
+import CustomDropdown from '../../CustomDropdown.vue';
+import { isFieldRequiredForOpType } from '../../../services/import/validation';
 
 const props = defineProps<{
   importFields: Array<{
