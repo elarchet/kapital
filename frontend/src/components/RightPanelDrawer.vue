@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
-import { X, ArrowLeft, ArrowRight } from '@lucide/vue';
+import { ChevronLeft, ChevronRight } from '@lucide/vue';
 
 const props = withDefaults(defineProps<{
   show?: boolean;
@@ -77,10 +77,32 @@ const toggleFullScreen = () => {
   }
 };
 
-// Keyboard listener for Escape
-const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape') {
+const handleClose = () => {
+  if (isSnapped.value) {
+    restoreSize();
+  } else {
     emit('close');
+  }
+};
+
+// Keyboard listener for Escape & F
+const handleKeyDown = (e: KeyboardEvent) => {
+  // Avoid capturing key events when the user is typing in form controls
+  const target = e.target as HTMLElement;
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    if (isSnapped.value) {
+      restoreSize();
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }
+  } else if (e.key === 'f' || e.key === 'F') {
+    toggleFullScreen();
+    e.stopImmediatePropagation();
+    e.preventDefault();
   }
 };
 
@@ -94,7 +116,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="fixed inset-0 z-[100] flex justify-end bg-slate-900/10 backdrop-blur-[1px]" @click.self="emit('close')">
+  <div class="fixed inset-0 z-[100] flex justify-end bg-slate-900/10 backdrop-blur-[1px]" @click.self="handleClose">
     <div 
       class="relative h-full bg-bg-secondary border-l border-border-color shadow-2xl flex flex-col"
       :class="{ 'transition-[width] duration-300': !isResizing }"
@@ -106,32 +128,42 @@ onBeforeUnmount(() => {
         @mousedown="startResize"
       ></div>
 
+      <!-- Full screen toggle button wrapper (Enlarged hit box) -->
+      <button 
+        @click="toggleFullScreen" 
+        class="absolute top-[20px] -translate-y-1/2 w-8 h-12 bg-transparent z-[120] cursor-pointer group select-none border-0 p-0 outline-none focus:outline-none"
+        :class="isSnapped ? 'left-0 translate-x-0' : 'left-0 -translate-x-full'"
+        :title="isSnapped ? 'Exit full screen (Press F or Esc)' : 'Full screen (Press F)'"
+      >
+        <!-- Visible U-shaped chevron button -->
+        <div 
+          class="absolute top-1/2 -translate-y-1/2 flex items-center justify-center transition-all duration-300 ease-out active:scale-95"
+          :class="isSnapped 
+            ? 'left-0 w-6 h-9 rounded-r-full bg-slate-200/30 backdrop-blur-[6px] text-text-secondary group-hover:bg-slate-200/60 group-hover:text-text-primary group-hover:w-7' 
+            : 'right-0 w-6 h-9 rounded-l-full bg-white/40 backdrop-blur-[6px] text-text-secondary group-hover:bg-white/70 group-hover:text-text-primary group-hover:w-7'
+          "
+        >
+          <!-- Sliding Chevron icon inside -->
+          <ChevronRight 
+            v-if="isSnapped" 
+            class="w-4 h-4 transition-transform duration-300 group-hover:translate-x-0.5" 
+          />
+          <ChevronLeft 
+            v-else 
+            class="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-0.5" 
+          />
+        </div>
+      </button>
+
       <!-- Header wrapper -->
-      <div class="flex items-center justify-between py-3.5 px-5 border-b border-border-color bg-bg-secondary shrink-0">
-        <div class="flex items-center gap-3 flex-1 min-w-0">
-          <!-- Toggle Full Screen arrow on the left -->
-          <button 
-            @click="toggleFullScreen" 
-            class="flex items-center justify-center p-1.5 rounded-sm bg-transparent border-0 cursor-pointer text-text-secondary transition-colors duration-150 ease-in-out hover:bg-bg-tertiary hover:text-text-primary shrink-0"
-            :title="isSnapped ? 'Exit full screen' : 'Full screen'"
+      <div class="flex items-center justify-between py-2 px-3 border-b border-border-color bg-bg-secondary shrink-0">
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <div 
+            class="flex-1 min-w-0 transition-[padding] duration-300"
+            :class="{ 'pl-11': isSnapped }"
           >
-            <ArrowRight v-if="isSnapped" class="w-4 h-4" />
-            <ArrowLeft v-else class="w-4 h-4" />
-          </button>
-          
-          <div class="flex-1 min-w-0">
             <slot name="header"></slot>
           </div>
-        </div>
-        
-        <div class="flex items-center gap-2 ml-4 shrink-0">
-          <button 
-            @click="emit('close')" 
-            class="flex items-center justify-center p-1.5 rounded-sm bg-transparent border-0 cursor-pointer text-text-secondary transition-colors duration-150 ease-in-out hover:bg-bg-tertiary hover:text-text-primary"
-            title="Close panel"
-          >
-            <X class="w-4.5 h-4.5" />
-          </button>
         </div>
       </div>
 
