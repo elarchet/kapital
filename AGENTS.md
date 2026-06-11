@@ -1,37 +1,52 @@
 # Project Constitution: Kapital
 
-## Financial Domain Expert
-- **Persona**: You are a Senior Fintech Engineer. Accuracy and security are non-negotiable.
-- **Logic**: All financial calculations (PnL, Optimization) must follow standard accounting principles. Use `Decimal` for all currency math; never use floats.
-- **Compliance**: Adhere to "Security by Design." Ensure PII (Personally Identifiable Information) and financial tokens are always encrypted or environment-gated.
+This document defines the core architecture, stack definitions, subagent matrix, and active skills registry.
 
-## Frontend Strategy
-- **Framework**: Decoupled Vue.js frontend + FastAPI REST API.
-- **Rule**: All financial logic (PnL, aggregations) must live in `backend/src/services/` or `backend/src/logic/`. The frontend must only interact with this logic via the REST API endpoints, ensuring clean decoupling.
+---
 
-## Styling Rules
-- **Tailwind First**: All styling must use Tailwind CSS v4 utility classes directly in templates. Writing custom CSS is only acceptable for patterns that cannot be expressed with utilities (e.g., complex animations, third-party overrides).
-- **No Scoped CSS Duplication**: Never redeclare styles in `<style scoped>` blocks that are already achievable via Tailwind utilities. Scoped blocks should be empty or near-empty.
-- **Design Tokens**: All colors, spacing, typography, and other design tokens must be declared once in `frontend/src/style.css` under the `@theme` directive. Components must never hardcode raw values.
+## 1. Core Architecture & Tech Stack
 
-## Tech Stack (2026 Standard)
-- **Frontend**: Vue.js (Modern SPA framework)
-- **Styling**: Tailwind CSS v4 (CSS-first, `@theme` tokens in `style.css`)
-- **Framework**: FastAPI (using `Annotated` dependencies)
-- **ORM**: SQLModel + Alembic
-- **Data Handling**: Polars
-- **Validation**: Pydantic v2 (Strict mode)
-- **Database**: SQLite (Development) / PostgreSQL (Production target)
-- **Package Manager**: `uv`
-- **Language**: Modern Python (Use PEP 695 generic syntax `def func[T]()` instead of `TypeVar`, `list|dict` instead of typing modules, new annotations).
+### Constitutional Guidelines
+- **Financial Expert**: Accuracy and security are non-negotiable. Use `Decimal` for all currency calculations. Never use floats.
+- **Clean Decoupling**: All business/financial logic resides in the backend. The frontend only presents data via the REST API endpoints.
+  - **Directory Rules**: Stateful operations (DB calls, external services) belong in `backend/src/services/`. Pure, stateless financial calculations (equations, interest models) belong in `backend/src/logic/`.
+- **API Versioning**: All endpoints must be versioned under the `/api/v1/` prefix to prevent breaking changes.
+- **Tailwind First**: All styling must use Tailwind CSS v4 utility classes. Declare theme variables once in `frontend/src/style.css`. `<style scoped>` blocks must remain empty or near-empty.
+- **Tech Stack**: Vue.js, Tailwind CSS v4, FastAPI (`Annotated` dependencies), SQLModel + Alembic, Polars, Pydantic v2 (Strict), SQLite/PostgreSQL, `uv`, Modern Python.
+- **Quality Control**: Automated hooks via `prek` running `ruff`, `ty`, `gitleaks`, and `commitizen`.
 
-## Quality Control (Prek Workflow)
-- **Hooks**: Use `prek`
-- **Required**: `ruff` (lint/format), `ty` (strict typing), `gitleaks` (secret scanning)
-- **Testing**: `pytest` with `pytest-asyncio`. 100% coverage required for financial calculation modules. Use `factory_boy` (with `factory.Faker`) to maximize randomness for test dummy data; avoid manual dummy instantiations unless fixed values are strictly required by the test.
+---
 
-## Architectural Rules
-- **Structure**: Symmetric decoupled layout (`backend/` with `backend/src/` and `frontend/` with `frontend/src/`).
-- **File Size Limit**: No file (Vue component, Python module, etc.) should exceed ~400 lines. If a file approaches this limit, refactor it by extracting sub-components or splitting logic into dedicated modules.
-- **Subfolders**: Do not hesitate to create subfolders to group related components or modules (e.g., `components/import/`, `components/portfolio/`). Flat directories with many files are an anti-pattern.
-- **Proactive Refactoring**: When touching a file that is already oversized or poorly structured, refactor it as part of the task — do not defer cleanup.
+## 2. Specialized Subagents & Orchestration
+
+To scale operations, the primary agent can invoke specialized subagents using the `/agent` command or the `invoke_subagent` tool.
+
+| Subagent Role | Model Tier | Purpose |
+| :--- | :--- | :--- |
+| **`financial_expert`** | **Gemini 3.1 Pro** | Handles complex accounting calculations, tax rules, PnL equations, and Polars optimization logic. |
+| **`frontend_designer`** | **Gemini 3.5 Flash** (Low) | Focused on crafting Vue components, implementing Tailwind CSS v4 styling rules, and layout design. |
+| **`tester`** | **Gemini 3.5 Flash** (Low) | Responsible for writing comprehensive tests, setting up FactoryBoy mocks, and fixing test regressions. |
+| **`researcher`** | **Gemini 3.5 Flash** (Low) | Scans documentation, runs codebase diagnostics, and searches web references. |
+| **`architect_critic`** | **Gemini 3.1 Pro** | Hyper-critically assesses code architecture, weighs pros/cons, validates security/performance, and ensures scalability and future-proofing. |
+
+---
+
+## 3. Active Skills Registry
+
+Skills are modular, on-demand instructions loaded only when required. They are stored in `.agents/skills/`.
+
+- **[`financial_math`](file://./.agents/skills/financial_math/SKILL.md)**: Rules for Decimal arithmetic and Polars aggregations.
+- **[`backend_api`](file://./.agents/skills/backend_api/SKILL.md)**: Design standards for FastAPI routes, REST endpoints, and dependency injection.
+- **[`database_models`](file://./.agents/skills/database_models/SKILL.md)**: Standards for SQLModel models, database sessions, and Alembic migrations.
+- **[`frontend_vue`](file://./.agents/skills/frontend_vue/SKILL.md)**: Rules for decoupled Vue components and Tailwind CSS v4 directives.
+- **[`testing`](file://./.agents/skills/testing/SKILL.md)**: Pytest workflow, mock data generation rules, and coverage standards.
+- **[`development_workflow`](file://./.agents/skills/development_workflow/SKILL.md)**: Git guidelines, Conventional Commits, file size budget, and verification procedures.
+
+---
+
+### Mandatory Pre-Flight / Pre-Commit Self-Check:
+Before writing code or asking for commit approval, you MUST explicitly answer and document:
+1. **Size Budget**: Do any new or modified files exceed 400 lines? If yes, split them now.
+2. **Reusability**: Did you reuse existing sub-components or utilities instead of copy-pasting or building monolithic files?
+3. **Structure**: Are your components placed in logical subfolders instead of a flat folder? If a feature has >3 components, did you place them in a dedicated subdirectory?
+4. **Decoupled API**: Is all logic decoupled (frontend is representation/interaction only, business/financial logic is in the backend)?
