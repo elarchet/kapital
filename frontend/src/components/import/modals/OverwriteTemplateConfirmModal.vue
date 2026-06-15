@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import BaseConfirmModal from '../../BaseConfirmModal.vue';
+import DynamicComponent from '../../DynamicComponent.vue';
 
 defineProps<{
   show: boolean;
@@ -13,7 +13,8 @@ defineEmits<{
 </script>
 
 <template>
-  <BaseConfirmModal
+  <DynamicComponent
+    componentKey="base-confirm-modal"
     :show="show"
     title="Overwrite Existing Template?"
     :message="`A template named '${templateName}' already exists. Saving this will overwrite and erase the previous template configuration. Do you want to proceed?`"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import CustomDropdown from '../../CustomDropdown.vue';
+import DynamicComponent from '../../DynamicComponent.vue';
 
 const props = defineProps<{
   importFileHeaders: string[];
@@ -66,7 +66,8 @@ const decimalSeparatorOptions = [
       <div style="flex: 1 1 100%; min-width: 0; max-width: 500px; margin: 0 auto;">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
           <div style="margin-bottom: 0;">
-            <CustomDropdown
+            <DynamicComponent
+              componentKey="custom-dropdown"
               v-model="delimiter"
               :options="delimiterOptions"
               :searchable="false"
@@ -75,7 +76,8 @@ const decimalSeparatorOptions = [
             />
           </div>
           <div style="margin-bottom: 0;">
-            <CustomDropdown
+            <DynamicComponent
+              componentKey="custom-dropdown"
               v-model="decimalSeparator"
               :options="decimalSeparatorOptions"
               :searchable="false"
@@ -86,7 +88,8 @@ const decimalSeparatorOptions = [
         </div>
 
         <div style="margin-bottom: 0;">
-          <CustomDropdown
+          <DynamicComponent
+            componentKey="custom-dropdown"
             v-model="colIdxString"
             :options="columnOptions"
             :searchable="true"

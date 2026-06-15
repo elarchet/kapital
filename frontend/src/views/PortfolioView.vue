@@ -2,11 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useKapitalStore } from '../store';
-import Sidebar from '../components/Sidebar.vue';
-import AddPositionButton from '../components/AddPositionButton.vue';
-import CreatePositionModal from '../components/CreatePositionModal.vue';
+import DynamicComponent from '../components/DynamicComponent.vue';
 import ImportTransactionsModal from '../components/import/ImportTransactionsModal.vue';
-import BaseConfirmModal from '../components/BaseConfirmModal.vue';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -136,7 +133,7 @@ const confirmDeletePortfolio = async () => {
 
 <template>
   <div class="app-container">
-    <Sidebar />
+    <DynamicComponent componentKey="sidebar" />
 
     <main class="main-content">
       <!-- Loading state if portfolios list is not populated yet -->
@@ -176,7 +173,8 @@ const confirmDeletePortfolio = async () => {
               <Trash2 style="width: 16px; height: 16px;" />
               <span>Delete Strategy</span>
             </button>
-            <AddPositionButton 
+            <DynamicComponent 
+              componentKey="add-position-button"
               @open-manual="showCreatePosModal = true" 
               @open-import="triggerImportFile" 
             />
@@ -319,7 +317,8 @@ const confirmDeletePortfolio = async () => {
         </div>
 
         <!-- Add Position Modal -->
-        <CreatePositionModal 
+        <DynamicComponent 
+          componentKey="create-position-modal"
           v-if="showCreatePosModal" 
           :portfolio="portfolio" 
           @close="showCreatePosModal = false" 
@@ -345,7 +344,8 @@ const confirmDeletePortfolio = async () => {
         />
 
         <!-- Delete Portfolio/Strategy Confirmation Modal -->
-        <BaseConfirmModal
+        <DynamicComponent
+          componentKey="base-confirm-modal"
           :show="showDeletePortfolioConfirm"
           title="Delete Strategy?"
           :message="`Are you sure you want to delete the strategy folder '${portfolio ? portfolio.name : ''}'? All associated positions will also be permanently removed.`"

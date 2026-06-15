@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
-import { useKapitalStore } from '../store';
+import { useKapitalStore } from '../../store';
+
 
 const props = defineProps<{
   portfolio: {

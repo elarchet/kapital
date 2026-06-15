@@ -17,8 +17,7 @@ import DiscardChangesConfirmModal from './modals/DiscardChangesConfirmModal.vue'
 
 import ImportSuccessSummary from './ImportSuccessSummary.vue';
 
-import CustomDropdown from '../CustomDropdown.vue';
-import RightPanelDrawer from '../RightPanelDrawer.vue';
+import DynamicComponent from '../DynamicComponent.vue';
 
 const props = defineProps<{
   portfolio: {
@@ -136,7 +135,8 @@ const onConfirmOverwrite = () => {
 </script>
 
 <template>
-  <RightPanelDrawer
+  <DynamicComponent
+    componentKey="right-panel-drawer"
     :show="true"
     :initialWidth="panelWidth"
     :minWidth="500"
@@ -176,7 +176,8 @@ const onConfirmOverwrite = () => {
                   <label>Template Schema</label>
                   <div style="display: flex; gap: 0.5rem; align-items: stretch; margin-bottom: 0.25rem;">
                     <div style="flex: 1; min-width: 0;">
-                      <CustomDropdown
+                      <DynamicComponent
+                        componentKey="custom-dropdown"
                         v-model="selectedSchemaIdString"
                         :options="schemaOptions"
                         placeholder="Select schema template..."
@@ -288,7 +289,7 @@ const onConfirmOverwrite = () => {
           Done
         </button>
     </template>
-  </RightPanelDrawer>
+  </DynamicComponent>
 
   <!-- Custom exit confirmation dialog -->
   <DiscardChangesConfirmModal 

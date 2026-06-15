@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import CustomDropdown from '../../CustomDropdown.vue';
+import DynamicComponent from '../../DynamicComponent.vue';
 import { isFieldRequiredForOpType } from '../../../services/import/validation';
 
 const props = defineProps<{
@@ -107,7 +107,8 @@ const dropdownOptions = computed(() => {
 
 <template>
   <div style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
-    <CustomDropdown
+    <DynamicComponent
+      componentKey="custom-dropdown"
       v-model="selectedDbKey"
       :options="dropdownOptions"
       placeholder="-- Ignore Column (Do Not Map) --"

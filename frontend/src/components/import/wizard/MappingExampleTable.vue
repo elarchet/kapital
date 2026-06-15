@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Plus, Trash2 } from '@lucide/vue';
-import CustomDropdown from '../../CustomDropdown.vue';
+import DynamicComponent from '../../DynamicComponent.vue';
 import { useTableGridSelection } from './useTableGridSelection';
 
 const props = defineProps<{
@@ -172,9 +172,10 @@ const dbOpOptions = computed(() => {
 
             <!-- Column 2: DB Transaction Type Dropdown Select -->
             <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: 170px; max-width: 170px; width: 170px;">
-              <CustomDropdown
+              <DynamicComponent
+                componentKey="custom-dropdown"
                 :model-value="operationTypeMappings[example.opType] || ''"
-                @update:model-value="dbOpType => emit('update-optype-mapping', { rawAction: example.opType, dbOpType })"
+                @update:model-value="(dbOpType: any) => emit('update-optype-mapping', { rawAction: example.opType, dbOpType })"
                 :options="dbOpOptions"
                 :searchable="false"
                 placeholder="-- Map DB Type --"

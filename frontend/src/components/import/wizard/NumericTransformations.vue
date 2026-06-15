@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import CustomDropdown from '../../CustomDropdown.vue';
+import DynamicComponent from '../../DynamicComponent.vue';
 
 const transformationType = defineModel<'none' | 'divisor' | 'multiplier'>('transformationType', { required: true });
 const transformationValue = defineModel<number | null>('transformationValue', { required: true });
@@ -25,7 +25,8 @@ const selectedType = computed({
   <div class="mt-5 bg-bg-primary border border-border-color rounded-sm p-4">
     <h5 class="text-[0.8rem] font-bold uppercase text-text-secondary tracking-wider mb-3">Numeric Data Transformations</h5>
     <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; align-items: center;">
-      <CustomDropdown
+      <DynamicComponent
+        componentKey="custom-dropdown"
         v-model="selectedType"
         :options="options"
         :searchable="false"

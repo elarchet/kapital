@@ -23,6 +23,12 @@ const routes = [
     component: PortfolioView,
     meta: { requiresAuth: true }
   },
+  {
+    path: '/settings',
+    name: 'settings',
+    component: () => import('../views/SettingsView.vue'),
+    meta: { requiresAuth: true }
+  },
   // Catch-all
   {
     path: '/:pathMatch(.*)*',

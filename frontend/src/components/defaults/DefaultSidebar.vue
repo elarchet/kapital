@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useKapitalStore } from '../store';
-import { api } from '../services/api';
+import { useKapitalStore } from '../../store';
+import { api } from '../../services/api';
 import { 
   LayoutDashboard, 
   LogOut, 
@@ -10,9 +10,13 @@ import {
   Folder,
   Loader,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Settings,
+  ChevronUp
 } from '@lucide/vue';
-import { SIDEBAR_CONFIG } from '../config/sidebar';
+import { SIDEBAR_CONFIG } from '../../config/sidebar';
+
+
 
 const router = useRouter();
 const route = useRoute();
@@ -83,6 +87,20 @@ const startResize = (e: MouseEvent) => {
   window.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('mouseup', handleMouseUp);
 };
+
+const showProfileMenu = ref(false);
+const toggleProfileMenu = () => {
+  showProfileMenu.value = !showProfileMenu.value;
+};
+const closeProfileMenu = () => {
+  showProfileMenu.value = false;
+};
+onMounted(() => {
+  window.addEventListener('click', closeProfileMenu);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('click', closeProfileMenu);
+});
 </script>
 
 <template>
@@ -112,6 +130,7 @@ const startResize = (e: MouseEvent) => {
         <LayoutDashboard class="nav-icon" />
         <span v-show="!store.sidebarCollapsed">Global View</span>
       </router-link>
+
 
       <!-- Section: Portfolios -->
       <div v-if="!store.sidebarCollapsed" class="nav-section-title" style="display: flex; justify-content: space-between; align-items: center;">
@@ -160,14 +179,47 @@ const startResize = (e: MouseEvent) => {
       </button>
     </nav>
 
-    <div class="sidebar-profile">
-      <div v-show="!store.sidebarCollapsed" class="profile-info">
-        <span class="profile-name">Senior Expert</span>
-        <span class="profile-email" :title="store.userEmail">{{ store.userEmail }}</span>
-      </div>
-      <button @click="handleLogout" class="btn-logout" title="Log Out">
-        <LogOut style="width: 18px; height: 18px;" />
+    <div class="sidebar-profile relative">
+      <button 
+        @click.stop="toggleProfileMenu" 
+        class="flex items-center justify-between w-full p-2 hover:bg-bg-tertiary rounded-md transition-colors text-left border-0 bg-transparent cursor-pointer"
+      >
+        <div class="flex items-center gap-3 overflow-hidden">
+          <div class="avatar bg-accent text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
+            SE
+          </div>
+          <div v-show="!store.sidebarCollapsed" class="profile-info overflow-hidden">
+            <span class="profile-name text-xs font-semibold text-text-primary block truncate">Senior Expert</span>
+            <span class="profile-email text-[10px] text-text-secondary block truncate" :title="store.userEmail">{{ store.userEmail }}</span>
+          </div>
+        </div>
+        <ChevronUp v-show="!store.sidebarCollapsed" class="w-4 h-4 text-text-secondary flex-shrink-0" />
       </button>
+
+      <div 
+        v-if="showProfileMenu" 
+        class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-bg-secondary border border-border-color rounded-md shadow-lg py-1 z-50 flex flex-col"
+        @click.stop
+      >
+        <router-link 
+          to="/settings" 
+          @click="showProfileMenu = false"
+          class="flex items-center gap-2.5 px-4 py-2.5 text-xs text-text-primary hover:bg-bg-tertiary transition-colors w-full text-left"
+        >
+          <Settings class="w-4 h-4 text-text-secondary" />
+          <span>Settings</span>
+        </router-link>
+        
+        <div class="h-[1px] bg-border-color my-1"></div>
+        
+        <button 
+          @click="handleLogout" 
+          class="flex items-center gap-2.5 px-4 py-2.5 text-xs text-color-danger hover:bg-color-danger-light transition-colors w-full text-left border-0 bg-transparent cursor-pointer"
+        >
+          <LogOut class="w-4 h-4" />
+          <span>Sign Out</span>
+        </button>
+      </div>
     </div>
 
     <!-- Create Portfolio Modal -->

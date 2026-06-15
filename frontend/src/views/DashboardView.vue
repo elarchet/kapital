@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useKapitalStore } from '../store';
-import Sidebar from '../components/Sidebar.vue';
+import DynamicComponent from '../components/DynamicComponent.vue';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -81,7 +81,7 @@ const getPortfolioName = (id: number) => {
 
 <template>
   <div class="app-container">
-    <Sidebar />
+    <DynamicComponent componentKey="sidebar" />
 
     <main class="main-content">
       <!-- Page Header -->

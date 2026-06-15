@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import BaseConfirmModal from '../../BaseConfirmModal.vue';
+import DynamicComponent from '../../DynamicComponent.vue';
 
 defineProps<{
   show: boolean;
@@ -13,7 +13,8 @@ defineEmits<{
 </script>
 
 <template>
-  <BaseConfirmModal
+  <DynamicComponent
+    componentKey="base-confirm-modal"
     :show="show"
     title="Delete Template?"
     :message="`Are you sure you want to delete the template '${templateName}'? This action will permanently erase this template configuration and cannot be undone.`"

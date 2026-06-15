@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import BaseConfirmModal from '../../BaseConfirmModal.vue';
+import DynamicComponent from '../../DynamicComponent.vue';
 
 withDefaults(defineProps<{
   show: boolean;
@@ -17,7 +17,8 @@ defineEmits<{
 </script>
 
 <template>
-  <BaseConfirmModal
+  <DynamicComponent
+    componentKey="base-confirm-modal"
     :show="show"
     :title="title"
     :message="message"

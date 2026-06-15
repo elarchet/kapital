@@ -50,6 +50,41 @@
   --transition-normal: 0.25s ease;
 }
 
+/* Custom Theme Overrides */
+.theme-slate-dark {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #64748b;
+
+  --accent-color: #38bdf8;
+  --accent-hover: #0ea5e9;
+  --accent-light: #0f172a;
+
+  --border-color: #334155;
+  --border-focus: #475569;
+}
+
+.theme-forest-mint {
+  --bg-primary: #f0fdf4;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #dcfce7;
+
+  --text-primary: #14532d;
+  --text-secondary: #166534;
+  --text-tertiary: #3f6212;
+
+  --accent-color: #10b981;
+  --accent-hover: #059669;
+  --accent-light: #ecfdf5;
+
+  --border-color: #d1fae5;
+  --border-focus: #a7f3d0;
+}
+
 @theme {
   --color-bg-primary: var(--bg-primary);
   --color-bg-secondary: var(--bg-secondary);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import CustomDropdown from '../../CustomDropdown.vue';
+import DynamicComponent from '../../DynamicComponent.vue';
 
 const dateFormat = defineModel<string>('dateFormat', { required: true });
 
@@ -36,7 +36,8 @@ const selectedOption = computed({
   <div class="mt-5 bg-bg-primary border border-border-color rounded-sm p-4">
     <h5 class="text-[0.8rem] font-bold uppercase text-text-secondary tracking-wider mb-3">Date Parser Configuration</h5>
     <div style="display: flex; flex-direction: column; gap: 1rem;">
-      <CustomDropdown
+      <DynamicComponent
+        componentKey="custom-dropdown"
         v-model="selectedOption"
         :options="dropdownOptions"
         :searchable="false"
