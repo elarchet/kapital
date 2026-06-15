@@ -71,7 +71,16 @@ export function useWizardMapping(
       targets: wizardTargetCells.value.map(t => ({ colId: t.colId, colIdx: uiColumns.value.find((c: any) => c.id === t.colId)?.colIdx || 0, opType: t.opType }))
     });
 
-    wizardCsvHeaderName.value = targets && targets.length > 1 ? `${setup.csvHeaderName} (+ ${targets.length - 1} other columns)` : setup.csvHeaderName;
+    if (targets && targets.length > 1) {
+      const uniqueCols = new Set(targets.map(t => t.colId)).size;
+      if (uniqueCols > 1) {
+        wizardCsvHeaderName.value = `${setup.csvHeaderName} (+ ${uniqueCols - 1} other columns)`;
+      } else {
+        wizardCsvHeaderName.value = `${setup.csvHeaderName} (${targets.length} rows)`;
+      }
+    } else {
+      wizardCsvHeaderName.value = setup.csvHeaderName;
+    }
     wizardExampleValue.value = setup.exampleValue;
     wizardUniqueValues.value = setup.uniqueValues;
     wizardInitialMapping.value = setup.initialMapping;
@@ -81,7 +90,7 @@ export function useWizardMapping(
   const handleWizardSave = (payload: any) => {
     if (wizardTargetCells.value.length > 0) {
       wizardTargetCells.value.forEach(target => {
-        saveWizardConfig(columnConfigMap.value, target.colId, target.opType, { ...payload, scope: target.opType ? 'type' : 'global' });
+        saveWizardConfig(columnConfigMap.value, target.colId, target.opType, { ...payload, scope: 'type' });
       });
       columnConfigMap.value = { ...columnConfigMap.value };
     }
@@ -104,7 +113,7 @@ export function useWizardMapping(
     } else {
       saveWizardConfig(columnConfigMap.value, colId, opType, {
         dbKey: mapping.dbKey,
-        scope: opType ? 'type' : 'global',
+        scope: 'type',
         divisor: mapping.divisor,
         multiplier: mapping.multiplier,
         enumMappings: mapping.enumMappings,
@@ -128,7 +137,7 @@ export function useWizardMapping(
     };
     const lastIndex = uiColumns.value.map((c: any) => c.colIdx).lastIndexOf(baseCol.colIdx);
     uiColumns.value.splice(lastIndex + 1, 0, newCol);
-    columnConfigMap.value[newId] = { global: { dbKey: '' }, typeSpecific: {} };
+    columnConfigMap.value[newId] = { typeSpecific: {} };
     columnConfigMap.value = { ...columnConfigMap.value };
   };
 

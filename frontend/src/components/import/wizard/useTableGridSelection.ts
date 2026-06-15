@@ -10,7 +10,6 @@ export interface GridSelectionProps {
   }>;
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
   columnConfigMap: Record<string, {
-    global: { dbKey: string; divisor?: number; multiplier?: number; enumMappings?: Record<string, string>; dateFormat?: string };
     typeSpecific: Record<string, { dbKey: string; divisor?: number; multiplier?: number; enumMappings?: Record<string, string>; dateFormat?: string }>;
   }>;
   operationTypeMappings: Record<string, string>;
@@ -122,20 +121,19 @@ export function useTableGridSelection(
     const primary = lastSelectedCell.value || getFirstSelectedCell();
     if (!primary) return;
 
+    // Build full list of targets preserving each cell's colId and rawAction opType.
+    // Pass all selected cells as individual targets so the wizard applies to each one.
     const targets = Array.from(selectedCells.value).map(key => {
       const parts = key.split(':::');
-      return { colId: parts[0], opType: parts[1] };
+      return { colId: parts[0], opType: parts[1] || null };
     });
 
-    const isGlobal = targets.length > 1;
-    const dbOpType = primary.opType ? props.operationTypeMappings[primary.opType] : null;
+    const primaryDbOpType = primary.opType ? props.operationTypeMappings[primary.opType] : null;
 
     emit('open-wizard', {
       colId: primary.colId,
-      opType: isGlobal ? null : dbOpType,
-      targets: isGlobal
-        ? [{ colId: primary.colId, opType: null }]
-        : targets.map(t => ({ colId: t.colId, opType: t.opType })),
+      opType: primaryDbOpType,
+      targets,
       rawAction: primary.opType
     });
   };
@@ -312,6 +310,7 @@ export function useTableGridSelection(
     const conf = props.columnConfigMap[colId];
     if (!conf) return '';
 
+    // Only show a mapping if it was explicitly set for this row.
     if (conf.typeSpecific[opType] !== undefined) {
       return conf.typeSpecific[opType].dbKey || '';
     }
@@ -320,7 +319,7 @@ export function useTableGridSelection(
       return conf.typeSpecific[dbOpType].dbKey || '';
     }
 
-    return conf.global?.dbKey || '';
+    return '';
   };
 
   const sanitizeId = (val: string) => {
