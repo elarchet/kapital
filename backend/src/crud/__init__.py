@@ -7,6 +7,7 @@ from src.crud.institution import institution_crud
 from src.crud.operation import operation_crud
 from src.crud.portfolio import portfolio_crud
 from src.crud.position import position_crud
+from src.crud.ui_marketplace import ui_component_override_crud, ui_component_variant_crud
 from src.crud.user import user_crud
 
 __all__ = [
@@ -17,5 +18,7 @@ __all__ = [
     "operation_crud",
     "portfolio_crud",
     "position_crud",
+    "ui_component_override_crud",
+    "ui_component_variant_crud",
     "user_crud",
 ]
