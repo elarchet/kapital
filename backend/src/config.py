@@ -20,5 +20,9 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite:///./kapital.db"
 
+    # UI Component Marketplace Asset uploads
+    UPLOAD_DIR: str = "static/uploads"
+    ASSETS_BASE_URL: str = "http://localhost:8000/static/uploads"
+
 
 settings = Settings()

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator  # noqa: TC003
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
+from src.config import settings
 from src.database import init_db
 from src.routers import (
     auth,
@@ -16,6 +19,7 @@ from src.routers import (
     operation,
     portfolio,
     position,
+    ui_marketplace,
 )
 
 
@@ -23,6 +27,8 @@ from src.routers import (
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Handles startup actions (like auto table creation) and teardown context."""
     init_db()
+    # Ensure upload directory exists
+    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
     yield
 
 
@@ -51,6 +57,11 @@ app.include_router(financial_account.router, prefix="/api")
 app.include_router(operation.router, prefix="/api")
 app.include_router(import_file_schema.router, prefix="/api")
 app.include_router(financial_info.router, prefix="/api")
+app.include_router(ui_marketplace.router, prefix="/api")
+
+# Mount Static Files for component uploads
+Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+app.mount("/static/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="static")
 
 
 @app.get("/")
