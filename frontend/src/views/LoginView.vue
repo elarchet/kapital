@@ -2,10 +2,13 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useKapitalStore } from '../store';
+import { usePreferencesStore } from '../store/preferences';
 import { api } from '../services/api';
+import { preloadComponents } from '../services/componentResolver';
 
 const router = useRouter();
 const store = useKapitalStore();
+const preferencesStore = usePreferencesStore();
 
 const email = ref('test@example.com'); // Pre-populate for convenience
 const password = ref('password123');
@@ -23,7 +26,11 @@ const handleLogin = async () => {
     await api.login(email.value, password.value);
     store.setAuthenticated(true, email.value);
     // Boot stores data fetch
-    await store.fetchAllData();
+    await Promise.all([
+      store.fetchAllData(),
+      preferencesStore.fetchPreferences()
+    ]);
+    await preloadComponents();
     router.push('/');
   } catch (err: any) {
     error.value = err.message || 'Authentication failed. Please verify credentials.';
