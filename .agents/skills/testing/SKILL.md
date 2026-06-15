@@ -22,3 +22,13 @@ This skill details how to write and execute unit and integration tests.
   uv run pytest backend/tests/test_specific.py
   ```
 - Do not run the full verification suite (`prek` or global pytest run) automatically on startup or before the user reviews/approves changes.
+
+## 4. Frontend E2E / QA Testing (Playwright)
+- Use Playwright for all frontend E2E and visual QA verification.
+- Write E2E test files in `frontend/e2e/` with `.spec.ts` extensions.
+- Execute Playwright E2E tests from the `frontend/` directory with:
+  ```bash
+  PATH="/home/etien/dev/perso/kapital/.node-dist/bin:$PATH" npx playwright test
+  ```
+- The dev server (`npm run dev`) is automatically launched and managed by Playwright's `webServer` config block.
+
