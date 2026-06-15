@@ -9,7 +9,6 @@ const props = defineProps<{
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
   operationTypeColumnIdx: number | null;
   columnConfigMap: Record<string, {
-    global: { dbKey: string; divisor?: number; multiplier?: number; enumMappings?: Record<string, string>; dateFormat?: string };
     typeSpecific: Record<string, { dbKey: string; divisor?: number; multiplier?: number; enumMappings?: Record<string, string>; dateFormat?: string }>;
   }>;
   activeDbOpTypes: string[];

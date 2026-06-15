@@ -112,7 +112,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
     columnConfigMap.value = {};
     uiColumns.value.forEach(col => {
-      columnConfigMap.value[col.id] = { global: { dbKey: '' }, typeSpecific: {} };
+      columnConfigMap.value[col.id] = { typeSpecific: {} };
     });
     operationTypeMappings.value = {};
     operationTypeColumnIdx.value = null;
@@ -124,7 +124,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
     columnConfigMap.value = {};
     uiColumns.value.forEach(col => {
-      columnConfigMap.value[col.id] = { global: { dbKey: '' }, typeSpecific: {} };
+      columnConfigMap.value[col.id] = { typeSpecific: {} };
     });
   };
 
