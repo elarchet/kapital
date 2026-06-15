@@ -16,7 +16,7 @@ export function getEnumMappingsForField(dbKey: string, mappings: any): Record<st
 export function buildCustomMappingPayload(params: {
   operationTypeColumnIdx: number | null;
   importFileHeaders: string[];
-  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }>;
   uiColumns: Array<{ id: string; colIdx: number }>;
   operationTypeMappings: Record<string, string>;
   importFields: any[];
@@ -25,45 +25,18 @@ export function buildCustomMappingPayload(params: {
   const enum_mappings: Record<string, Record<string, string[]>> = {};
   const date_formats: Record<string, any> = {};
 
-  const dbKeyToCol = new Map<string, { global?: string; typeSpecific?: Record<string, string> }>();
+  const dbKeyToCol = new Map<string, { typeSpecific?: Record<string, string> }>();
+  params.importFields.forEach(f => { dbKeyToCol.set(f.key, {}); });
 
-  params.importFields.forEach(f => {
-    dbKeyToCol.set(f.key, {});
-  });
+  // Collect explicitly-cleared type-specific entries (dbKey = '') so they survive a
+  // save/reload cycle and the per-row clear is not lost.
+  // Key = CSV header name, value = rawAction opTypes that were explicitly cleared.
+  const cleared_type_specifics: Record<string, string[]> = {};
 
   Object.entries(params.columnConfigMap).forEach(([colId, conf]) => {
     const col = params.uiColumns.find(c => c.id === colId);
     if (!col) return;
-    const colIdx = col.colIdx;
-    const headerName = params.importFileHeaders[colIdx];
-
-    if (conf.global.dbKey) {
-      const entry = dbKeyToCol.get(conf.global.dbKey) || {};
-      entry.global = headerName;
-      dbKeyToCol.set(conf.global.dbKey, entry);
-
-      if (conf.global.divisor || conf.global.multiplier) {
-        transformations[conf.global.dbKey] = {
-          divisor: conf.global.divisor,
-          multiplier: conf.global.multiplier
-        };
-      }
-
-      if (conf.global.dateFormat && conf.global.dateFormat !== 'auto') {
-        date_formats[conf.global.dbKey] = conf.global.dateFormat;
-      }
-
-      if (conf.global.enumMappings) {
-        const dbKey = conf.global.dbKey;
-        if (!enum_mappings[dbKey]) enum_mappings[dbKey] = {};
-        Object.entries(conf.global.enumMappings).forEach(([rawVal, targetVal]) => {
-          if (targetVal) {
-            if (!enum_mappings[dbKey][targetVal]) enum_mappings[dbKey][targetVal] = [];
-            enum_mappings[dbKey][targetVal].push(rawVal);
-          }
-        });
-      }
-    }
+    const headerName = params.importFileHeaders[col.colIdx];
 
     Object.entries(conf.typeSpecific).forEach(([opType, specificConf]) => {
       if (specificConf.dbKey) {
@@ -81,9 +54,7 @@ export function buildCustomMappingPayload(params: {
         }
 
         if (specificConf.dateFormat && specificConf.dateFormat !== 'auto') {
-          if (!date_formats[specificConf.dbKey]) {
-            date_formats[specificConf.dbKey] = {};
-          }
+          if (!date_formats[specificConf.dbKey]) date_formats[specificConf.dbKey] = {};
           date_formats[specificConf.dbKey][opType] = specificConf.dateFormat;
         }
 
@@ -97,32 +68,28 @@ export function buildCustomMappingPayload(params: {
             }
           });
         }
+      } else {
+        // dbKey is empty → explicitly cleared row; persist so the parser can restore it.
+        if (!cleared_type_specifics[headerName]) cleared_type_specifics[headerName] = [];
+        if (!cleared_type_specifics[headerName].includes(opType)) {
+          cleared_type_specifics[headerName].push(opType);
+        }
       }
     });
   });
 
   const finalColumns: Record<string, any> = {};
-
   dbKeyToCol.forEach((entry, dbKey) => {
     if (entry.typeSpecific && Object.keys(entry.typeSpecific).length > 0) {
-      const typeMap: Record<string, string> = { ...entry.typeSpecific };
-      if (entry.global) {
-        typeMap['global'] = entry.global;
-      }
-      finalColumns[dbKey] = typeMap;
-    } else if (entry.global) {
-      finalColumns[dbKey] = entry.global;
+      finalColumns[dbKey] = { ...entry.typeSpecific };
     }
   });
 
   const type_mappings: Record<string, string[]> = {};
   const opField = params.importFields.find(f => f.key === 'operation_type');
-  if (opField && opField.enum_values) {
-    opField.enum_values.forEach((v: string) => {
-      type_mappings[v] = [];
-    });
+  if (opField?.enum_values) {
+    opField.enum_values.forEach((v: string) => { type_mappings[v] = []; });
   }
-
   Object.entries(params.operationTypeMappings).forEach(([rawVal, targetVal]) => {
     if (targetVal) {
       if (!type_mappings[targetVal]) type_mappings[targetVal] = [];
@@ -131,12 +98,15 @@ export function buildCustomMappingPayload(params: {
   });
 
   return {
-    operation_type_column: params.operationTypeColumnIdx !== null ? params.importFileHeaders[params.operationTypeColumnIdx] : null,
+    operation_type_column: params.operationTypeColumnIdx !== null
+      ? params.importFileHeaders[params.operationTypeColumnIdx]
+      : null,
     columns: finalColumns,
     type_mappings,
     enum_mappings,
     transformations,
-    date_formats
+    date_formats,
+    ...(Object.keys(cleared_type_specifics).length > 0 ? { cleared_type_specifics } : {})
   };
 }
 
@@ -146,64 +116,38 @@ export function parseSchemaMappings(
 ): {
   operationTypeColumnIdx: number | null;
   operationTypeMappings: Record<string, string>;
-  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }>;
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
 } {
   let operationTypeColumnIdx: number | null = null;
   const operationTypeMappings: Record<string, string> = {};
-  const columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }> = {};
+  const columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }> = {};
   const uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }> = [];
 
   importFileHeaders.forEach((h, idx) => {
     const colId = `col-${idx}`;
-    uiColumns.push({
-      id: colId,
-      colIdx: idx,
-      name: h,
-      label: h
-    });
-    columnConfigMap[colId] = {
-      global: { dbKey: '' },
-      typeSpecific: {}
-    };
+    uiColumns.push({ id: colId, colIdx: idx, name: h, label: h });
+    columnConfigMap[colId] = { typeSpecific: {} };
   });
 
-  const getOrCreateColIdForMapping = (idx: number, dbKey: string) => {
-    let foundColId = '';
+  // Find or create a UI column for the given CSV index that has a free typeSpecific
+  // slot for `opType`, creating a duplicate column only when there's a real conflict.
+  const getOrCreateColIdForMapping = (idx: number, dbKey: string, opType: string): string => {
     for (const col of uiColumns) {
-      if (col.colIdx === idx) {
-        const conf = columnConfigMap[col.id];
-        if (!conf) continue;
-
-        const isUnmapped = !conf.global.dbKey && Object.keys(conf.typeSpecific).length === 0;
-        const isMappedToThis = conf.global.dbKey === dbKey ||
-          Object.values(conf.typeSpecific).some(spec => spec?.dbKey === dbKey);
-
-        if (isUnmapped || isMappedToThis) {
-          foundColId = col.id;
-          break;
-        }
-      }
+      if (col.colIdx !== idx) continue;
+      const conf = columnConfigMap[col.id];
+      if (!conf) continue;
+      const existing = conf.typeSpecific[opType];
+      // Reuse if the slot is free or already set to this same dbKey.
+      if (!existing || existing.dbKey === dbKey) return col.id;
     }
-
-    if (!foundColId) {
-      const headerName = importFileHeaders[idx];
-      const dupCount = uiColumns.filter(c => c.colIdx === idx).length;
-      foundColId = `col-${idx}_dup_${dupCount}`;
-      uiColumns.push({
-        id: foundColId,
-        colIdx: idx,
-        name: headerName,
-        label: `${headerName} (Copy)`,
-        isDuplicate: true
-      });
-      columnConfigMap[foundColId] = {
-        global: { dbKey: '' },
-        typeSpecific: {}
-      };
-    }
-
-    return foundColId;
+    // No suitable slot found — create a duplicate UI column.
+    const headerName = importFileHeaders[idx];
+    const dupCount = uiColumns.filter(c => c.colIdx === idx).length;
+    const newId = `col-${idx}_dup_${dupCount}`;
+    uiColumns.push({ id: newId, colIdx: idx, name: headerName, label: `${headerName} (Copy)`, isDuplicate: true });
+    columnConfigMap[newId] = { typeSpecific: {} };
+    return newId;
   };
 
   try {
@@ -211,94 +155,68 @@ export function parseSchemaMappings(
     const cols = mappings.columns || {};
     const dateFormats = mappings.date_formats || {};
 
-    // 1. Parse operation type column
+    // 1. Operation type column
     const opTypeHeader = mappings.operation_type_column || cols.operation_type;
     if (opTypeHeader) {
       const idx = importFileHeaders.indexOf(opTypeHeader);
-      if (idx >= 0) {
-        operationTypeColumnIdx = idx;
-      }
+      if (idx >= 0) operationTypeColumnIdx = idx;
     }
 
-    // 2. Parse operation type value mappings
+    // 2. Operation type value mappings
     const op_mappings = mappings.enum_mappings?.operation_type || mappings.type_mappings || {};
     Object.entries(op_mappings).forEach(([targetEnum, rawVals]: [string, any]) => {
       if (Array.isArray(rawVals)) {
-        rawVals.forEach(val => {
-          operationTypeMappings[val.trim()] = targetEnum;
-        });
+        rawVals.forEach(val => { operationTypeMappings[val.trim()] = targetEnum; });
       }
     });
 
-    // 3. Parse other columns mappings
+    // 3. Column mappings — only object format (per-opType) is supported.
+    //    String-value (global) format is not supported; it was a legacy concept.
     Object.entries(cols).forEach(([dbKey, val]) => {
       if (dbKey === 'operation_type') return;
+      if (!val || typeof val !== 'object') return;
 
-      if (typeof val === 'string') {
-        const idx = importFileHeaders.indexOf(val);
-        if (idx >= 0) {
-          const colId = getOrCreateColIdForMapping(idx, dbKey);
-          let globalDateFormat = 'auto';
-          const dfVal = dateFormats[dbKey];
-          if (dfVal) {
-            if (typeof dfVal === 'string') {
-              globalDateFormat = dfVal;
-            } else if (typeof dfVal === 'object') {
-              globalDateFormat = dfVal.global || 'auto';
-            }
+      const valObj = val as Record<string, string>;
+      Object.entries(valObj).forEach(([opType, headerName]) => {
+        const idx = importFileHeaders.indexOf(headerName);
+        if (idx < 0) return;
+        const colId = getOrCreateColIdForMapping(idx, dbKey, opType);
+        const dfVal = dateFormats[dbKey];
+        const specDateFormat = !dfVal
+          ? 'auto'
+          : typeof dfVal === 'string' ? dfVal : (dfVal[opType] || 'auto');
+
+        columnConfigMap[colId].typeSpecific[opType] = {
+          dbKey,
+          divisor: mappings.transformations?.[dbKey]?.[opType]?.divisor || mappings.transformations?.[dbKey]?.divisor,
+          multiplier: mappings.transformations?.[dbKey]?.[opType]?.multiplier || mappings.transformations?.[dbKey]?.multiplier,
+          enumMappings: getEnumMappingsForField(dbKey, mappings),
+          dateFormat: specDateFormat
+        };
+      });
+    });
+
+    // 4. Restore explicitly-cleared rows so cleared cells don't appear mapped on reload.
+    const clearedTypeSpecifics: Record<string, string[]> = mappings.cleared_type_specifics || {};
+    Object.entries(clearedTypeSpecifics).forEach(([headerName, opTypes]) => {
+      const idx = importFileHeaders.indexOf(headerName);
+      if (idx < 0) return;
+      (opTypes as string[]).forEach(opType => {
+        for (const col of uiColumns) {
+          if (col.colIdx !== idx) continue;
+          const conf = columnConfigMap[col.id];
+          if (!conf) continue;
+          const existing = conf.typeSpecific[opType];
+          if (!existing || !existing.dbKey) {
+            conf.typeSpecific[opType] = { dbKey: '' };
+            break;
           }
-
-          columnConfigMap[colId].global = {
-            dbKey,
-            divisor: mappings.transformations?.[dbKey]?.divisor,
-            multiplier: mappings.transformations?.[dbKey]?.multiplier,
-            enumMappings: getEnumMappingsForField(dbKey, mappings),
-            dateFormat: globalDateFormat
-          };
         }
-      } else if (val && typeof val === 'object') {
-        const valObj = val as Record<string, string>;
-        Object.entries(valObj).forEach(([opType, headerName]) => {
-          const idx = importFileHeaders.indexOf(headerName);
-          if (idx >= 0) {
-            const colId = getOrCreateColIdForMapping(idx, dbKey);
-            let specDateFormat = 'auto';
-            const dfVal = dateFormats[dbKey];
-            if (dfVal) {
-              if (typeof dfVal === 'string') {
-                specDateFormat = dfVal;
-              } else if (typeof dfVal === 'object') {
-                specDateFormat = dfVal[opType] || dfVal.global || 'auto';
-              }
-            }
-
-            const mapEntry = {
-              dbKey,
-              divisor: mappings.transformations?.[dbKey]?.[opType]?.divisor || mappings.transformations?.[dbKey]?.divisor,
-              multiplier: mappings.transformations?.[dbKey]?.[opType]?.multiplier || mappings.transformations?.[dbKey]?.multiplier,
-              enumMappings: getEnumMappingsForField(dbKey, mappings),
-              dateFormat: specDateFormat
-            };
-
-            if (opType === 'global') {
-              columnConfigMap[colId].global = mapEntry;
-            } else {
-              columnConfigMap[colId].typeSpecific[opType] = mapEntry;
-            }
-          }
-        });
-      }
+      });
     });
   } catch (err) {
     console.error('Failed to parse schema mappings:', err);
   }
 
-
-
-  return {
-    operationTypeColumnIdx,
-    operationTypeMappings,
-    columnConfigMap,
-    uiColumns
-  };
+  return { operationTypeColumnIdx, operationTypeMappings, columnConfigMap, uiColumns };
 }
