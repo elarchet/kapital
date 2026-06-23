@@ -75,4 +75,4 @@ uv run --directory backend prek install --hook-type commit-msg
 ```
 
 ## ⚖️ License
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [FSL-1.1-ALv2 License](LICENSE).
