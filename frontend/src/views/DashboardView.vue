@@ -37,6 +37,46 @@ const formatCurrency = (val: number, cur: string = 'EUR') => {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur }).format(val);
 };
 
+// Dialog and alert states for unified premium components popups
+const popupState = ref<{
+  show: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: 'danger' | 'warning' | 'info' | 'success';
+  hideCancel?: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}>({
+  show: false,
+  title: '',
+  message: '',
+});
+
+const triggerPopup = (config: Partial<typeof popupState.value>) => {
+  popupState.value = {
+    show: true,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    variant: 'danger',
+    hideCancel: false,
+    ...config,
+  };
+};
+
+const handlePopupConfirm = () => {
+  popupState.value.show = false;
+  if (popupState.value.onConfirm) popupState.value.onConfirm();
+};
+
+const handlePopupCancel = () => {
+  popupState.value.show = false;
+  if (popupState.value.onCancel) popupState.value.onCancel();
+};
+
 const handleCreatePosition = async () => {
   if (!posPortfolioId.value || !posName.value.trim() || posQuantity.value <= 0) return;
   isSubmitting.value = true;
@@ -59,18 +99,45 @@ const handleCreatePosition = async () => {
     showCreatePosModal.value = false;
   } catch (err: any) {
     submitError.value = err.message || 'Failed to add position.';
+    triggerPopup({
+      title: 'Error Creating Position',
+      message: err.message || 'An unexpected failure occurred while trying to record the position.',
+      confirmText: 'OK',
+      variant: 'danger',
+      hideCancel: true,
+    });
   } finally {
     isSubmitting.value = false;
   }
 };
 
-const handleDeletePosition = async (id: number) => {
-  if (!confirm('Are you sure you want to delete this position?')) return;
-  try {
-    await store.deletePosition(id);
-  } catch (err: any) {
-    alert(err.message || 'Failed to delete position.');
-  }
+const positionToDelete = ref<number | null>(null);
+
+const handleDeletePosition = (id: number) => {
+  positionToDelete.value = id;
+  triggerPopup({
+    title: 'Delete Position?',
+    message: 'Are you sure you want to permanently delete this asset position from your strategy folder?',
+    confirmText: 'Delete Position',
+    cancelText: 'Cancel',
+    variant: 'danger',
+    onConfirm: async () => {
+      if (positionToDelete.value === null) return;
+      try {
+        await store.deletePosition(positionToDelete.value);
+      } catch (err: any) {
+        triggerPopup({
+          title: 'Error Deleting Position',
+          message: err.message || 'An unexpected failure occurred while trying to delete the position.',
+          confirmText: 'OK',
+          variant: 'danger',
+          hideCancel: true,
+        });
+      } finally {
+        positionToDelete.value = null;
+      }
+    }
+  });
 };
 
 const getPortfolioName = (id: number) => {
@@ -361,6 +428,20 @@ const getPortfolioName = (id: number) => {
           </div>
         </div>
       </div>
+
+      <!-- Unified Premium Modal / Alert Popup -->
+      <DynamicComponent
+        componentKey="base-confirm-modal"
+        :show="popupState.show"
+        :title="popupState.title"
+        :message="popupState.message"
+        :confirmText="popupState.confirmText"
+        :cancelText="popupState.cancelText"
+        :variant="popupState.variant"
+        :hideCancel="popupState.hideCancel"
+        @confirm="handlePopupConfirm"
+        @cancel="handlePopupCancel"
+      />
     </main>
   </div>
 </template>

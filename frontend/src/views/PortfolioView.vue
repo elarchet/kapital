@@ -119,30 +119,100 @@ const handleManualSuccess = async () => {
   await store.fetchAllData();
 };
 
-const handleDeletePosition = async (id: number) => {
-  if (!confirm('Are you sure you want to delete this position?')) return;
-  try {
-    await store.deletePosition(id);
-  } catch (err: any) {
-    alert(err.message || 'Failed to delete position.');
-  }
+// Dialog and alert states for unified premium components popups
+const popupState = ref<{
+  show: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: 'danger' | 'warning' | 'info' | 'success';
+  hideCancel?: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}>({
+  show: false,
+  title: '',
+  message: '',
+});
+
+const triggerPopup = (config: Partial<typeof popupState.value>) => {
+  popupState.value = {
+    show: true,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    variant: 'danger',
+    hideCancel: false,
+    ...config,
+  };
 };
 
-const showDeletePortfolioConfirm = ref(false);
+const handlePopupConfirm = () => {
+  popupState.value.show = false;
+  if (popupState.value.onConfirm) popupState.value.onConfirm();
+};
+
+const handlePopupCancel = () => {
+  popupState.value.show = false;
+  if (popupState.value.onCancel) popupState.value.onCancel();
+};
+
+const positionToDelete = ref<number | null>(null);
+
+const handleDeletePosition = (id: number) => {
+  positionToDelete.value = id;
+  triggerPopup({
+    title: 'Delete Position?',
+    message: 'Are you sure you want to permanently delete this asset position from your strategy folder?',
+    confirmText: 'Delete Position',
+    cancelText: 'Cancel',
+    variant: 'danger',
+    onConfirm: async () => {
+      if (positionToDelete.value === null) return;
+      try {
+        await store.deletePosition(positionToDelete.value);
+      } catch (err: any) {
+        triggerPopup({
+          title: 'Error Deleting Position',
+          message: err.message || 'An unexpected failure occurred while trying to delete the position.',
+          confirmText: 'OK',
+          variant: 'danger',
+          hideCancel: true,
+        });
+      } finally {
+        positionToDelete.value = null;
+      }
+    }
+  });
+};
 
 const handleDeletePortfolio = () => {
   if (!portfolio.value) return;
-  showDeletePortfolioConfirm.value = true;
+  triggerPopup({
+    title: 'Delete Strategy?',
+    message: `Are you sure you want to delete the strategy folder '${portfolio.value.name}'? All associated positions will also be permanently removed.`,
+    confirmText: 'Delete Strategy',
+    cancelText: 'Cancel',
+    variant: 'danger',
+    onConfirm: confirmDeletePortfolio,
+  });
 };
 
 const confirmDeletePortfolio = async () => {
-  if (!portfolio.value) return;
+  if (!portfolio.value || portfolioId.value === 'unassigned') return;
   try {
     await store.deletePortfolio(portfolioId.value);
-    showDeletePortfolioConfirm.value = false;
     router.push('/');
   } catch (err: any) {
-    alert(err.message || 'Failed to delete portfolio.');
+    triggerPopup({
+      title: 'Error Deleting Strategy',
+      message: err.message || 'Failed to remove the strategy portfolio folder.',
+      confirmText: 'OK',
+      variant: 'danger',
+      hideCancel: true,
+    });
   }
 };
 
@@ -151,7 +221,13 @@ const handleMovePosition = async (posId: number, targetPortfolioId: number) => {
   try {
     await store.movePosition(posId, targetPortfolioId);
   } catch (err: any) {
-    alert(err.message || 'Failed to move position.');
+    triggerPopup({
+      title: 'Error Moving Position',
+      message: err.message || 'Failed to move position to the selected strategy.',
+      confirmText: 'OK',
+      variant: 'danger',
+      hideCancel: true,
+    });
   }
 };
 </script>
@@ -381,18 +457,18 @@ const handleMovePosition = async (posId: number, targetPortfolioId: number) => {
           @success="() => { store.fetchAllData(); showImportModal = false; initialImportFile = null; }" 
         />
 
-        <!-- Delete Portfolio/Strategy Confirmation Modal -->
+        <!-- Unified Premium Modal / Alert Popup -->
         <DynamicComponent
           componentKey="base-confirm-modal"
-          :show="showDeletePortfolioConfirm"
-          title="Delete Strategy?"
-          :message="`Are you sure you want to delete the strategy folder '${portfolio ? portfolio.name : ''}'? All associated positions will also be permanently removed.`"
-          confirmText="Delete Strategy"
-          cancelText="Cancel"
-          variant="danger"
-          defaultAction="cancel"
-          @cancel="showDeletePortfolioConfirm = false"
-          @confirm="confirmDeletePortfolio"
+          :show="popupState.show"
+          :title="popupState.title"
+          :message="popupState.message"
+          :confirmText="popupState.confirmText"
+          :cancelText="popupState.cancelText"
+          :variant="popupState.variant"
+          :hideCancel="popupState.hideCancel"
+          @confirm="handlePopupConfirm"
+          @cancel="handlePopupCancel"
         />
       </template>
     </main>

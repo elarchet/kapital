@@ -66,7 +66,7 @@ def fixture_client(session):
 
 def get_auth_headers(client: TestClient, email: str, password: str = "SeedP@ss1!") -> dict[str, str]:
     response = client.post(
-        "/api/auth/token",
+        "/api/v1/auth/token",
         data={"username": email, "password": password},
     )
     assert response.status_code == status.HTTP_200_OK, response.text

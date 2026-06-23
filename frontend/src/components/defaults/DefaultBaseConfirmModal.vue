@@ -10,11 +10,13 @@ const props = withDefaults(defineProps<{
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info' | 'success';
   defaultAction?: 'confirm' | 'cancel';
+  hideCancel?: boolean;
 }>(), {
   confirmText: 'Confirm',
   cancelText: 'Cancel',
   variant: 'danger',
-  defaultAction: 'cancel'
+  defaultAction: 'cancel',
+  hideCancel: false
 });
 
 const emit = defineEmits<{
@@ -34,21 +36,23 @@ const handleKeyDown = (e: KeyboardEvent) => {
   } else if (e.key === 'Enter') {
     e.preventDefault();
     e.stopPropagation();
-    if (selectedOption.value === 'confirm') {
+    if (selectedOption.value === 'confirm' || props.hideCancel) {
       emit('confirm');
     } else {
       emit('cancel');
     }
   } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
-    e.preventDefault();
-    e.stopPropagation();
-    selectedOption.value = selectedOption.value === 'confirm' ? 'cancel' : 'confirm';
+    if (!props.hideCancel) {
+      e.preventDefault();
+      e.stopPropagation();
+      selectedOption.value = selectedOption.value === 'confirm' ? 'cancel' : 'confirm';
+    }
   }
 };
 
 watch(() => props.show, (newVal) => {
   if (newVal) {
-    selectedOption.value = props.defaultAction;
+    selectedOption.value = props.hideCancel ? 'confirm' : props.defaultAction;
     window.addEventListener('keydown', handleKeyDown, true);
   } else {
     window.removeEventListener('keydown', handleKeyDown, true);
@@ -118,6 +122,7 @@ const variantConfig = computed(() => {
       </div>
       <div class="py-4 px-6 border-t border-border-color flex justify-end gap-3 bg-bg-primary">
         <button 
+          v-if="!hideCancel"
           @click="$emit('cancel')" 
           @mouseenter="selectedOption = 'cancel'"
           class="btn btn-sm"

@@ -22,7 +22,7 @@ from src.schemas import (
     UserPreferencesRead,
 )
 
-router = APIRouter(prefix="/v1/user/preferences", tags=["ui-marketplace"])
+router = APIRouter(prefix="/user/preferences", tags=["ui-marketplace"])
 
 
 @router.get(

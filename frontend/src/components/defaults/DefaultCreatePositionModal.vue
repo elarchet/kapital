@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useKapitalStore } from '../../store';
+import DynamicComponent from '../DynamicComponent.vue';
 
 
 const props = defineProps<{
@@ -39,15 +40,24 @@ const isDirty = computed(() => {
   );
 });
 
+const showDiscardConfirm = ref(false);
+
 // Safe close method
 const requestClose = () => {
   if (isDirty.value) {
-    if (confirm('You have unsaved changes. Are you sure you want to discard them?')) {
-      emit('close');
-    }
+    showDiscardConfirm.value = true;
   } else {
     emit('close');
   }
+};
+
+const confirmDiscard = () => {
+  showDiscardConfirm.value = false;
+  emit('close');
+};
+
+const cancelDiscard = () => {
+  showDiscardConfirm.value = false;
 };
 
 const handleCreatePosition = async () => {
@@ -188,6 +198,20 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </div>
+
+    <!-- Discard Changes Confirmation Modal -->
+    <DynamicComponent
+      componentKey="base-confirm-modal"
+      :show="showDiscardConfirm"
+      title="Discard Unsaved Changes?"
+      message="You have unsaved changes. Are you sure you want to discard them?"
+      confirmText="Discard Changes"
+      cancelText="Keep Editing"
+      variant="warning"
+      defaultAction="cancel"
+      @confirm="confirmDiscard"
+      @cancel="cancelDiscard"
+    />
   </div>
 </template>
 

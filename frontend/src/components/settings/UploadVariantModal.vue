@@ -22,29 +22,36 @@ const selectedFile = ref<File | null>(null);
 const isDragActive = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const isSubmitting = ref(false);
+const errorMessage = ref('');
 
 const onDragOver = () => { isDragActive.value = true; };
 const onDragLeave = () => { isDragActive.value = false; };
 const onDrop = (e: DragEvent) => {
   isDragActive.value = false;
+  errorMessage.value = '';
   const file = e.dataTransfer?.files?.[0];
   if (file && file.name.endsWith('.js')) {
     selectedFile.value = file;
   } else if (file) {
-    alert('Only .js files (compiled ESM bundles) are allowed.');
+    errorMessage.value = 'Only .js files (compiled ESM bundles) are allowed.';
   }
 };
-const triggerFileInput = () => fileInput.value?.click();
+const triggerFileInput = () => {
+  errorMessage.value = '';
+  fileInput.value?.click();
+};
 const onFileChange = (e: Event) => {
+  errorMessage.value = '';
   const file = (e.target as HTMLInputElement).files?.[0];
   if (file && file.name.endsWith('.js')) {
     selectedFile.value = file;
   } else if (file) {
-    alert('Only .js files (compiled ESM bundles) are allowed.');
+    errorMessage.value = 'Only .js files (compiled ESM bundles) are allowed.';
   }
 };
 const removeSelectedFile = () => {
   selectedFile.value = null;
+  errorMessage.value = '';
   if (fileInput.value) fileInput.value.value = '';
 };
 const formatBytes = (bytes: number) => {
@@ -56,6 +63,7 @@ const formatBytes = (bytes: number) => {
 const registerVariant = async () => {
   if (!newVariantName.value.trim()) return;
   isSubmitting.value = true;
+  errorMessage.value = '';
   try {
     let newVar;
     if (uploadMode.value === 'file') {
@@ -81,8 +89,9 @@ const registerVariant = async () => {
     newVariantDesc.value = '';
     newVariantAssetUrl.value = '';
     selectedFile.value = null;
+    errorMessage.value = '';
   } catch (err: any) {
-    alert(err.message || 'Failed to register variant.');
+    errorMessage.value = err.message || 'Failed to register variant.';
   } finally {
     isSubmitting.value = false;
   }
@@ -98,6 +107,12 @@ const registerVariant = async () => {
       </div>
 
       <div class="modal-body flex flex-col gap-4">
+        <!-- Error Alert -->
+        <div v-if="errorMessage" class="login-error flex justify-between items-center" style="margin-bottom: 0.5rem;">
+          <span>{{ errorMessage }}</span>
+          <button @click="errorMessage = ''" class="bg-transparent border-0 font-bold text-danger-color cursor-pointer text-sm">&times;</button>
+        </div>
+
         <!-- Toggle Tabs -->
         <div class="flex border-b border-border-color pb-1">
           <button

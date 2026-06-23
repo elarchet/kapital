@@ -71,7 +71,7 @@ def fixture_client(session):
 # Helper to get standard auth headers for a user
 def get_auth_headers(client: TestClient, email: str, password: str = "SeedP@ss1!") -> dict[str, str]:
     response = client.post(
-        "/api/auth/token",
+        "/api/v1/auth/token",
         data={"username": email, "password": password},
     )
     assert response.status_code == status.HTTP_200_OK, response.text
@@ -90,7 +90,7 @@ def test_register_and_login(client: TestClient):
         "email": "testapi@example.com",
         "password": "SecurePassword1!",
     }
-    response = client.post("/api/auth/register", json=register_payload)
+    response = client.post("/api/v1/auth/register", json=register_payload)
     assert response.status_code == status.HTTP_201_CREATED
     data = response.json()
     assert "public_id" in data
@@ -99,12 +99,12 @@ def test_register_and_login(client: TestClient):
     assert "hashed_password" not in data
 
     # Double register must fail
-    response = client.post("/api/auth/register", json=register_payload)
+    response = client.post("/api/v1/auth/register", json=register_payload)
     assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     # Login to obtain token
     login_response = client.post(
-        "/api/auth/token",
+        "/api/v1/auth/token",
         data={"username": "testapi@example.com", "password": "SecurePassword1!"},
     )
     assert login_response.status_code == status.HTTP_200_OK
@@ -114,7 +114,7 @@ def test_register_and_login(client: TestClient):
 
     # Fetch profile (/auth/me)
     headers = {"Authorization": f"Bearer {token_data['access_token']}"}
-    me_response = client.get("/api/auth/me", headers=headers)
+    me_response = client.get("/api/v1/auth/me", headers=headers)
     assert me_response.status_code == status.HTTP_200_OK
     assert me_response.json()["email"] == "testapi@example.com"
 
@@ -138,44 +138,44 @@ def test_portfolio_crud_and_gating(client: TestClient, session: Session):
         "name": "User 1 Portfolio",
         "description": "My first wealth allocation",
     }
-    response = client.post("/api/portfolios/", json=portfolio_payload, headers=headers1)
+    response = client.post("/api/v1/portfolios/", json=portfolio_payload, headers=headers1)
     assert response.status_code == status.HTTP_201_CREATED
     portfolio_data = response.json()
     p1_id = portfolio_data["id"]
     assert portfolio_data["name"] == "User 1 Portfolio"
 
     # User 2 lists portfolios (should be empty for them)
-    response = client.get("/api/portfolios/", headers=headers2)
+    response = client.get("/api/v1/portfolios/", headers=headers2)
     assert response.status_code == status.HTTP_200_OK
     assert len(response.json()) == 0
 
     # User 2 tries to fetch User 1's portfolio (should fail with 404)
-    response = client.get(f"/api/portfolios/{p1_id}", headers=headers2)
+    response = client.get(f"/api/v1/portfolios/{p1_id}", headers=headers2)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
     # User 1 lists portfolios (should have 1 portfolio)
-    response = client.get("/api/portfolios/", headers=headers1)
+    response = client.get("/api/v1/portfolios/", headers=headers1)
     assert response.status_code == status.HTTP_200_OK
     assert len(response.json()) == 1
     assert response.json()[0]["id"] == p1_id
 
     # User 1 updates portfolio
     update_payload = {"name": "User 1 Updated Portfolio Name"}
-    response = client.put(f"/api/portfolios/{p1_id}", json=update_payload, headers=headers1)
+    response = client.put(f"/api/v1/portfolios/{p1_id}", json=update_payload, headers=headers1)
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["name"] == "User 1 Updated Portfolio Name"
 
     # User 2 tries to update User 1's portfolio (should fail)
-    response = client.put(f"/api/portfolios/{p1_id}", json=update_payload, headers=headers2)
+    response = client.put(f"/api/v1/portfolios/{p1_id}", json=update_payload, headers=headers2)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
     # User 1 deletes portfolio
-    response = client.delete(f"/api/portfolios/{p1_id}", headers=headers1)
+    response = client.delete(f"/api/v1/portfolios/{p1_id}", headers=headers1)
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["is_active"] is False
 
     # Portfolio is now inactive, listing should be empty
-    response = client.get("/api/portfolios/", headers=headers1)
+    response = client.get("/api/v1/portfolios/", headers=headers1)
     assert len(response.json()) == 0
 
 
@@ -204,7 +204,7 @@ def test_position_crud_and_gating(client: TestClient, session: Session):
         "currency": "USD",
         "portfolio_id": p1.id,
     }
-    response = client.post("/api/positions/", json=position_payload, headers=h1)
+    response = client.post("/api/v1/positions/", json=position_payload, headers=h1)
     assert response.status_code == status.HTTP_201_CREATED
     pos_data = response.json()
     pos_id = pos_data["id"]
@@ -215,16 +215,16 @@ def test_position_crud_and_gating(client: TestClient, session: Session):
     # User 1 tries to create a position in User 2's portfolio (should fail 404)
     invalid_position_payload = position_payload.copy()
     invalid_position_payload["portfolio_id"] = p2.id
-    response = client.post("/api/positions/", json=invalid_position_payload, headers=h1)
+    response = client.post("/api/v1/positions/", json=invalid_position_payload, headers=h1)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
     # User 2 tries to fetch User 1's position (should fail 404)
-    response = client.get(f"/api/positions/{pos_id}", headers=h2)
+    response = client.get(f"/api/v1/positions/{pos_id}", headers=h2)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
     # User 1 updates position
     update_payload = {"ticker": "AAPL-NEW", "quantity": "12.0"}
-    response = client.put(f"/api/positions/{pos_id}", json=update_payload, headers=h1)
+    response = client.put(f"/api/v1/positions/{pos_id}", json=update_payload, headers=h1)
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["ticker"] == "AAPL-NEW"
     assert Decimal(response.json()["quantity"]) == Decimal("12.0")
@@ -246,7 +246,7 @@ def test_reference_data_crud(client: TestClient, session: Session):
         "country": "US",
         "website": "https://www.interactivebrokers.com",
     }
-    response = client.post("/api/institutions/", json=inst_payload, headers=h)
+    response = client.post("/api/v1/institutions/", json=inst_payload, headers=h)
     assert response.status_code == status.HTTP_201_CREATED
     inst_id = response.json()["id"]
 
@@ -257,7 +257,7 @@ def test_reference_data_crud(client: TestClient, session: Session):
         "currency": "USD",
         "institution_id": inst_id,
     }
-    response = client.post("/api/financial-accounts/", json=acc_payload, headers=h)
+    response = client.post("/api/v1/financial-accounts/", json=acc_payload, headers=h)
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["id"] is not None
     assert response.json()["name"] == "USD Margin Account"
@@ -265,7 +265,7 @@ def test_reference_data_crud(client: TestClient, session: Session):
     # Try creating account for invalid institution
     bad_acc_payload = acc_payload.copy()
     bad_acc_payload["institution_id"] = 99999
-    response = client.post("/api/financial-accounts/", json=bad_acc_payload, headers=h)
+    response = client.post("/api/v1/financial-accounts/", json=bad_acc_payload, headers=h)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -297,7 +297,7 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
         "position_id": position.id,
         "financial_account_id": account.id,
     }
-    response = client.post("/api/operations/", json=buy_payload, headers=h)
+    response = client.post("/api/v1/operations/", json=buy_payload, headers=h)
     assert response.status_code == status.HTTP_201_CREATED
     op_data = response.json()
     assert op_data["operation_type"] == "trade"
@@ -316,13 +316,13 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
         "position_id": position.id,
         "financial_account_id": account.id,
     }
-    response = client.post("/api/operations/", json=limit_buy_bad_payload, headers=h)
+    response = client.post("/api/v1/operations/", json=limit_buy_bad_payload, headers=h)
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
 
     # 3. Successful Limit Buy Operation with limit_price
     limit_buy_good_payload = limit_buy_bad_payload.copy()
     limit_buy_good_payload["limit_price"] = "89.50"
-    response = client.post("/api/operations/", json=limit_buy_good_payload, headers=h)
+    response = client.post("/api/v1/operations/", json=limit_buy_good_payload, headers=h)
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["operation_type"] == "trade"
     assert response.json()["order_type"] == "limit"
@@ -337,7 +337,7 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
         "position_id": position.id,
         "financial_account_id": account.id,
     }
-    response = client.post("/api/operations/", json=div_payload, headers=h)
+    response = client.post("/api/v1/operations/", json=div_payload, headers=h)
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["operation_type"] == "dividend"
     assert Decimal(response.json()["dividend_per_share"]) == Decimal("1.25")
@@ -349,7 +349,7 @@ def test_polymorphic_operation_validation_and_crud(client: TestClient, session: 
 
     intruder_payload = buy_payload.copy()
     intruder_payload["position_id"] = position.id
-    response = client.post("/api/operations/", json=intruder_payload, headers=h2)
+    response = client.post("/api/v1/operations/", json=intruder_payload, headers=h2)
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -403,7 +403,7 @@ def test_import_portfolio_csv_endpoint(client: TestClient, session: Session):
     form_data = {"schema_id": str(schema.id)}
 
     response = client.post(
-        f"/api/portfolios/{portfolio.id}/import",
+        f"/api/v1/portfolios/{portfolio.id}/import",
         headers=headers,
         files=files,
         data=form_data,

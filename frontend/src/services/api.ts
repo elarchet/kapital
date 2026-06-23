@@ -66,7 +66,7 @@ export const api = {
     formData.append('username', email); // OAuth2 password flow expects "username" field mapped to email
     formData.append('password', password);
 
-    const response = await fetch('/api/auth/token', {
+    const response = await fetch('/api/v1/auth/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -107,36 +107,36 @@ export const api = {
 
   // Portfolios CRUD
   async getPortfolios(): Promise<any[]> {
-    return request<any[]>('/api/portfolios/');
+    return request<any[]>('/api/v1/portfolios/');
   },
 
   async getPortfolio(id: number): Promise<any> {
-    return request<any>(`/api/portfolios/${id}`);
+    return request<any>(`/api/v1/portfolios/${id}`);
   },
 
   async createPortfolio(name: string, description: string = ''): Promise<any> {
-    return request<any>('/api/portfolios/', {
+    return request<any>('/api/v1/portfolios/', {
       method: 'POST',
       body: JSON.stringify({ name, description }),
     });
   },
 
   async updatePortfolio(id: number, name: string, description: string = ''): Promise<any> {
-    return request<any>(`/api/portfolios/${id}`, {
+    return request<any>(`/api/v1/portfolios/${id}`, {
       method: 'PUT',
       body: JSON.stringify({ name, description }),
     });
   },
 
   async deletePortfolio(id: number): Promise<any> {
-    return request<any>(`/api/portfolios/${id}`, {
+    return request<any>(`/api/v1/portfolios/${id}`, {
       method: 'DELETE',
     });
   },
 
   // Positions CRUD
   async getPositions(portfolioId?: number): Promise<any[]> {
-    const url = portfolioId !== undefined ? `/api/positions/?portfolio_id=${portfolioId}` : '/api/positions/';
+    const url = portfolioId !== undefined ? `/api/v1/positions/?portfolio_id=${portfolioId}` : '/api/v1/positions/';
     return request<any[]>(url);
   },
 
@@ -149,7 +149,7 @@ export const api = {
     quantity: number;
     currency: string;
   }): Promise<any> {
-    return request<any>('/api/positions/', {
+    return request<any>('/api/v1/positions/', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -164,21 +164,21 @@ export const api = {
     quantity: number;
     currency: string;
   }>): Promise<any> {
-    return request<any>(`/api/positions/${id}`, {
+    return request<any>(`/api/v1/positions/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   },
 
   async deletePosition(id: number): Promise<any> {
-    return request<any>(`/api/positions/${id}`, {
+    return request<any>(`/api/v1/positions/${id}`, {
       method: 'DELETE',
     });
   },
 
   // Import schemas and uploads
   async getImportFileSchemas(): Promise<any[]> {
-    return request<any[]>('/api/import-file-schemas/');
+    return request<any[]>('/api/v1/import-file-schemas/');
   },
 
   async createImportFileSchema(data: {
@@ -189,7 +189,7 @@ export const api = {
     mappings: string;
     is_incomplete?: boolean;
   }): Promise<any> {
-    return request<any>('/api/import-file-schemas/', {
+    return request<any>('/api/v1/import-file-schemas/', {
       method: 'POST',
       body: JSON.stringify(data),
     });
@@ -203,27 +203,27 @@ export const api = {
     mappings: string;
     is_incomplete?: boolean;
   }>): Promise<any> {
-    return request<any>(`/api/import-file-schemas/${id}`, {
+    return request<any>(`/api/v1/import-file-schemas/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   },
 
   async deleteImportFileSchema(id: number): Promise<any> {
-    return request<any>(`/api/import-file-schemas/${id}`, {
+    return request<any>(`/api/v1/import-file-schemas/${id}`, {
       method: 'DELETE',
     });
   },
 
   async detectImportFileSchema(headers: string[]): Promise<any> {
-    return request<any>('/api/import-file-schemas/detect', {
+    return request<any>('/api/v1/import-file-schemas/detect', {
       method: 'POST',
       body: JSON.stringify(headers),
     });
   },
 
   async getImportMetadata(): Promise<any> {
-    return request<any>('/api/portfolios/import-metadata');
+    return request<any>('/api/v1/portfolios/import-metadata');
   },
 
   async importPositions(
@@ -247,7 +247,7 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`/api/portfolios/${portfolioId}/import`, {
+    const response = await fetch(`/api/v1/portfolios/${portfolioId}/import`, {
       method: 'POST',
       headers,
       body: formData,

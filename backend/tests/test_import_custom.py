@@ -183,7 +183,7 @@ def test_update_import_file_schema(client, session):
 
     # Authenticate user 1
     response = client.post(
-        "/api/auth/token",
+        "/api/v1/auth/token",
         data={"username": "user1@example.com", "password": "SeedP@ss1!"},
     )
     assert response.status_code == 200
@@ -221,7 +221,7 @@ def test_update_import_file_schema(client, session):
         "is_incomplete": True,
     }
     response = client.put(
-        f"/api/import-file-schemas/{schema1.id}",
+        f"/api/v1/import-file-schemas/{schema1.id}",
         json=update_data,
         headers=headers1,
     )
@@ -233,7 +233,7 @@ def test_update_import_file_schema(client, session):
 
     # 2. User 1 tries to update User 2's template
     response = client.put(
-        f"/api/import-file-schemas/{schema2.id}",
+        f"/api/v1/import-file-schemas/{schema2.id}",
         json={"name": "Stolen Template"},
         headers=headers1,
     )
@@ -243,7 +243,7 @@ def test_update_import_file_schema(client, session):
     public_schema = session.exec(select(ImportFileSchema).where(ImportFileSchema.is_public)).first()
     assert public_schema is not None
     response = client.put(
-        f"/api/import-file-schemas/{public_schema.id}",
+        f"/api/v1/import-file-schemas/{public_schema.id}",
         json={"name": "Malicious public edit"},
         headers=headers1,
     )

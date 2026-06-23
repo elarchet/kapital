@@ -276,22 +276,22 @@ def test_api_endpoints(client: TestClient, session: Session):
         mock_ticker_cls.return_value = mock_ticker
 
         # 1. Profile Endpoint
-        response = client.get("/api/financial-info/profile/AAPL", headers=headers)
+        response = client.get("/api/v1/financial-info/profile/AAPL", headers=headers)
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["name"] == "Apple Inc."
 
         # 2. Quote Endpoint
-        response = client.get("/api/financial-info/quote/AAPL", headers=headers)
+        response = client.get("/api/v1/financial-info/quote/AAPL", headers=headers)
         assert response.status_code == status.HTTP_200_OK
         assert Decimal(response.json()["price"]) == Decimal("150.50")
 
         # 3. History Endpoint
-        response = client.get("/api/financial-info/history/AAPL?period=1mo&interval=1d", headers=headers)
+        response = client.get("/api/v1/financial-info/history/AAPL?period=1mo&interval=1d", headers=headers)
         assert response.status_code == status.HTTP_200_OK
         assert len(response.json()) == 1
         assert Decimal(response.json()[0]["close"]) == Decimal("151.5")
 
         # 4. Financials Endpoint
-        response = client.get("/api/financial-info/financials/AAPL", headers=headers)
+        response = client.get("/api/v1/financial-info/financials/AAPL", headers=headers)
         assert response.status_code == status.HTTP_200_OK
         assert response.json()["income_statement"][0]["metric"] == "Total Revenue"

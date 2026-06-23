@@ -322,14 +322,14 @@ def test_get_import_metadata(client, session):
     session.refresh(user)
 
     response = client.post(
-        "/api/auth/token",
+        "/api/v1/auth/token",
         data={"username": "import_meta@example.com", "password": "SeedP@ss1!"},
     )
     assert response.status_code == 200
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    response = client.get("/api/portfolios/import-metadata", headers=headers)
+    response = client.get("/api/v1/portfolios/import-metadata", headers=headers)
     assert response.status_code == 200
     data = response.json()
     assert "fields" in data

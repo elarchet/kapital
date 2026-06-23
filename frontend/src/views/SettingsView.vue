@@ -64,13 +64,59 @@ const closeVariantsModal = () => {
   selectedComponent.value = null;
 };
 
+// Dialog and alert states for unified premium components popups
+const popupState = ref<{
+  show: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: 'danger' | 'warning' | 'info' | 'success';
+  hideCancel?: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
+}>({
+  show: false,
+  title: '',
+  message: '',
+});
+
+const triggerPopup = (config: Partial<typeof popupState.value>) => {
+  popupState.value = {
+    show: true,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    variant: 'danger',
+    hideCancel: false,
+    ...config,
+  };
+};
+
+const handlePopupConfirm = () => {
+  popupState.value.show = false;
+  if (popupState.value.onConfirm) popupState.value.onConfirm();
+};
+
+const handlePopupCancel = () => {
+  popupState.value.show = false;
+  if (popupState.value.onCancel) popupState.value.onCancel();
+};
+
 const selectVariant = async (variantId: number) => {
   if (!selectedComponent.value) return;
   try {
     await preferencesStore.setComponentOverride(selectedComponent.value.key, variantId);
     closeVariantsModal();
   } catch (err) {
-    alert('Failed to apply override variant.');
+    triggerPopup({
+      title: 'Override Failed',
+      message: 'Failed to apply the custom component override variant.',
+      confirmText: 'OK',
+      variant: 'danger',
+      hideCancel: true,
+    });
   }
 };
 
@@ -78,7 +124,13 @@ const revertToDefault = async (compKey: string) => {
   try {
     await preferencesStore.revertComponentToDefault(compKey);
   } catch (err) {
-    alert('Failed to revert to default.');
+    triggerPopup({
+      title: 'Revert Failed',
+      message: 'Failed to revert the component to its default fallback.',
+      confirmText: 'OK',
+      variant: 'danger',
+      hideCancel: true,
+    });
   }
 };
 
@@ -87,20 +139,40 @@ const handleUploaded = (newVar: any) => {
   showCreateVariantModal.value = false;
 };
 
-const deleteVariant = async (id: number) => {
-  if (!confirm('Are you sure you want to delete this custom variant?')) return;
-  try {
-    await api.deleteComponentVariant(id);
-    componentVariants.value = componentVariants.value.filter(v => v.id !== id);
-    if (selectedComponent.value) {
-      const active = preferencesStore.getComponentOverride(selectedComponent.value.key);
-      if (active && active.id === id) {
-        preferencesStore.overrides[selectedComponent.value.key] = null;
+const variantToDelete = ref<number | null>(null);
+
+const deleteVariant = (id: number) => {
+  variantToDelete.value = id;
+  triggerPopup({
+    title: 'Delete Variant?',
+    message: 'Are you sure you want to permanently delete this custom component variant extension?',
+    confirmText: 'Delete Variant',
+    cancelText: 'Cancel',
+    variant: 'danger',
+    onConfirm: async () => {
+      if (variantToDelete.value === null) return;
+      try {
+        await api.deleteComponentVariant(variantToDelete.value);
+        componentVariants.value = componentVariants.value.filter(v => v.id !== variantToDelete.value);
+        if (selectedComponent.value) {
+          const active = preferencesStore.getComponentOverride(selectedComponent.value.key);
+          if (active && active.id === variantToDelete.value) {
+            preferencesStore.overrides[selectedComponent.value.key] = null;
+          }
+        }
+      } catch (err: any) {
+        triggerPopup({
+          title: 'Error Deleting Variant',
+          message: err.message || 'An unexpected failure occurred while trying to delete this variant.',
+          confirmText: 'OK',
+          variant: 'danger',
+          hideCancel: true,
+        });
+      } finally {
+        variantToDelete.value = null;
       }
     }
-  } catch (err: any) {
-    alert(err.message || 'Failed to delete variant.');
-  }
+  });
 };
 </script>
 
@@ -212,6 +284,20 @@ const deleteVariant = async (id: number) => {
       :componentName="selectedComponent?.name || ''"
       @close="showCreateVariantModal = false"
       @uploaded="handleUploaded"
+    />
+
+    <!-- Unified Premium Modal / Alert Popup -->
+    <DynamicComponent
+      componentKey="base-confirm-modal"
+      :show="popupState.show"
+      :title="popupState.title"
+      :message="popupState.message"
+      :confirmText="popupState.confirmText"
+      :cancelText="popupState.cancelText"
+      :variant="popupState.variant"
+      :hideCancel="popupState.hideCancel"
+      @confirm="handlePopupConfirm"
+      @cancel="handlePopupCancel"
     />
   </div>
 </template>

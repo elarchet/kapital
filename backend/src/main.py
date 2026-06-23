@@ -49,15 +49,15 @@ app.add_middleware(
 )
 
 # Register routers under the unified /api prefix
-app.include_router(auth.router, prefix="/api")
-app.include_router(portfolio.router, prefix="/api")
-app.include_router(position.router, prefix="/api")
-app.include_router(institution.router, prefix="/api")
-app.include_router(financial_account.router, prefix="/api")
-app.include_router(operation.router, prefix="/api")
-app.include_router(import_file_schema.router, prefix="/api")
-app.include_router(financial_info.router, prefix="/api")
-app.include_router(ui_marketplace.router, prefix="/api")
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(portfolio.router, prefix="/api/v1")
+app.include_router(position.router, prefix="/api/v1")
+app.include_router(institution.router, prefix="/api/v1")
+app.include_router(financial_account.router, prefix="/api/v1")
+app.include_router(operation.router, prefix="/api/v1")
+app.include_router(import_file_schema.router, prefix="/api/v1")
+app.include_router(financial_info.router, prefix="/api/v1")
+app.include_router(ui_marketplace.router, prefix="/api/v1")
 
 # Mount Static Files for component uploads
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
