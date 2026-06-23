@@ -2,20 +2,24 @@ from __future__ import annotations
 
 import csv
 import json
+from decimal import Decimal
 from typing import TYPE_CHECKING, TypedDict
+
+from sqlmodel import select
 
 if TYPE_CHECKING:
     from sqlmodel import Session
 
-from src.crud import import_file_schema_crud, operation_crud
-from src.models import Fee
-from src.schemas.operation import OperationCreate
-from src.services.import_db import (
-    check_duplicate_operation,
-    find_or_create_position,
-    get_or_create_cash_position,
-    get_or_create_institution_and_account,
+from src.crud import import_file_schema_crud
+from src.crud.operation import OPERATION_TYPE_MAP
+from src.models import (
+    AssetType,
+    Fee,
+    Operation,
+    Position,
 )
+from src.schemas.operation import OperationCreate
+from src.services.import_db import get_or_create_institution_and_account
 from src.services.import_parsers import combine_stock_splits
 from src.services.import_row_parser import parse_csv_row
 
@@ -119,113 +123,250 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     parsed_operations.sort(key=lambda o: o["executed_at"])
     processed_ops = combine_stock_splits(parsed_operations)
 
-    # 5. Execute DB insertions and update positions
+    # 5. Load and Cache portfolio Position records in memory
+    positions = db.exec(
+        select(Position).where(
+            Position.portfolio_id == portfolio_id,
+            Position.is_active,
+        ),
+    ).all()
+
+    isin_to_pos = {p.isin: p for p in positions if p.isin}
+    ticker_to_pos = {p.ticker: p for p in positions if p.ticker}
+    name_to_pos = {p.name: p for p in positions if p.name}
+    cash_currency_to_pos = {p.currency: p for p in positions if p.asset_type == AssetType.CASH}
+
+    def get_or_create_position_cached(op_info: dict, *, is_cash_op: bool) -> tuple[Position, bool]:
+        created = False
+        if not is_cash_op:
+            position = None
+            if op_info["isin"]:
+                position = isin_to_pos.get(op_info["isin"])
+            elif op_info["ticker"]:
+                position = ticker_to_pos.get(op_info["ticker"])
+            else:
+                position = name_to_pos.get(op_info["name"])
+
+            if not position:
+                asset_type = AssetType.STOCK
+                lower_name = op_info["name"].lower() if op_info.get("name") else ""
+                if any(term in lower_name for term in ("etf", "ishares", "vanguard", "xtrackers")):
+                    asset_type = AssetType.ETF
+
+                position = Position(
+                    portfolio_id=portfolio_id,
+                    asset_type=asset_type,
+                    ticker=op_info["ticker"],
+                    name=op_info["name"],
+                    isin=op_info["isin"],
+                    quantity=Decimal("0.0"),
+                    currency=op_info["currency"],
+                )
+                db.add(position)
+                # Add to caches immediately
+                if position.isin:
+                    isin_to_pos[position.isin] = position
+                if position.ticker:
+                    ticker_to_pos[position.ticker] = position
+                if position.name:
+                    name_to_pos[position.name] = position
+                created = True
+        else:
+            cash_currency = op_info["currency"]
+            position = cash_currency_to_pos.get(cash_currency)
+
+            if not position:
+                position = Position(
+                    portfolio_id=portfolio_id,
+                    asset_type=AssetType.CASH,
+                    name=f"Cash ({cash_currency})",
+                    quantity=Decimal("0.0"),
+                    currency=cash_currency,
+                )
+                db.add(position)
+                cash_currency_to_pos[cash_currency] = position
+                created = True
+
+        return position, created
+
+    def get_or_create_cash_position_cached(currency: str) -> tuple[Position, bool]:
+        created = False
+        cash_pos = cash_currency_to_pos.get(currency)
+
+        if not cash_pos:
+            cash_pos = Position(
+                portfolio_id=portfolio_id,
+                asset_type=AssetType.CASH,
+                name=f"Cash ({currency})",
+                quantity=Decimal("0.0"),
+                currency=currency,
+            )
+            db.add(cash_pos)
+            cash_currency_to_pos[currency] = cash_pos
+            created = True
+        return cash_pos, created
+
+    def get_model_cls(op_type: str) -> type[Operation]:
+        model_cls = OPERATION_TYPE_MAP.get(op_type)
+        if not model_cls:
+            raise ValueError(f"Unknown operation type: {op_type}")
+        return model_cls
+
+    # 6. Cache existing operation transaction_ids and key tuples for duplicate checks
+    existing_transaction_ids: set[str] = set()
+    existing_op_tuples: set[tuple] = set()
+
+    position_ids = [p.id for p in positions if p.id is not None]
+    if position_ids:
+        existing_ops = db.exec(
+            select(Operation).where(Operation.position_id.in_(position_ids)),
+        ).all()
+        for op in existing_ops:
+            if op.transaction_id:
+                existing_transaction_ids.add(op.transaction_id)
+            existing_op_tuples.add(
+                (op.position_id, op.operation_type, op.executed_at, op.total_amount, op.quantity),
+            )
+
+    # 7. Execute DB insertions and update positions in-memory
     summary: ImportSummary = {
         "positions_created": 0,
         "operations_imported": 0,
         "operations_skipped": 0,
     }
 
-    for op_info in processed_ops:
-        is_cash_op = (
-            op_info["op_type"] in ("interest", "transfer_in", "transfer_out", "expense", "revenue")
-            and not op_info["ticker"]
-        )
-
-        # Find or create Position
-        position, pos_created = find_or_create_position(db, portfolio_id, op_info, is_cash_op=is_cash_op)
-        if pos_created:
-            summary["positions_created"] += 1
-
-        if not position or position.id is None:
-            continue
-
-        # Duplicate check
-        if check_duplicate_operation(db, position.id, op_info):
-            summary["operations_skipped"] += 1
-            continue
-
-        # Create Operation
-        op_in = OperationCreate(
-            operation_type=op_info["op_type"],
-            quantity=op_info["quantity"],
-            unit_price=op_info["unit_price"],
-            price_currency=op_info.get("price_currency"),
-            total_amount=op_info["total_amount"],
-            currency=op_info["currency"],
-            executed_at=op_info["executed_at"],
-            notes=op_info["notes"],
-            position_id=position.id,
-            financial_account_id=financial_account.id,
-            transaction_id=op_info["transaction_id"],
-            exchange_rate=op_info["exchange_rate"],
-            split_ratio=op_info.get("split_ratio"),
-            merchant_name=op_info.get("merchant_name"),
-            merchant_category=op_info.get("merchant_category"),
-            source_reference=op_info.get("source_reference"),
-            destination_reference=op_info.get("destination_reference"),
-            dividend_per_share=op_info.get("dividend_per_share"),
-            limit_price=op_info.get("limit_price"),
-            fee_category=op_info.get("fee_category"),
-            tax_category=op_info.get("tax_category"),
-            source_currency=op_info.get("source_currency"),
-            target_currency=op_info.get("target_currency"),
-            trade_side=op_info.get("trade_side"),
-            order_type=op_info.get("order_type"),
-            order_status=op_info.get("order_status"),
-            stop_price=op_info.get("stop_price"),
-            execution_price=op_info.get("execution_price"),
-            order_placed_at=op_info.get("order_placed_at"),
-            filled_at=op_info.get("filled_at"),
-            expense_category=op_info.get("expense_category"),
-            revenue_category=op_info.get("revenue_category"),
-            payment_method=op_info.get("payment_method"),
-            interest_type=op_info.get("interest_type"),
-        )
-        db_op = operation_crud.create(db, obj_in=op_in)
-
-        # Create Child Fees
-        for fee_in in op_info["fees"]:
-            db_fee = Fee(
-                amount=fee_in.amount,
-                currency=fee_in.currency,
-                fee_type=fee_in.fee_type,
-                notes=fee_in.notes,
-                operation_id=db_op.id,
+    try:
+        for op_info in processed_ops:
+            is_cash_op = (
+                op_info["op_type"] in ("interest", "transfer_in", "transfer_out", "expense", "revenue")
+                and not op_info["ticker"]
             )
-            db.add(db_fee)
 
-        # Update Position quantity
-        is_buy_trade = op_info["op_type"] == "trade" and op_info.get("trade_side") == "buy"
-        is_sell_trade = op_info["op_type"] == "trade" and op_info.get("trade_side") == "sell"
-
-        if is_buy_trade:
-            position.quantity += op_info["quantity"]
-        elif is_sell_trade:
-            position.quantity -= op_info["quantity"]
-        elif op_info["op_type"] == "stock_split":
-            position.quantity += op_info["quantity"]
-        elif is_cash_op:
-            position.quantity += op_info["total_amount"]
-
-        db.add(position)
-
-        # Update Cash Position balance for stock trades/dividends
-        if not is_cash_op:
-            cash_currency = op_info["currency"]
-            cash_pos, cash_created = get_or_create_cash_position(db, portfolio_id, cash_currency)
-            if cash_created:
+            # Find or create Position
+            position, pos_created = get_or_create_position_cached(op_info, is_cash_op=is_cash_op)
+            if pos_created:
                 summary["positions_created"] += 1
 
-            if cash_pos and cash_pos.id is not None:
-                if is_buy_trade:
-                    cash_pos.quantity -= op_info["total_amount"]
-                elif is_sell_trade or op_info["op_type"] == "dividend":
-                    cash_pos.quantity += op_info["total_amount"]
+            if not position:
+                continue
 
-                db.add(cash_pos)
+            # Duplicate check
+            transaction_id = op_info["transaction_id"]
+            if transaction_id:
+                is_duplicate = transaction_id in existing_transaction_ids
+            else:
+                pos_key = (
+                    position.id
+                    if position.id is not None
+                    else (position.ticker, position.isin, position.currency, position.name)
+                )
+                op_tuple = (
+                    pos_key,
+                    op_info["op_type"],
+                    op_info["executed_at"],
+                    op_info["total_amount"],
+                    op_info["quantity"],
+                )
+                is_duplicate = op_tuple in existing_op_tuples
 
+            if is_duplicate:
+                summary["operations_skipped"] += 1
+                continue
+
+            # Create Operation using compressed schema initializer to save code space
+            op_data_dict = {
+                "operation_type": op_info["op_type"],
+                "position_id": 0,  # Dummy value for validation
+                "financial_account_id": financial_account.id,
+                **{k: v for k, v in op_info.items() if k not in ("op_type", "fees", "csv_action")},
+            }
+            op_in = OperationCreate(**op_data_dict)
+
+            model_cls = get_model_cls(op_in.operation_type)
+
+            # Extract data from Pydantic schema
+            obj_data = op_in.model_dump()
+            obj_data.pop("fees", None)
+            obj_data.pop("position_id", None)  # Discard dummy position_id
+
+            # Filter obj_data to only include attributes that are valid for the specific subclass
+            mapper = model_cls.__mapper__
+            valid_keys = set(mapper.attrs.keys())
+            filtered_data = {k: v for k, v in obj_data.items() if k in valid_keys or hasattr(model_cls, k)}
+
+            # Instantiate specific subclass
+            db_op = model_cls(**filtered_data)
+            db_op.position = position  # Link directly to the Position object
+
+            # Convert and attach fees if provided using relationship
+            if op_info["fees"]:
+                db_op.fees = [
+                    Fee(
+                        amount=fee_in.amount,
+                        currency=fee_in.currency,
+                        fee_type=fee_in.fee_type,
+                        notes=fee_in.notes,
+                    )
+                    for fee_in in op_info["fees"]
+                ]
+
+            db.add(db_op)
+
+            # Update Position quantity
+            is_buy_trade = op_info["op_type"] == "trade" and op_info.get("trade_side") == "buy"
+            is_sell_trade = op_info["op_type"] == "trade" and op_info.get("trade_side") == "sell"
+
+            if is_buy_trade:
+                position.quantity += op_info["quantity"]
+            elif is_sell_trade:
+                position.quantity -= op_info["quantity"]
+            elif op_info["op_type"] == "stock_split":
+                position.quantity += op_info["quantity"]
+            elif is_cash_op:
+                position.quantity += op_info["total_amount"]
+
+            db.add(position)
+
+            # Update Cash Position balance for stock trades/dividends
+            if not is_cash_op:
+                cash_currency = op_info["currency"]
+                cash_pos, cash_created = get_or_create_cash_position_cached(cash_currency)
+                if cash_created:
+                    summary["positions_created"] += 1
+
+                if cash_pos:
+                    if is_buy_trade:
+                        cash_pos.quantity -= op_info["total_amount"]
+                    elif is_sell_trade or op_info["op_type"] == "dividend":
+                        cash_pos.quantity += op_info["total_amount"]
+
+                    db.add(cash_pos)
+
+            # Add to duplicate check caches to prevent duplicate processing
+            if transaction_id:
+                existing_transaction_ids.add(transaction_id)
+            else:
+                pos_key = (
+                    position.id
+                    if position.id is not None
+                    else (position.ticker, position.isin, position.currency, position.name)
+                )
+                existing_op_tuples.add(
+                    (
+                        pos_key,
+                        op_info["op_type"],
+                        op_info["executed_at"],
+                        op_info["total_amount"],
+                        op_info["quantity"],
+                    ),
+                )
+
+            summary["operations_imported"] += 1
+
+        # 8. Single batch commit at the very end
         db.commit()
-        summary["operations_imported"] += 1
+    except Exception:
+        db.rollback()
+        raise
 
     return summary

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Layers, Loader, Trash2 } from '@lucide/vue';
+import { Layers, Loader, Trash2, Pencil } from '@lucide/vue';
 
 // Composables & services
 import { useImportWizard } from './useImportWizard';
@@ -127,6 +127,15 @@ const promptDeleteTemplate = () => {
   }
 };
 
+const startEditingSchema = () => {
+  if (selectedSchema.value) {
+    isCustomMapping.value = true;
+    saveMappingTemplate.value = true;
+    mappingTemplateName.value = selectedSchema.value.name;
+    currentStep.value = 1;
+  }
+};
+
 const onConfirmOverwrite = () => {
   showOverwriteConfirm.value = false;
   hasConfirmedOverwrite.value = true;
@@ -147,7 +156,7 @@ const onConfirmOverwrite = () => {
     </template>
 
     <template #body>
-        <div v-if="importError" class="login-error" style="margin-bottom: 0.5rem;">
+        <div v-if="importError" class="login-error mb-2">
           {{ importError }}
         </div>
 
@@ -160,49 +169,57 @@ const onConfirmOverwrite = () => {
 
         <template v-else-if="importFile">
           <div>
-            <div v-if="!isCustomMapping || currentStep === 1" style="display: flex; justify-content: space-between; align-items: center; background-color: var(--bg-tertiary); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 0.75rem;">
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <Layers style="width: 16px; height: 16px; color: var(--accent-color);" />
-                <span style="font-weight: 600; font-size: 0.9rem;">{{ importFile.name }}</span>
-                <span style="font-size: 0.75rem; color: var(--text-secondary);">({{ (importFile.size / 1024).toFixed(1) }} KB)</span>
+            <div v-if="!isCustomMapping || currentStep === 1" class="flex justify-between items-center bg-bg-tertiary py-2 px-3 rounded-sm border border-border-color mb-3">
+              <div class="flex items-center gap-2">
+                <Layers class="w-4 h-4 text-accent" />
+                <span class="text-[0.9rem] font-semibold">{{ importFile.name }}</span>
+                <span class="text-xs text-text-secondary">({{ (importFile.size / 1024).toFixed(1) }} KB)</span>
               </div>
-              <button @click="requestClose" style="background: none; border: none; color: var(--color-danger); cursor: pointer; font-size: 0.8rem; font-weight: 600;">Remove</button>
+              <button @click="requestClose" class="bg-transparent border-none text-danger-color cursor-pointer text-[0.8rem] font-semibold">Remove</button>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%;">
+            <div class="flex flex-col gap-3 w-full">
               <div>
                 <!-- Template select -->
-                <div v-if="!isCustomMapping || currentStep === 1" class="form-group !mb-3" style="max-width: 450px;">
+                <div v-if="!isCustomMapping || currentStep === 1" class="form-group !mb-3 max-w-[450px]">
                   <label>Template Schema</label>
-                  <div style="display: flex; gap: 0.5rem; align-items: stretch; margin-bottom: 0.25rem;">
-                    <div style="flex: 1; min-width: 0;">
+                  <div class="flex gap-2 items-stretch mb-1">
+                    <div class="flex-1 min-w-0">
                       <DynamicComponent
                         componentKey="custom-dropdown"
                         v-model="selectedSchemaIdString"
                         :options="schemaOptions"
                         placeholder="Select schema template..."
                         label=""
-                        style="margin-bottom: 0;"
+                        class="mb-0"
                       />
                     </div>
                     <button
                       v-if="selectedSchema && !selectedSchema.is_public"
+                      @click="startEditingSchema"
+                      type="button"
+                      class="btn !py-0 !px-3 shrink-0 mr-1"
+                      title="Edit this template"
+                    >
+                      <Pencil class="w-4 h-4 text-accent" />
+                    </button>
+                    <button
+                      v-if="selectedSchema && !selectedSchema.is_public"
                       @click="promptDeleteTemplate"
                       type="button"
-                      class="btn"
+                      class="btn !py-0 !px-3 shrink-0"
                       title="Delete this template"
-                      style="padding: 0 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--border-color); background-color: var(--bg-secondary);"
                     >
-                      <Trash2 style="width: 16px; height: 16px; color: var(--color-danger);" />
+                      <Trash2 class="w-4 h-4 text-danger-color" />
                     </button>
                   </div>
-                  <p v-if="autodetectedSchemaId && selectedSchemaId === autodetectedSchemaId" style="font-size: 0.75rem; color: var(--color-success); margin-top: 0.25rem; font-weight: 500;">
+                  <p v-if="autodetectedSchemaId && selectedSchemaId === autodetectedSchemaId" class="text-xs text-success-color mt-1 font-medium">
                     ✓ Autodetected format matching this file
                   </p>
                 </div>
 
                 <!-- Custom mapping builder form -->
-                <div v-if="isCustomMapping" style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; margin-top: 0.5rem; background-color: var(--bg-primary);">
+                <div v-if="isCustomMapping" class="border border-border-color rounded-sm p-3 mt-2 bg-bg-primary">
                   
                   <!-- STEP 1: Delimiter & OpType mapping -->
                   <Step1DelimiterMapping
@@ -262,11 +279,10 @@ const onConfirmOverwrite = () => {
         <button 
           v-if="!importSuccessSummary && isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
           @click="handleImport"
-          class="btn btn-sm btn-primary"
+          class="btn btn-sm btn-primary !bg-warning-color !border-warning-color !text-white"
           :disabled="isImporting || !mappingTemplateName.trim()"
-          style="background-color: var(--color-warning); border-color: var(--color-warning); color: white;"
         >
-          <Loader v-if="isImporting" style="animation: spin 1.5s linear infinite; width: 14px; height: 14px;" />
+          <Loader v-if="isImporting" class="w-3.5 h-3.5 animate-spin" />
           <span v-if="isImporting">Saving template...</span>
           <span v-else>Save Incomplete Template</span>
         </button>
@@ -276,7 +292,7 @@ const onConfirmOverwrite = () => {
           class="btn btn-sm btn-primary" 
           :disabled="isImporting || !importFile || (isCustomMapping && !isValidCustomMapping) || (isCustomMapping && saveMappingTemplate && !mappingTemplateName.trim())"
         >
-          <Loader v-if="isImporting" style="animation: spin 1.5s linear infinite; width: 14px; height: 14px;" />
+          <Loader v-if="isImporting" class="w-3.5 h-3.5 animate-spin" />
           <span v-if="isImporting">Importing data...</span>
           <span v-else-if="isCustomMapping && saveMappingTemplate">Save Template & Import</span>
           <span v-else>Import Transactions</span>

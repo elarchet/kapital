@@ -2,13 +2,14 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../../services/api';
 import { useSchemaManagement } from './useSchemaManagement';
 import { useWizardMapping } from './useWizardMapping';
+import { useImportFileProcessor } from './useImportFileProcessor';
+import { useImportExecutor } from './useImportExecutor';
 import {
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
   validateLiveStats,
   parsePreviewRows,
   getValidationErrors,
   parseSchemaMappings,
-  parseCsvText,
   groupRowsByOpType
 } from '../../services/import';
 
@@ -18,43 +19,50 @@ interface Portfolio {
 }
 
 export function useImportWizard(props: { portfolio: Portfolio; initialFile?: File | null }, emit: any) {
-  // Leverage sub-composables
-  const schemaMgmt = useSchemaManagement();
-
-  // UI States
+  // Shared state refs
   const importFile = ref<File | null>(null);
   const fileText = ref('');
   const importFileHeaders = ref<string[]>([]);
+  const allRawRows = ref<string[][]>([]);
+  
   const isCustomMapping = ref(false);
-  const isImporting = ref(false);
-  const importError = ref('');
-  const importSuccessSummary = ref<any>(null);
-
-  // Mappings configuration
   const mappingTemplateName = ref('');
   const saveMappingTemplate = ref(false);
   const importDelimiter = ref(',');
   const importDecimalSep = ref('.');
 
-  // Dynamic metadata & row parsing state
   const importFields = ref<any[]>([]);
-  const allRawRows = ref<string[][]>([]);
   const currentStep = ref(1);
 
-  // Step 1: Operation type column and value mapping
   const operationTypeColumnIdx = ref<number | null>(null);
   const operationTypeMappings = ref<Record<string, string>>({});
 
-  // Step 2: Column configs
   const columnConfigMap = ref<Record<string, any>>({});
   const uiColumns = ref<Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>>([]);
 
-  // Confirmations
   const showExitConfirm = ref(false);
-  const showOverwriteConfirm = ref(false);
-  const hasConfirmedOverwrite = ref(false);
-
   const isDirty = computed(() => importFile.value !== null);
+
+  // Configuration helpers
+  const initializeConfigs = () => {
+    uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
+    columnConfigMap.value = {};
+    uiColumns.value.forEach(col => {
+      columnConfigMap.value[col.id] = { typeSpecific: {} };
+    });
+    operationTypeMappings.value = {};
+    operationTypeColumnIdx.value = null;
+    currentStep.value = 1;
+  };
+
+  const handleColumnChange = () => {
+    operationTypeMappings.value = {};
+    uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
+    columnConfigMap.value = {};
+    uiColumns.value.forEach(col => {
+      columnConfigMap.value[col.id] = { typeSpecific: {} };
+    });
+  };
 
   const onSchemaSelect = () => {
     if (schemaMgmt.selectedSchemaId.value === -1) {
@@ -75,7 +83,6 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         const parsed = parseSchemaMappings(schema.mappings, importFileHeaders.value);
         operationTypeColumnIdx.value = parsed.operationTypeColumnIdx;
         
-        // Normalize operationTypeMappings casing to match uniqueOperationTypes of this CSV file
         const normalizedMappings: Record<string, string> = {};
         if (parsed.operationTypeColumnIdx !== null) {
           const uniqueSet = new Set<string>();
@@ -104,30 +111,14 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         operationTypeMappings.value = normalizedMappings;
         columnConfigMap.value = parsed.columnConfigMap;
         uiColumns.value = parsed.uiColumns;
+      } else {
+        isCustomMapping.value = true;
+        initializeConfigs();
       }
     }
   };
 
-  const initializeConfigs = () => {
-    uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
-    columnConfigMap.value = {};
-    uiColumns.value.forEach(col => {
-      columnConfigMap.value[col.id] = { typeSpecific: {} };
-    });
-    operationTypeMappings.value = {};
-    operationTypeColumnIdx.value = null;
-    currentStep.value = 1;
-  };
-
-  const handleColumnChange = () => {
-    operationTypeMappings.value = {};
-    uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
-    columnConfigMap.value = {};
-    uiColumns.value.forEach(col => {
-      columnConfigMap.value[col.id] = { typeSpecific: {} };
-    });
-  };
-
+  // Computeds
   const uniqueOperationTypes = computed(() => {
     if (operationTypeColumnIdx.value === null) return [];
     const uniqueSet = new Set<string>();
@@ -163,17 +154,6 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const matchingRowsByType = computed(() => {
     return groupRowsByOpType(allRawRows.value, operationTypeColumnIdx.value, operationTypeMappings.value);
   });
-
-  // Wizard Mapping sub-composable
-  const wizardMapping = useWizardMapping(
-    uiColumns,
-    columnConfigMap,
-    importFileHeaders,
-    matchingRowsByType,
-    matchingRowsByRawAction,
-    allRawRows,
-    operationTypeMappings
-  );
 
   const liveValidationStats = computed(() => {
     return validateLiveStats({
@@ -229,177 +209,57 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     });
   };
 
-  const processFile = async (file: File) => {
-    importFile.value = file;
-    importError.value = '';
-    importSuccessSummary.value = null;
+  // Sub-composables orchestration
+  const schemaMgmt = useSchemaManagement();
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      fileText.value = text;
-      
-      const parsed = parseCsvText(text);
-      if (parsed.headers.length > 0) {
-        importDelimiter.value = parsed.delimiter;
-        importFileHeaders.value = parsed.headers;
-        uiColumns.value = parsed.headers.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
-        allRawRows.value = parsed.rawRows;
-        currentStep.value = 1;
+  const wizardMapping = useWizardMapping(
+    uiColumns,
+    columnConfigMap,
+    importFileHeaders,
+    matchingRowsByType,
+    matchingRowsByRawAction,
+    allRawRows,
+    operationTypeMappings
+  );
 
-        try {
-          const detectRes = await api.detectImportFileSchema(parsed.headers);
-          if (detectRes.schema_id) {
-            schemaMgmt.autodetectedSchemaId.value = detectRes.schema_id;
-            schemaMgmt.selectedSchemaId.value = detectRes.schema_id;
-            isCustomMapping.value = false;
-            onSchemaSelect();
-          } else {
-            schemaMgmt.autodetectedSchemaId.value = null;
-            schemaMgmt.selectedSchemaId.value = null;
-            isCustomMapping.value = true;
-            initializeConfigs();
-          }
-        } catch (err: any) {
-          console.error('Failed to autodetect schema:', err);
-          isCustomMapping.value = true;
-          initializeConfigs();
-        }
-      }
-    };
-    reader.readAsText(file);
-  };
+  const executor = useImportExecutor({
+    portfolio: props.portfolio,
+    importFile,
+    selectedSchemaId: schemaMgmt.selectedSchemaId,
+    availableSchemas: schemaMgmt.availableSchemas,
+    loadSchemas: schemaMgmt.loadSchemas,
+    isCustomMapping,
+    saveMappingTemplate,
+    mappingTemplateName,
+    isValidCustomMapping,
+    importDelimiter,
+    importDecimalSep,
+    buildCustomMappingPayload,
+    initializeConfigs,
+    schemaDeleteTemplate: schemaMgmt.handleDeleteTemplate,
+    emit,
+  });
 
-  const handleImport = async () => {
-    if (!importFile.value || !props.portfolio.id) return;
-    isImporting.value = true;
-    importError.value = '';
-    importSuccessSummary.value = null;
+  const { processFile } = useImportFileProcessor({
+    importFile,
+    fileText,
+    importFileHeaders,
+    allRawRows,
+    importDelimiter,
+    uiColumns,
+    currentStep,
+    autodetectedSchemaId: schemaMgmt.autodetectedSchemaId,
+    selectedSchemaId: schemaMgmt.selectedSchemaId,
+    isCustomMapping,
+    importError: executor.importError,
+    importSuccessSummary: executor.importSuccessSummary,
+    onSchemaSelect,
+    initializeConfigs,
+  });
 
-    try {
-      let finalSchemaId = schemaMgmt.selectedSchemaId.value;
-
-      if (isCustomMapping.value && saveMappingTemplate.value && mappingTemplateName.value.trim()) {
-        const existingSchema = schemaMgmt.availableSchemas.value.find(
-          s => s.name.trim().toLowerCase() === mappingTemplateName.value.trim().toLowerCase()
-        );
-
-        if (existingSchema) {
-          if (existingSchema.is_public || existingSchema.user_id === null) {
-            throw new Error(`A public template named "${existingSchema.name}" already exists. Please choose a unique name.`);
-          }
-          if (!hasConfirmedOverwrite.value) {
-            showOverwriteConfirm.value = true;
-            isImporting.value = false;
-            return;
-          }
-        }
-      }
-
-      const overwriteConfirmed = hasConfirmedOverwrite.value;
-      hasConfirmedOverwrite.value = false;
-
-      if (isCustomMapping.value) {
-        if (!isValidCustomMapping.value) {
-          if (saveMappingTemplate.value && mappingTemplateName.value.trim()) {
-            const mappingConfig = buildCustomMappingPayload();
-            const templateData = {
-              name: mappingTemplateName.value.trim(),
-              is_public: false,
-              delimiter: importDelimiter.value,
-              decimal_separator: importDecimalSep.value,
-              mappings: JSON.stringify(mappingConfig),
-              is_incomplete: true,
-            };
-
-            if (overwriteConfirmed) {
-              const existingSchema = schemaMgmt.availableSchemas.value.find(
-                s => s.name.trim().toLowerCase() === mappingTemplateName.value.trim().toLowerCase()
-              );
-              if (existingSchema) {
-                await api.updateImportFileSchema(existingSchema.id, templateData);
-              }
-            } else {
-              await api.createImportFileSchema(templateData);
-            }
-            
-            importSuccessSummary.value = {
-              positions_created: 0,
-              operations_imported: 0,
-              operations_skipped: 0,
-              is_template_only: true,
-            };
-            schemaMgmt.loadSchemas();
-            emit('success');
-            return;
-          } else {
-            throw new Error('Please fix the validation errors before importing.');
-          }
-        }
-        const mappingConfig = buildCustomMappingPayload();
-
-        if (saveMappingTemplate.value && mappingTemplateName.value.trim()) {
-          const templateData = {
-            name: mappingTemplateName.value.trim(),
-            is_public: false,
-            delimiter: importDelimiter.value,
-            decimal_separator: importDecimalSep.value,
-            mappings: JSON.stringify(mappingConfig),
-            is_incomplete: false,
-          };
-
-          let savedSchema;
-          if (overwriteConfirmed) {
-            const existingSchema = schemaMgmt.availableSchemas.value.find(
-              s => s.name.trim().toLowerCase() === mappingTemplateName.value.trim().toLowerCase()
-            );
-            if (existingSchema) {
-              savedSchema = await api.updateImportFileSchema(existingSchema.id, templateData);
-            } else {
-              savedSchema = await api.createImportFileSchema(templateData);
-            }
-          } else {
-            savedSchema = await api.createImportFileSchema(templateData);
-          }
-          finalSchemaId = savedSchema.id;
-        } else {
-          const res = await api.importPositions(
-            props.portfolio.id,
-            importFile.value,
-            null,
-            {
-              mappings: mappingConfig,
-              delimiter: importDelimiter.value,
-              decimal_separator: importDecimalSep.value,
-            }
-          );
-          importSuccessSummary.value = res;
-          emit('success');
-          return;
-        }
-      }
-
-      if (finalSchemaId) {
-        const res = await api.importPositions(props.portfolio.id, importFile.value, finalSchemaId, null);
-        importSuccessSummary.value = res;
-        emit('success');
-      }
-    } catch (err: any) {
-      importError.value = err.message || 'Import failed.';
-    } finally {
-      isImporting.value = false;
-    }
-  };
-
-  const handleDeleteTemplateWrapper = async () => {
-    const res = await schemaMgmt.handleDeleteTemplate();
-    if (res && !res.success) {
-      importError.value = res.error || 'Failed to delete template.';
-    }
-  };
-
+  // Watchers & Life Cycle
   const requestClose = () => {
-    if (isDirty.value && !importSuccessSummary.value) {
+    if (isDirty.value && !executor.importSuccessSummary.value) {
       showExitConfirm.value = true;
     } else {
       emit('close');
@@ -464,10 +324,10 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     selectedSchemaId: schemaMgmt.selectedSchemaId,
     autodetectedSchemaId: schemaMgmt.autodetectedSchemaId,
     selectedSchema: schemaMgmt.selectedSchema,
-    selectedSchemaIdString: selectedSchemaIdString,
+    selectedSchemaIdString,
     showDeleteConfirm: schemaMgmt.showDeleteConfirm,
     isDeletingSchema: schemaMgmt.isDeletingSchema,
-    handleDeleteTemplate: handleDeleteTemplateWrapper,
+    handleDeleteTemplate: executor.handleDeleteTemplateWrapper,
 
     isWizardOpen: wizardMapping.isWizardOpen,
     wizardCsvHeaderName: wizardMapping.wizardCsvHeaderName,
@@ -494,9 +354,9 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     fileText,
     importFileHeaders,
     isCustomMapping,
-    isImporting,
-    importError,
-    importSuccessSummary,
+    isImporting: executor.isImporting,
+    importError: executor.importError,
+    importSuccessSummary: executor.importSuccessSummary,
     mappingTemplateName,
     saveMappingTemplate,
     importDelimiter,
@@ -509,13 +369,13 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     columnConfigMap,
     uiColumns,
     showExitConfirm,
-    showOverwriteConfirm,
-    hasConfirmedOverwrite,
+    showOverwriteConfirm: executor.showOverwriteConfirm,
+    hasConfirmedOverwrite: executor.hasConfirmedOverwrite,
     isDirty,
     panelWidth,
     onSchemaSelect,
     processFile,
-    handleImport,
+    handleImport: executor.handleImport,
     requestClose,
     validationErrors,
     isValidCustomMapping,
