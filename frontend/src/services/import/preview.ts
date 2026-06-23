@@ -22,7 +22,7 @@ export function parsePreviewRows(params: {
       const hasSpecific = conf.typeSpecific[opType] !== undefined;
       if (hasSpecific && conf.typeSpecific[opType].dbKey === fieldKey) {
         foundConf = conf.typeSpecific[opType];
-      } else if (!hasSpecific && conf.global.dbKey === fieldKey) {
+      } else if (!hasSpecific && conf.global?.dbKey === fieldKey) {
         foundConf = conf.global;
       }
     });
