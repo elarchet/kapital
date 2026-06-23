@@ -33,5 +33,10 @@ This skill governs DB schemas, relationships, session management, and validation
   # db: Annotated[AsyncSession, Depends(get_db_session)]
   ```
 
-## 3. Database Migrations
+## 3. Bulk Operations & Performance
+- **Batch Commits**: Avoid performing database commits (`db.commit()`) or database queries inside a loop during data ingestion (e.g., import wizard). This degrades database performance.
+- **Transactional Consistency**: Perform all mutations within a single transaction block and execute a single batch `db.commit()` at the very end, wrapped in a `try/except` block with a `db.rollback()` on error.
+- **In-Memory Caching**: Use dictionary caches to store references of existing entities (e.g., pre-fetched Positions, transaction IDs) during bulk operations to prevent N+1 select queries.
+
+## 4. Database Migrations
 - For detailed migration commands and lifecycle procedures, refer to [alembic_migrations.md](file://./references/alembic_migrations.md).

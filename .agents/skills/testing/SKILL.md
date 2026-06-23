@@ -11,6 +11,7 @@ This skill details how to write and execute unit and integration tests.
 - Use `pytest` and `pytest-asyncio` for all backend code.
 - Focus on testing logic and service layers independently of the DB where possible, or use SQLite in-memory for DB tests.
 - Target 100% test coverage for all financial calculation modules (`backend/src/services/` or `backend/src/logic/`).
+- **Test Suite Splitting**: Strictly respect the ~400-line budget limit for all test files (e.g., `test_*.py`). Split large test files into focused feature tests (e.g., `test_import_custom.py`) to keep files highly readable, maintainable, and within line budget limits.
 
 ## 2. Test Data Generation
 - Use `factory_boy` and `factory.Faker` to generate mock data dynamically.

@@ -20,3 +20,7 @@ This skill governs the development of the frontend single-page application (SPA)
 ## 3. Subfolder Organization
 - Avoid flat components directories. Place related components in logical subdirectories (e.g., `components/import/`, `components/portfolio/`).
 - Never exceed ~400 lines in any Vue component.
+
+## 4. Defensive Rendering & Orchestration
+- **Optional Chaining**: When rendering dynamic rows, custom templates, or preview tables where keys/columns or data might be missing, always use optional chaining (`?.`) or fallback checks.
+- **Composables Orchestration**: For complex UI panels or wizards (like the import wizard), do not pack all logic into a single component or hook. Separate concerns by orchestrating multiple focused sub-composables (e.g., separating executor, parser/processor, and UI mapping wizards) from the parent view/component.
