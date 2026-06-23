@@ -181,6 +181,8 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         destination_reference = notes or "CSV Import"
 
     dividend_per_share = unit_price if op_type == "dividend" else None
+    if op_type == "dividend" and dividend_per_share is None:
+        dividend_per_share = Decimal("0.0")
 
     # Trade resolution
     if op_type == "trade":
@@ -253,6 +255,19 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
             if fa_str:
                 fa_fmt = get_date_format(date_formats, "filled_at", op_type, csv_action)
                 filled_at = parse_datetime_safe(fa_str, fa_fmt)
+
+    interest_type = None
+    if op_type == "interest":
+        it_col = get_mapped_col(columns, "interest_type", op_type, csv_action)
+        raw_it = row.get(it_col).strip() if (it_col and row.get(it_col)) else None
+        if raw_it:
+            it_mappings = schema_mappings.get("enum_mappings", {}).get("interest_type", {})
+            for key, val_list in it_mappings.items():
+                if raw_it in val_list or raw_it == key:
+                    interest_type = key
+                    break
+        if not interest_type:
+            interest_type = "cash_interest"
 
     expense_category = None
     revenue_category = None
@@ -375,4 +390,5 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         "expense_category": expense_category,
         "revenue_category": revenue_category,
         "payment_method": payment_method,
+        "interest_type": interest_type,
     }

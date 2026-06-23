@@ -13,7 +13,7 @@ from sqlmodel import Session, SQLModel, select
 
 from src.database import get_session
 from src.main import app
-from src.models import AssetType, FeeType, Operation, Portfolio, Position, User
+from src.models import AssetType, FeeType, InterestType, Operation, Portfolio, Position, User
 from src.models.base import SABase
 from src.models.import_file_schema import ImportFileSchema
 from src.services.import_service import autodetect_schema, import_portfolio_transactions
@@ -59,17 +59,25 @@ def fixture_engine():
                 "tax_currency": "Currency (Withholding tax)",
                 "merchant_name": "Merchant name",
                 "merchant_category": "Merchant category",
+                "interest_type": "Action",
             },
             "type_mappings": {
                 "buy": ["Market buy", "Limit buy", "Stock split open"],
                 "sell": ["Market sell", "Limit sell", "Stock split close"],
-                "dividend": ["Dividend (Dividend)", "Dividend (Dividend manufactured payment)"],
+                "dividend": ["Dividend (Dividend)", "Dividend (Dividend manufactured payment)", "Dividend adjustment"],
                 "interest": ["Interest on cash", "Lending interest", "Spending cashback"],
                 "transfer_in": ["Deposit"],
                 "transfer_out": ["Withdrawal"],
                 "expense": ["Card debit"],
                 "revenue": ["Card credit"],
                 "fx_rate_change": ["Currency conversion"],
+            },
+            "enum_mappings": {
+                "interest_type": {
+                    "cash_interest": ["Interest on cash"],
+                    "lending_interest": ["Lending interest"],
+                    "cashback": ["Spending cashback"],
+                },
             },
             "scaling": {
                 "unit_price": {
@@ -162,7 +170,7 @@ def test_import_portfolio_transactions(session):  # noqa: PLR0915
     assert schema.id is not None
 
     # Read the actual CSV file
-    csv_path = Path("../from_2026-01-01_to_2026-05-25_MTc3OTczMDI0NzIwNw.csv")
+    csv_path = Path(__file__).parent.parent.parent / "from_2026-01-01_to_2026-05-25_MTc3OTczMDI0NzIwNw.csv"
     assert csv_path.exists(), f"CSV file not found at {csv_path}"
 
     file_content = csv_path.read_bytes()
@@ -278,6 +286,34 @@ def test_import_portfolio_transactions(session):  # noqa: PLR0915
     assert amazon_op.merchant_category == "RETAIL_STORES"
     assert amazon_op.total_amount == Decimal("31.20")
     assert amazon_op.currency == "EUR"
+
+    # 6. Check Interest operations are imported with correct types
+    interest_ops = session.exec(select(Operation).where(Operation.operation_type == "interest")).all()
+    assert len(interest_ops) > 0
+
+    # Line 2: Interest on cash -> cash_interest
+    cash_interest_op = next(
+        (o for o in interest_ops if o.transaction_id == "7e830324-42b5-4bb0-bee9-56d12d3c591c"),
+        None,
+    )
+    assert cash_interest_op is not None
+    assert cash_interest_op.interest_type == InterestType.CASH_INTEREST
+    assert cash_interest_op.total_amount == Decimal("0.02")
+
+    # Line 3: Lending interest -> lending_interest
+    lending_interest_op = next(
+        (o for o in interest_ops if o.transaction_id == "d9700e57-3f5f-4389-99fb-231eb592fea3"),
+        None,
+    )
+    assert lending_interest_op is not None
+    assert lending_interest_op.interest_type == InterestType.LENDING_INTEREST
+    assert lending_interest_op.total_amount == Decimal("0.01")
+
+    # Line 9: Spending cashback -> cashback
+    cashback_op = next((o for o in interest_ops if o.transaction_id == "7a0f01e5-1075-4731-91b6-a71fa4e3d7a8"), None)
+    assert cashback_op is not None
+    assert cashback_op.interest_type == InterestType.CASHBACK
+    assert cashback_op.total_amount == Decimal("0.06")
 
 
 def test_get_import_metadata(client, session):
@@ -435,3 +471,45 @@ def test_update_import_file_schema(client, session):
         headers=headers1,
     )
     assert response.status_code == 404
+
+
+def test_import_dividend_without_price_per_share(session):
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "total_amount": "Total",
+            "currency": "Currency",
+            "quantity": "Qty",
+        },
+        "type_mappings": {
+            "dividend": ["DIV"],
+        },
+        "date_formats": {
+            "executed_at": "%Y-%m-%d %H:%M:%S",
+        },
+    }
+
+    csv_content = b"Type,Date,Asset,Total,Currency,Qty\nDIV,2026-06-01 15:30:00,Apple,50.0,USD,10\n"
+
+    summary = import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["operations_imported"] == 1
+    op = session.exec(select(Operation).where(Operation.operation_type == "dividend")).first()
+    assert op is not None
+    assert op.dividend_per_share == Decimal("0.0")

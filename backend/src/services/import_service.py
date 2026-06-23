@@ -180,6 +180,7 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             expense_category=op_info.get("expense_category"),
             revenue_category=op_info.get("revenue_category"),
             payment_method=op_info.get("payment_method"),
+            interest_type=op_info.get("interest_type"),
         )
         db_op = operation_crud.create(db, obj_in=op_in)
 
@@ -193,7 +194,6 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 operation_id=db_op.id,
             )
             db.add(db_fee)
-            db.commit()
 
         # Update Position quantity
         is_buy_trade = op_info["op_type"] == "trade" and op_info.get("trade_side") == "buy"
@@ -209,7 +209,6 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             position.quantity += op_info["total_amount"]
 
         db.add(position)
-        db.commit()
 
         # Update Cash Position balance for stock trades/dividends
         if not is_cash_op:
@@ -225,8 +224,8 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                     cash_pos.quantity += op_info["total_amount"]
 
                 db.add(cash_pos)
-                db.commit()
 
+        db.commit()
         summary["operations_imported"] += 1
 
     return summary
