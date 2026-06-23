@@ -167,6 +167,18 @@ onBeforeUnmount(() => {
         </router-link>
       </template>
 
+      <!-- Separate entry for Unassigned Holdings fallback pool -->
+      <router-link 
+        v-if="store.hasUnassignedPositions"
+        to="/portfolio/unassigned"
+        class="nav-link mt-2 border border-dashed border-[var(--border-color)] rounded-md hover:bg-bg-tertiary transition-colors"
+        :class="{ active: route.path === '/portfolio/unassigned' }"
+        title="Unassigned Holdings"
+      >
+        <Folder class="nav-icon text-amber-500" />
+        <span v-show="!store.sidebarCollapsed" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary);">Unassigned Holdings</span>
+      </router-link>
+
       <!-- Collapsed Add Portfolio Action -->
       <button 
         v-if="store.sidebarCollapsed"

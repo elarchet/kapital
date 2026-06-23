@@ -75,7 +75,9 @@ const handleDeletePosition = async (id: number) => {
 
 const getPortfolioName = (id: number) => {
   const p = store.portfolios.find(item => item.id === id);
-  return p ? p.name : 'Unknown';
+  if (p) return p.name;
+  const isUnassigned = store.positions.some(pos => pos.portfolio_id === id);
+  return isUnassigned ? 'Unassigned Holdings' : 'Unknown';
 };
 </script>
 

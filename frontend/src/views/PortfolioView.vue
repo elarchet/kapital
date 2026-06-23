@@ -38,13 +38,29 @@ const onFileSelected = (e: Event) => {
   }
 };
 
-const portfolioId = computed(() => Number(route.params.id));
+const portfolioId = computed(() => {
+  const idParam = route.params.id;
+  if (idParam === 'unassigned') return 'unassigned';
+  return Number(idParam);
+});
 
 const portfolio = computed(() => {
+  if (portfolioId.value === 'unassigned') {
+    return {
+      id: 'unassigned' as any,
+      name: 'Unassigned Holdings',
+      description: 'Default pool for positions from deleted strategy folders',
+      created_at: new Date().toISOString(),
+    };
+  }
   return store.portfolios.find(p => p.id === portfolioId.value);
 });
 
 const portfolioPositions = computed(() => {
+  if (portfolioId.value === 'unassigned') {
+    const activeIds = new Set(store.portfolios.map(p => p.id));
+    return store.computedPositions.filter(pos => !activeIds.has(pos.portfolio_id));
+  }
   return store.computedPositions.filter(pos => pos.portfolio_id === portfolioId.value);
 });
 
@@ -129,6 +145,15 @@ const confirmDeletePortfolio = async () => {
     alert(err.message || 'Failed to delete portfolio.');
   }
 };
+
+const handleMovePosition = async (posId: number, targetPortfolioId: number) => {
+  if (!targetPortfolioId) return;
+  try {
+    await store.movePosition(posId, targetPortfolioId);
+  } catch (err: any) {
+    alert(err.message || 'Failed to move position.');
+  }
+};
 </script>
 
 <template>
@@ -169,11 +194,12 @@ const confirmDeletePortfolio = async () => {
             <p>{{ portfolio.description || 'Custom asset strategy plan' }}</p>
           </div>
           <div style="display: flex; gap: 0.75rem;">
-            <button @click="handleDeletePortfolio" class="btn btn-danger" title="Delete Portfolio">
+            <button v-if="portfolioId !== 'unassigned'" @click="handleDeletePortfolio" class="btn btn-danger" title="Delete Portfolio">
               <Trash2 style="width: 16px; height: 16px;" />
               <span>Delete Strategy</span>
             </button>
             <DynamicComponent 
+              v-if="portfolioId !== 'unassigned'"
               componentKey="add-position-button"
               @open-manual="showCreatePosModal = true" 
               @open-import="triggerImportFile" 
@@ -280,6 +306,7 @@ const confirmDeletePortfolio = async () => {
                     <th>Quantity</th>
                     <th>Est. Unit Price</th>
                     <th>Current Value</th>
+                    <th v-if="portfolioId === 'unassigned'">Assign to Strategy</th>
                     <th style="width: 50px;"></th>
                   </tr>
                 </thead>
@@ -303,6 +330,17 @@ const confirmDeletePortfolio = async () => {
                     <td style="font-family: monospace;">{{ formatCurrency(pos.estimated_price || 0, pos.currency) }}</td>
                     <td style="font-weight: 600; font-family: monospace;">
                       {{ formatCurrency(pos.estimated_value || 0, pos.currency) }}
+                    </td>
+                    <td v-if="portfolioId === 'unassigned'">
+                      <select 
+                        @change="handleMovePosition(pos.id, Number(($event.target as HTMLSelectElement).value))"
+                        class="bg-bg-tertiary border border-border-color rounded text-xs px-2 py-1 text-text-primary focus:outline-none focus:border-accent-color cursor-pointer max-w-[180px]"
+                      >
+                        <option value="" disabled selected>Select active strategy...</option>
+                        <option v-for="p in store.portfolios" :key="p.id" :value="p.id">
+                          {{ p.name }}
+                        </option>
+                      </select>
                     </td>
                     <td>
                       <button @click="handleDeletePosition(pos.id)" class="btn-logout" title="Remove Position" style="padding: 0.25rem;">

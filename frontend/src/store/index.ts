@@ -111,6 +111,11 @@ export const useKapitalStore = defineStore('kapital', {
         percentage: (value / absoluteTotal) * 100,
         color: colors[type] || '#64748b'
       })).sort((a, b) => b.value - a.value);
+    },
+
+    hasUnassignedPositions(state): boolean {
+      const activeIds = new Set(state.portfolios.map(p => p.id));
+      return state.positions.some(pos => !activeIds.has(pos.portfolio_id));
     }
   },
 
@@ -164,9 +169,25 @@ export const useKapitalStore = defineStore('kapital', {
       try {
         await api.deletePortfolio(id);
         this.portfolios = this.portfolios.filter(p => p.id !== id);
-        this.positions = this.positions.filter(pos => pos.portfolio_id !== id);
+        // Do not filter out positions, they remain in state and become unassigned holdings
       } catch (err: any) {
         this.error = err.message || 'Failed to delete portfolio';
+        throw err;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async movePosition(id: number, portfolioId: number) {
+      this.loading = true;
+      try {
+        await api.updatePosition(id, { portfolio_id: portfolioId });
+        const index = this.positions.findIndex(p => p.id === id);
+        if (index !== -1) {
+          this.positions[index] = { ...this.positions[index], portfolio_id: portfolioId };
+        }
+      } catch (err: any) {
+        this.error = err.message || 'Failed to move position';
         throw err;
       } finally {
         this.loading = false;
