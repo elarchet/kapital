@@ -27,7 +27,6 @@ To scale operations, the primary agent can invoke specialized subagents using th
 | **`frontend_designer`** | **Gemini 3.5 Flash** (Low) | Focused on crafting functional Vue components, implementing Tailwind CSS v4 styling rules, and layout design strictly following the contracts and tokens defined by the architect. |
 | **`frontend_architect`** | **Gemini 3.1 Pro** (High) | Responsible for the design system architecture, strict component contracts (API/Props definitions for the marketplace), and runtime theming engines. |
 | **`tester`** | **Gemini 3.5 Flash** (Low) | Responsible for writing comprehensive tests, setting up FactoryBoy mocks, and fixing test regressions. |
-| **`researcher`** | **Gemini 3.5 Flash** (Low) | Scans documentation, runs codebase diagnostics, and searches web references. |
 | **`architect_critic`** | **Gemini 3.1 Pro** | Hyper-critically assesses code architecture, weighs pros/cons, validates security/performance, and ensures scalability and future-proofing. |
 
 ### Mandatory Subagent Delegation Protocol
@@ -43,13 +42,8 @@ To guarantee absolute code quality and robust division of labor, the primary age
 ## 3. Active Skills Registry
 
 Skills are modular, on-demand instructions loaded only when required. They are stored in `.agents/skills/`.
-
-- **[`financial_math`](file://./.agents/skills/financial_math/SKILL.md)**: Rules for Decimal arithmetic and Polars aggregations.
-- **[`backend_api`](file://./.agents/skills/backend_api/SKILL.md)**: Design standards for FastAPI routes, REST endpoints, and dependency injection.
-- **[`database_models`](file://./.agents/skills/database_models/SKILL.md)**: Standards for SQLModel models, database sessions, and Alembic migrations.
-- **[`frontend_vue`](file://./.agents/skills/frontend_vue/SKILL.md)**: Rules for decoupled Vue components and Tailwind CSS v4 directives.
-- **[`testing`](file://./.agents/skills/testing/SKILL.md)**: Pytest backend testing, Playwright frontend E2E/QA testing, mock data generation rules, and coverage standards.
-- **[`development_workflow`](file://./.agents/skills/development_workflow/SKILL.md)**: Git guidelines, Conventional Commits, file size budget, and verification procedures.
+- Automatically locate, read, and load relevant skills whenever a task maps to an existing skill framework.
+- Prioritize using these native skills over writing raw custom workflows from scratch.
 
 ---
 

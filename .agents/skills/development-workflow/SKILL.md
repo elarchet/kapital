@@ -1,5 +1,5 @@
 ---
-name: development_workflow
+name: development-workflow
 description: Code quality checks, size budgets, Git conventions, and self-checks.
 ---
 

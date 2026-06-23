@@ -1,5 +1,5 @@
 ---
-name: database_models
+name: database-models
 description: SQLModel database structures, schemas, and lifecycle rules.
 ---
 

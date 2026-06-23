@@ -1,5 +1,5 @@
 ---
-name: generate_themed_component
+name: generate-themed-component
 description: Generates or refactors Vue 3 components ensuring absolute compliance with runtime theming and strict marketplace interface contracts.
 ---
 

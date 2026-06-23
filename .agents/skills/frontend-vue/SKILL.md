@@ -1,5 +1,5 @@
 ---
-name: frontend_vue
+name: frontend-vue
 description: Vue.js frontend architecture, decoupled data handling, and Tailwind CSS v4 styling rules.
 ---
 

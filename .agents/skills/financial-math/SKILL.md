@@ -1,5 +1,5 @@
 ---
-name: financial_math
+name: financial-math
 description: Procedural rules and templates for financial mathematics, Decimal-only calculations, and Polars-based aggregations.
 ---
 

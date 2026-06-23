@@ -1,5 +1,5 @@
 ---
-name: backend_api
+name: backend-api
 description: API design standards for FastAPI routers, REST endpoints, and dependency injection.
 ---
 
