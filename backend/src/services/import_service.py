@@ -19,7 +19,9 @@ from src.models import (
     Position,
 )
 from src.schemas.operation import OperationCreate
+from src.services.financial_info import FinancialInfoService
 from src.services.import_db import get_or_create_institution_and_account
+from src.services.import_enrichment import run_enrichment_pipeline
 from src.services.import_parsers import combine_stock_splits
 from src.services.import_row_parser import parse_csv_row
 
@@ -60,7 +62,7 @@ def autodetect_schema(db: Session, headers: list[str], user_id: int) -> int | No
     return best_schema_id
 
 
-def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
+async def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     db: Session,
     portfolio_id: int,
     user_id: int,
@@ -122,6 +124,10 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
 
     parsed_operations.sort(key=lambda o: o["executed_at"])
     processed_ops = combine_stock_splits(parsed_operations)
+
+    # 4b. Run enrichment pipeline
+    financial_info = FinancialInfoService()
+    await run_enrichment_pipeline(processed_ops, schema_mappings, financial_info, db)
 
     # 5. Load and Cache portfolio Position records in memory
     positions = db.exec(
@@ -252,9 +258,14 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
 
             # Duplicate check
             transaction_id = op_info["transaction_id"]
+            is_duplicate = False
             if transaction_id:
                 is_duplicate = transaction_id in existing_transaction_ids
-            else:
+
+            # If the transaction ID is auto-generated (starts with "auto-") or missing,
+            # we also perform the tuple-based fallback check.
+            is_auto_id = bool(transaction_id and transaction_id.startswith("auto-"))
+            if not is_duplicate and (not transaction_id or is_auto_id):
                 pos_key = (
                     position.id
                     if position.id is not None
@@ -345,21 +356,20 @@ def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
             # Add to duplicate check caches to prevent duplicate processing
             if transaction_id:
                 existing_transaction_ids.add(transaction_id)
-            else:
-                pos_key = (
-                    position.id
-                    if position.id is not None
-                    else (position.ticker, position.isin, position.currency, position.name)
-                )
-                existing_op_tuples.add(
-                    (
-                        pos_key,
-                        op_info["op_type"],
-                        op_info["executed_at"],
-                        op_info["total_amount"],
-                        op_info["quantity"],
-                    ),
-                )
+            pos_key = (
+                position.id
+                if position.id is not None
+                else (position.ticker, position.isin, position.currency, position.name)
+            )
+            existing_op_tuples.add(
+                (
+                    pos_key,
+                    op_info["op_type"],
+                    op_info["executed_at"],
+                    op_info["total_amount"],
+                    op_info["quantity"],
+                ),
+            )
 
             summary["operations_imported"] += 1
 

@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
 from typing import Any
 
-from src.models import FeeType
-from src.schemas.fee import FeeCreate
 from src.services.import_parsers import (
     apply_transformation,
     get_date_format,
     get_mapped_col,
     parse_datetime_safe,
     parse_decimal_safe,
+)
+from src.services.import_row_parser_helpers import (
+    resolve_category_fields,
+    resolve_fees_and_taxes,
+    resolve_fx_rate_change_fields,
+    resolve_merchant_and_ref_fields,
+    resolve_trade_fields,
 )
 
 
@@ -53,9 +59,48 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
     # Extract values
     ticker = row.get(get_mapped_col(columns, "ticker", op_type, csv_action))
     isin = row.get(get_mapped_col(columns, "isin", op_type, csv_action))
-    name = row.get(get_mapped_col(columns, "name", op_type, csv_action)) or ticker or isin or "Asset"
+
+    name_col = get_mapped_col(columns, "name", op_type, csv_action)
+    raw_name = row.get(name_col) if name_col else None
+    name_was_set = bool(raw_name and raw_name.strip())
+    name = raw_name.strip() if name_was_set else (ticker or isin or "Asset")
+
     notes = row.get(get_mapped_col(columns, "notes", op_type, csv_action))
-    transaction_id = row.get(get_mapped_col(columns, "transaction_id", op_type, csv_action))
+
+    # Transaction ID resolution with custom options
+    transaction_id_col = get_mapped_col(columns, "transaction_id", op_type, csv_action)
+    raw_transaction_id = row.get(transaction_id_col) if transaction_id_col else None
+
+    # Read the enrichment option
+    enrich_opt = schema_mappings.get("enrich_transaction_ids")
+    if enrich_opt is None:
+        # Fallback to legacy boolean
+        legacy = schema_mappings.get("generate_auto_ids")
+        enrich_opt = "when_empty" if legacy is not False else "never"
+
+    if isinstance(enrich_opt, dict):
+        if csv_action and csv_action in enrich_opt:
+            opt = enrich_opt[csv_action]
+        elif op_type and op_type in enrich_opt:
+            opt = enrich_opt[op_type]
+        else:
+            opt = enrich_opt.get("global") or "when_empty"
+    else:
+        opt = enrich_opt
+
+    has_raw = bool(raw_transaction_id and raw_transaction_id.strip())
+
+    should_generate = transaction_id_col and (opt == "always" or (opt == "when_empty" and not has_raw))
+
+    if should_generate:
+        serialized = ",".join(f"{k}:{v}" for k, v in sorted(row.items()) if v is not None)
+        row_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+        transaction_id = f"auto-{row_hash}"
+    elif has_raw:
+        transaction_id = raw_transaction_id.strip()
+    else:
+        transaction_id = None
+
     currency = row.get(get_mapped_col(columns, "currency", op_type, csv_action)) or "EUR"
 
     executed_at_str = row.get(get_mapped_col(columns, "executed_at", op_type, csv_action))
@@ -103,262 +148,85 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         decimal_separator,
     )
 
-    # Child Fees and Taxes
-    fees = []
-    fee_amt_col = get_mapped_col(columns, "fee_amount", op_type, csv_action)
-    if fee_amt_col:
-        fee_val = parse_decimal_safe(row.get(fee_amt_col), decimal_separator)
-        fee_val = apply_transformation(transformations, "fee_amount", fee_val, op_type, csv_action)
-        if fee_val and fee_val > 0:
-            fee_curr = row.get(get_mapped_col(columns, "fee_currency", op_type, csv_action)) or currency
-            resolved_fee_type = "conversion"
-            fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
-            if fee_type_col:
-                raw_fee_type = row.get(fee_type_col)
-                if raw_fee_type:
-                    fee_type_mappings = schema_mappings.get("enum_mappings", {}).get("fee_type", {})
-                    for key, val_list in fee_type_mappings.items():
-                        if raw_fee_type in val_list or raw_fee_type == key:
-                            resolved_fee_type = key
-                            break
-            try:
-                fee_type_enum = FeeType(resolved_fee_type)
-            except ValueError:
-                fee_type_enum = FeeType.OTHER
+    # Call external helper for fees and taxes
+    fees = resolve_fees_and_taxes(
+        row=row,
+        columns=columns,
+        transformations=transformations,
+        schema_mappings=schema_mappings,
+        decimal_separator=decimal_separator,
+        op_type=op_type,
+        csv_action=csv_action,
+        currency=currency,
+    )
 
-            fees.append(
-                FeeCreate(
-                    amount=fee_val,
-                    currency=fee_curr,
-                    fee_type=fee_type_enum,
-                    notes="Currency conversion fee" if resolved_fee_type == "conversion" else "Fee",
-                ),
-            )
-
-    tax_amt_col = get_mapped_col(columns, "tax_amount", op_type, csv_action)
-    if tax_amt_col:
-        tax_val = parse_decimal_safe(row.get(tax_amt_col), decimal_separator)
-        tax_val = apply_transformation(transformations, "tax_amount", tax_val, op_type, csv_action)
-        if tax_val and tax_val > 0:
-            tax_curr = row.get(get_mapped_col(columns, "tax_currency", op_type, csv_action)) or currency
-            resolved_tax_type = "withholding_tax"
-            fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
-            if fee_type_col:
-                raw_fee_type = row.get(fee_type_col)
-                if raw_fee_type:
-                    fee_type_mappings = schema_mappings.get("enum_mappings", {}).get("fee_type", {})
-                    for key, val_list in fee_type_mappings.items():
-                        if raw_fee_type in val_list or raw_fee_type == key:
-                            resolved_tax_type = key
-                            break
-            try:
-                tax_type_enum = FeeType(resolved_tax_type)
-            except ValueError:
-                tax_type_enum = FeeType.WITHHOLDING_TAX
-
-            fees.append(
-                FeeCreate(
-                    amount=tax_val,
-                    currency=tax_curr,
-                    fee_type=tax_type_enum,
-                    notes="Withholding tax",
-                ),
-            )
-
-    # Merchant fields
-    merchant_name = row.get(get_mapped_col(columns, "merchant_name", op_type, csv_action))
-    merchant_category = row.get(get_mapped_col(columns, "merchant_category", op_type, csv_action))
-
-    # Reference fields
-    source_ref_col = get_mapped_col(columns, "source_reference", op_type, csv_action)
-    source_reference = row.get(source_ref_col) if source_ref_col else None
-    dest_ref_col = get_mapped_col(columns, "destination_reference", op_type, csv_action)
-    destination_reference = row.get(dest_ref_col) if dest_ref_col else None
-
-    if op_type == "transfer_in" and not source_reference:
-        source_reference = notes or "CSV Import"
-    if op_type == "transfer_out" and not destination_reference:
-        destination_reference = notes or "CSV Import"
+    # Call external helper for merchant and reference fields
+    merchant_name, merchant_category, source_reference, destination_reference = resolve_merchant_and_ref_fields(
+        row=row,
+        columns=columns,
+        op_type=op_type,
+        csv_action=csv_action,
+        notes=notes,
+    )
 
     dividend_per_share = unit_price if op_type == "dividend" else None
     if op_type == "dividend" and dividend_per_share is None:
         dividend_per_share = Decimal("0.0")
 
-    # Trade resolution
-    if op_type == "trade":
-        if not trade_side:
-            trade_side_col = get_mapped_col(columns, "trade_side", op_type, csv_action)
-            raw_trade_side = row.get(trade_side_col) if trade_side_col else None
-            if raw_trade_side:
-                trade_side_mappings = schema_mappings.get("enum_mappings", {}).get("trade_side", {})
-                for key, val_list in trade_side_mappings.items():
-                    if raw_trade_side in val_list or raw_trade_side == key:
-                        trade_side = key
-                        break
-            if not trade_side:
-                trade_side = "buy"
+    # Call external helper for trades
+    (
+        trade_side,
+        order_type_val,
+        limit_price,
+        stop_price,
+        execution_price,
+        order_status,
+        order_placed_at,
+        filled_at,
+    ) = resolve_trade_fields(
+        row=row,
+        columns=columns,
+        schema_mappings=schema_mappings,
+        op_type=op_type,
+        csv_action=csv_action,
+        trade_side=trade_side,
+        order_type_val=order_type_val,
+        unit_price=unit_price,
+        decimal_separator=decimal_separator,
+        date_formats=date_formats,
+    )
 
-        if not order_type_val:
-            order_type_col = get_mapped_col(columns, "order_type", op_type, csv_action)
-            raw_order_type = row.get(order_type_col) if order_type_col else None
-            if raw_order_type:
-                order_type_mappings = schema_mappings.get("enum_mappings", {}).get("order_type", {})
-                for key, val_list in order_type_mappings.items():
-                    if raw_order_type in val_list or raw_order_type == key:
-                        order_type_val = key
-                        break
-            if not order_type_val:
-                order_type_val = "market"
-
-    limit_price = None
-    if op_type == "trade" and order_type_val in ("limit", "stop_limit"):
-        lp_col = get_mapped_col(columns, "limit_price", op_type, csv_action)
-        limit_price = parse_decimal_safe(row.get(lp_col), decimal_separator) if lp_col else None
-        if limit_price is None:
-            limit_price = unit_price
-
-    stop_price = None
-    if op_type == "trade" and order_type_val in ("stop", "stop_limit"):
-        sp_col = get_mapped_col(columns, "stop_price", op_type, csv_action)
-        stop_price = parse_decimal_safe(row.get(sp_col), decimal_separator) if sp_col else None
-
-    execution_price = None
-    if op_type == "trade":
-        ep_col = get_mapped_col(columns, "execution_price", op_type, csv_action)
-        execution_price = parse_decimal_safe(row.get(ep_col), decimal_separator) if ep_col else None
-
-    order_status = None
-    if op_type == "trade":
-        os_col = get_mapped_col(columns, "order_status", op_type, csv_action)
-        raw_order_status = row.get(os_col) if os_col else None
-        if raw_order_status:
-            os_mappings = schema_mappings.get("enum_mappings", {}).get("order_status", {})
-            for key, val_list in os_mappings.items():
-                if raw_order_status in val_list or raw_order_status == key:
-                    order_status = key
-                    break
-        if not order_status:
-            order_status = "filled"
-
-    order_placed_at = None
-    filled_at = None
-    if op_type == "trade":
-        op_col = get_mapped_col(columns, "order_placed_at", op_type, csv_action)
-        if op_col:
-            op_str = row.get(op_col)
-            if op_str:
-                op_fmt = get_date_format(date_formats, "order_placed_at", op_type, csv_action)
-                order_placed_at = parse_datetime_safe(op_str, op_fmt)
-        fa_col = get_mapped_col(columns, "filled_at", op_type, csv_action)
-        if fa_col:
-            fa_str = row.get(fa_col)
-            if fa_str:
-                fa_fmt = get_date_format(date_formats, "filled_at", op_type, csv_action)
-                filled_at = parse_datetime_safe(fa_str, fa_fmt)
-
-    interest_type = None
-    if op_type == "interest":
-        it_col = get_mapped_col(columns, "interest_type", op_type, csv_action)
-        raw_it = row.get(it_col).strip() if (it_col and row.get(it_col)) else None
-        if raw_it:
-            it_mappings = schema_mappings.get("enum_mappings", {}).get("interest_type", {})
-            for key, val_list in it_mappings.items():
-                if raw_it in val_list or raw_it == key:
-                    interest_type = key
-                    break
-        if not interest_type:
-            interest_type = "cash_interest"
-
-    expense_category = None
-    revenue_category = None
-    payment_method = None
-    if op_type == "expense":
-        ec_col = get_mapped_col(columns, "expense_category", op_type, csv_action)
-        raw_ec = row.get(ec_col) if ec_col else None
-        if raw_ec:
-            ec_mappings = schema_mappings.get("enum_mappings", {}).get("expense_category", {})
-            for key, val_list in ec_mappings.items():
-                if raw_ec in val_list or raw_ec == key:
-                    expense_category = key
-                    break
-        if not expense_category:
-            expense_category = "other"
-    elif op_type == "revenue":
-        rc_col = get_mapped_col(columns, "revenue_category", op_type, csv_action)
-        raw_rc = row.get(rc_col) if rc_col else None
-        if raw_rc:
-            rc_mappings = schema_mappings.get("enum_mappings", {}).get("revenue_category", {})
-            for key, val_list in rc_mappings.items():
-                if raw_rc in val_list or raw_rc == key:
-                    revenue_category = key
-                    break
-        if not revenue_category:
-            revenue_category = "other"
-
-    if op_type in ("expense", "revenue"):
-        pm_col = get_mapped_col(columns, "payment_method", op_type, csv_action)
-        raw_pm = row.get(pm_col) if pm_col else None
-        if raw_pm:
-            pm_mappings = schema_mappings.get("enum_mappings", {}).get("payment_method", {})
-            for key, val_list in pm_mappings.items():
-                if raw_pm in val_list or raw_pm == key:
-                    payment_method = key
-                    break
+    # Call external helper for interest, expense, revenue categories
+    interest_type, expense_category, revenue_category, payment_method = resolve_category_fields(
+        row=row,
+        columns=columns,
+        schema_mappings=schema_mappings,
+        op_type=op_type,
+        csv_action=csv_action,
+    )
 
     fee_category = notes or "other" if op_type == "fee" else None
     tax_category = notes or "withholding" if op_type == "tax" else None
 
-    source_currency = None
-    target_currency = None
-    if op_type == "fx_rate_change":
-        if notes and " -> " in notes:
-            try:
-                parts = notes.split(" -> ")
-                from_part = parts[0].strip().split()
-                to_part = parts[1].strip().split()
-                if len(from_part) == 2 and len(to_part) == 2:  # noqa: PLR2004
-                    from_amt = parse_decimal_safe(from_part[0], decimal_separator)
-                    from_curr = from_part[1].strip()
-                    to_amt = parse_decimal_safe(to_part[0], decimal_separator)
-                    to_curr = to_part[1].strip()
-                    if from_amt and to_amt and from_amt > 0:
-                        source_currency = from_curr
-                        target_currency = to_curr
-                        exchange_rate = to_amt / from_amt
-            except Exception:  # noqa: BLE001, S110
-                pass
-
-        if not source_currency or not target_currency:
-            source_currency = row.get(get_mapped_col(columns, "source_currency", op_type, csv_action))
-            target_currency = row.get(get_mapped_col(columns, "target_currency", op_type, csv_action))
-            if source_currency:
-                source_currency = source_currency.strip()
-            if target_currency:
-                target_currency = target_currency.strip()
-            if not exchange_rate:
-                from_amt = parse_decimal_safe(
-                    row.get(get_mapped_col(columns, "from_amount", op_type, csv_action)),
-                    decimal_separator,
-                )
-                to_amt = parse_decimal_safe(
-                    row.get(get_mapped_col(columns, "to_amount", op_type, csv_action)),
-                    decimal_separator,
-                )
-                if from_amt and to_amt and from_amt > 0:
-                    exchange_rate = to_amt / from_amt
-
-        source_currency = source_currency or currency
-        target_currency = target_currency or currency
-        exchange_rate = exchange_rate or Decimal("1.0")
-    elif price_currency and price_currency != currency:
-        source_currency = currency
-        target_currency = price_currency
+    # Call external helper for FX rate changes
+    source_currency, target_currency, exchange_rate = resolve_fx_rate_change_fields(
+        row=row,
+        columns=columns,
+        decimal_separator=decimal_separator,
+        currency=currency,
+        op_type=op_type,
+        csv_action=csv_action,
+        exchange_rate=exchange_rate,
+        price_currency=price_currency,
+        notes=notes,
+    )
 
     return {
         "op_type": op_type,
         "ticker": ticker,
         "isin": isin,
         "name": name,
+        "name_was_set": name_was_set,
         "quantity": quantity,
         "unit_price": unit_price,
         "price_currency": price_currency,

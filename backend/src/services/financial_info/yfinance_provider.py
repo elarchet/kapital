@@ -48,7 +48,11 @@ class YFinanceProvider(BaseFinancialProvider):
 
         # Read fields defensively
         symbol = info.get("symbol") or ticker
-        name = info.get("longName") or info.get("shortName") or symbol
+        long_name = info.get("longName")
+        short_name = info.get("shortName")
+        if not long_name and not short_name:
+            raise ValueError(f"No company name found for ticker '{ticker}'.")
+        name = long_name or short_name
 
         market_cap_val = info.get("marketCap")
         market_cap = None

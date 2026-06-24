@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from src.models.operation import (
     ExpenseCategory,
@@ -158,3 +158,8 @@ class OperationRead(OperationBase):
     financial_account_id: int
     created_at: datetime
     fees: list[FeeRead] = []
+
+    @computed_field
+    @property
+    def is_transaction_id_auto_generated(self) -> bool:
+        return bool(self.transaction_id and self.transaction_id.startswith("auto-"))
