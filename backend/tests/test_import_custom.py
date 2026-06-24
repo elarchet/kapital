@@ -122,7 +122,8 @@ def fixture_client(session):
     app.dependency_overrides.clear()
 
 
-def test_import_with_custom_date_format(session):
+@pytest.mark.asyncio
+async def test_import_with_custom_date_format(session):
     # Setup test portfolio and user
     user = cast("User", UserFactory())
     portfolio = cast("Portfolio", PortfolioFactory(user=user))
@@ -151,7 +152,7 @@ def test_import_with_custom_date_format(session):
     # CSV content with date format "01/06/2026 15:30:00" (June 1st, 2026)
     csv_content = b"Type,Date,Asset,Total,Currency,Qty\nBUY,01/06/2026 15:30:00,Apple,150.0,USD,10\n"
 
-    summary = import_portfolio_transactions(
+    summary = await import_portfolio_transactions(
         db=session,
         portfolio_id=portfolio.id,
         user_id=user.id,
@@ -250,7 +251,8 @@ def test_update_import_file_schema(client, session):
     assert response.status_code == 404
 
 
-def test_import_dividend_without_price_per_share(session):
+@pytest.mark.asyncio
+async def test_import_dividend_without_price_per_share(session):
     user = cast("User", UserFactory())
     portfolio = cast("Portfolio", PortfolioFactory(user=user))
     session.commit()
@@ -274,7 +276,7 @@ def test_import_dividend_without_price_per_share(session):
 
     csv_content = b"Type,Date,Asset,Total,Currency,Qty\nDIV,2026-06-01 15:30:00,Apple,50.0,USD,10\n"
 
-    summary = import_portfolio_transactions(
+    summary = await import_portfolio_transactions(
         db=session,
         portfolio_id=portfolio.id,
         user_id=user.id,
@@ -292,7 +294,8 @@ def test_import_dividend_without_price_per_share(session):
     assert op.dividend_per_share == Decimal("0.0")
 
 
-def test_import_without_transaction_id(session):
+@pytest.mark.asyncio
+async def test_import_without_transaction_id(session):
     # Setup test portfolio and user
     user = cast("User", UserFactory())
     portfolio = cast("Portfolio", PortfolioFactory(user=user))
@@ -329,7 +332,7 @@ def test_import_without_transaction_id(session):
         b"BUY,2026-06-01 16:30:00,NewAsset,150.0,USD,10\n"
     )
 
-    summary = import_portfolio_transactions(
+    summary = await import_portfolio_transactions(
         db=session,
         portfolio_id=portfolio.id,
         user_id=user.id,

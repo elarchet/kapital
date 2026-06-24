@@ -153,7 +153,8 @@ def test_autodetect_schema(session):
     assert bad_schema_id is None
 
 
-def test_import_portfolio_transactions(session):  # noqa: PLR0915
+@pytest.mark.asyncio
+async def test_import_portfolio_transactions(session):  # noqa: PLR0915
     # Setup test portfolio and user
     user = cast("User", UserFactory())
     portfolio = cast("Portfolio", PortfolioFactory(user=user))
@@ -176,7 +177,7 @@ def test_import_portfolio_transactions(session):  # noqa: PLR0915
     file_content = csv_path.read_bytes()
 
     # Run the import
-    summary = import_portfolio_transactions(
+    summary = await import_portfolio_transactions(
         db=session,
         portfolio_id=portfolio.id,
         user_id=user.id,
@@ -258,7 +259,7 @@ def test_import_portfolio_transactions(session):  # noqa: PLR0915
 
     # 4. Check duplicate operations are skipped on re-import
     # If we run the import again, it should skip all operations
-    summary_reimport = import_portfolio_transactions(
+    summary_reimport = await import_portfolio_transactions(
         db=session,
         portfolio_id=portfolio.id,
         user_id=user.id,
