@@ -15,6 +15,7 @@ This document defines the core architecture, stack definitions, subagent matrix,
 - **Tech Stack**: Vue.js, Tailwind CSS v4, Playwright, FastAPI (`Annotated` dependencies), SQLModel + Alembic, Polars, Pydantic v2 (Strict), SQLite/PostgreSQL, `uv`, Modern Python.
 - **Bulk Mutations & Performance**: Optimize bulk updates or imports by caching database lookups in-memory and using a single batch `db.commit()` in a try-except-rollback block at the service layer, avoiding N+1 queries and loop commits.
 - **Defensive Rendering**: Defensively use optional chaining (`?.`) when displaying dynamic rows, custom templates, or mapped fields to prevent UI crashes if some attributes are missing.
+- **No Unsolicited Commits**: Never perform git commits or push changes to the repository without explicit consent from the user. All code modifications must remain in the working directory staged or unstaged until approved.
 - **Quality Control**: Automated hooks via `prek` running `ruff`, `ty`, `gitleaks`, and `commitizen`.
 
 ---
