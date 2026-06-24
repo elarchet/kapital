@@ -32,6 +32,8 @@ export function buildCustomMappingPayload(params: {
   // save/reload cycle and the per-row clear is not lost.
   // Key = CSV header name, value = rawAction opTypes that were explicitly cleared.
   const cleared_type_specifics: Record<string, string[]> = {};
+  const enrich_asset_names: Record<string, string> = {};
+  const enrich_transaction_ids: Record<string, string> = {};
 
   Object.entries(params.columnConfigMap).forEach(([colId, conf]) => {
     const col = params.uiColumns.find(c => c.id === colId);
@@ -39,6 +41,13 @@ export function buildCustomMappingPayload(params: {
     const headerName = params.importFileHeaders[col.colIdx];
 
     Object.entries(conf.typeSpecific).forEach(([opType, specificConf]) => {
+      if (specificConf.dbKey === 'name' && specificConf.enrichAssetNames) {
+        enrich_asset_names[opType] = specificConf.enrichAssetNames;
+      }
+      if (specificConf.dbKey === 'transaction_id' && specificConf.enrichTransactionIds) {
+        enrich_transaction_ids[opType] = specificConf.enrichTransactionIds;
+      }
+
       if (specificConf.dbKey) {
         const entry = dbKeyToCol.get(specificConf.dbKey) || {};
         if (!entry.typeSpecific) entry.typeSpecific = {};
@@ -106,6 +115,8 @@ export function buildCustomMappingPayload(params: {
     enum_mappings,
     transformations,
     date_formats,
+    enrich_asset_names,
+    enrich_transaction_ids,
     ...(Object.keys(cleared_type_specifics).length > 0 ? { cleared_type_specifics } : {})
   };
 }
@@ -186,13 +197,22 @@ export function parseSchemaMappings(
           ? 'auto'
           : typeof dfVal === 'string' ? dfVal : (dfVal[opType] || 'auto');
 
-        columnConfigMap[colId].typeSpecific[opType] = {
+        const specConf: ColMapping = {
           dbKey,
           divisor: mappings.transformations?.[dbKey]?.[opType]?.divisor || mappings.transformations?.[dbKey]?.divisor,
           multiplier: mappings.transformations?.[dbKey]?.[opType]?.multiplier || mappings.transformations?.[dbKey]?.multiplier,
           enumMappings: getEnumMappingsForField(dbKey, mappings),
           dateFormat: specDateFormat
         };
+
+        if (dbKey === 'name') {
+          specConf.enrichAssetNames = mappings.enrich_asset_names?.[opType] || 'when_empty';
+        }
+        if (dbKey === 'transaction_id') {
+          specConf.enrichTransactionIds = mappings.enrich_transaction_ids?.[opType] || 'when_empty';
+        }
+
+        columnConfigMap[colId].typeSpecific[opType] = specConf;
       });
     });
 

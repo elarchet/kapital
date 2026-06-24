@@ -226,6 +226,10 @@ export const api = {
     return request<any>('/api/v1/portfolios/import-metadata');
   },
 
+  async getTickerProfile(ticker: string): Promise<{ symbol: string; name: string }> {
+    return request<{ symbol: string; name: string }>(`/api/v1/financial-info/profile/${ticker}`);
+  },
+
   async importPositions(
     portfolioId: number,
     file: File,

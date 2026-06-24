@@ -4,6 +4,8 @@ export interface ColMapping {
   multiplier?: number;
   enumMappings?: Record<string, string>;
   dateFormat?: string;
+  enrichAssetNames?: 'never' | 'when_empty' | 'always';
+  enrichTransactionIds?: 'never' | 'when_empty' | 'always';
 }
 
 export interface RowError {

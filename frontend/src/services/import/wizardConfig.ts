@@ -101,8 +101,8 @@ export function getWizardSetup(params: {
   const conf = params.columnConfigMap[params.colId];
   let initialMapping: any = null;
   if (conf) {
-    const typeKey = params.rawAction || params.opType;
-    const specific = typeKey ? conf.typeSpecific[typeKey] : null;
+    const specific = (params.opType ? conf.typeSpecific[params.opType] : null) ||
+                     (params.rawAction ? conf.typeSpecific[params.rawAction] : null);
     if (specific?.dbKey) {
       initialMapping = {
         dbKey: specific.dbKey,
@@ -110,7 +110,9 @@ export function getWizardSetup(params: {
         divisor: specific.divisor,
         multiplier: specific.multiplier,
         enumMappings: specific.enumMappings,
-        dateFormat: specific.dateFormat
+        dateFormat: specific.dateFormat,
+        enrichAssetNames: specific.enrichAssetNames,
+        enrichTransactionIds: specific.enrichTransactionIds
       };
     }
   }
@@ -129,6 +131,8 @@ export function saveWizardConfig(
     multiplier?: number;
     enumMappings?: Record<string, string>;
     dateFormat?: string;
+    enrichAssetNames?: 'never' | 'when_empty' | 'always';
+    enrichTransactionIds?: 'never' | 'when_empty' | 'always';
   }
 ) {
   if (!opType) return; // opType is always required — no global slot exists anymore
@@ -139,7 +143,9 @@ export function saveWizardConfig(
     divisor: payload.divisor,
     multiplier: payload.multiplier,
     enumMappings: payload.enumMappings,
-    dateFormat: payload.dateFormat
+    dateFormat: payload.dateFormat,
+    enrichAssetNames: payload.enrichAssetNames,
+    enrichTransactionIds: payload.enrichTransactionIds
   };
 }
 

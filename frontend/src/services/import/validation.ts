@@ -50,69 +50,52 @@ export function isFieldRequiredForOpType(fieldKey: string, opType: string): bool
   if (globalRequired.includes(fieldKey)) return true;
   if (!opType) return false;
 
-  if (opType === 'trade') {
-    return ['ticker', 'quantity', 'unit_price', 'trade_side'].includes(fieldKey);
-  }
-  if (opType === 'dividend') {
-    return ['ticker', 'unit_price'].includes(fieldKey);
-  }
-  if (opType === 'interest') {
-    return fieldKey === 'interest_type';
-  }
-  if (opType === 'transfer_in') {
-    return fieldKey === 'source_reference';
-  }
-  if (opType === 'transfer_out') {
-    return fieldKey === 'destination_reference';
-  }
-  if (opType === 'stock_split') {
-    return ['ticker', 'quantity'].includes(fieldKey);
-  }
-  if (opType === 'fx_rate_change') {
-    return ['source_currency', 'target_currency', 'exchange_rate'].includes(fieldKey);
-  }
-  if (opType === 'fee') {
-    return ['fee_amount'].includes(fieldKey);
-  }
-  if (opType === 'tax') {
-    return ['tax_amount'].includes(fieldKey);
-  }
-  if (opType === 'expense') {
-    return fieldKey === 'merchant_name';
-  }
-  if (opType === 'revenue') {
-    return fieldKey === 'merchant_name';
-  }
-  return false;
+  const reqMap: Record<string, string[]> = {
+    trade: ['ticker', 'quantity', 'unit_price', 'trade_side'],
+    dividend: ['ticker', 'unit_price'],
+    stock_split: ['ticker', 'quantity'],
+    fx_rate_change: ['source_currency', 'target_currency', 'exchange_rate'],
+    fee: ['fee_amount'],
+    tax: ['tax_amount'],
+    interest: ['interest_type'],
+    transfer_in: ['source_reference'],
+    transfer_out: ['destination_reference'],
+    expense: ['merchant_name'],
+    revenue: ['merchant_name'],
+  };
+  return (reqMap[opType] || []).includes(fieldKey);
 }
 
 export function getMappedColIdxForField(
   dbKey: string,
-  opType: string,
+  rawAction: string,
+  dbOpType: string,
   columnConfigMap: Record<string | number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
   uiColumns?: Array<{ id: string; colIdx: number }>
 ): number {
   let mappedIdx = -1;
   if (!columnConfigMap) return mappedIdx;
 
+  const resolveIdx = (idOrIdxStr: string) => {
+    if (uiColumns) {
+      const col = uiColumns.find(c => c.id === idOrIdxStr);
+      return col ? col.colIdx : -1;
+    }
+    const idx = Number(idOrIdxStr);
+    return isNaN(idx) ? -1 : idx;
+  };
+
   Object.entries(columnConfigMap).forEach(([idOrIdxStr, conf]) => {
     if (!conf) return;
-    const hasSpecific = conf.typeSpecific && conf.typeSpecific[opType] !== undefined;
-    const isMatch = (hasSpecific && conf.typeSpecific[opType]?.dbKey === dbKey) || (!hasSpecific && conf.global?.dbKey === dbKey);
-    if (isMatch) {
-      if (uiColumns) {
-        const col = uiColumns.find(c => c.id === idOrIdxStr);
-        if (col) {
-          mappedIdx = col.colIdx;
-        }
-      } else {
-        const idx = Number(idOrIdxStr);
-        if (!isNaN(idx)) {
-          mappedIdx = idx;
-        }
-      }
+    if (conf.typeSpecific && conf.typeSpecific[rawAction]?.dbKey === dbKey) {
+      mappedIdx = resolveIdx(idOrIdxStr);
+    } else if (conf.typeSpecific && dbOpType && conf.typeSpecific[dbOpType]?.dbKey === dbKey) {
+      mappedIdx = resolveIdx(idOrIdxStr);
+    } else if (conf.global?.dbKey === dbKey) {
+      mappedIdx = resolveIdx(idOrIdxStr);
     }
   });
+
   return mappedIdx;
 }
 
@@ -126,6 +109,7 @@ export function validateLiveStats(params: {
   allRawRows: string[][];
   operationTypeColumnIdx: number | null;
   operationTypeMappings: Record<string, string>;
+  enrichedNames?: Record<string, string>;
 }): Record<string, { total: number; success: number; failed: number; errors: RowError[] }> {
   const stats: Record<string, {
     total: number;
@@ -154,21 +138,39 @@ export function validateLiveStats(params: {
     }
   });
 
-  const getColumnConfigForField = (fieldKey: string, opType: string) => {
+  const getColumnConfigForField = (fieldKey: string, rawAction: string, dbOpType: string) => {
     let foundConf: ColMapping | null = null;
     if (!params.columnConfigMap) return foundConf;
 
     Object.entries(params.columnConfigMap).forEach(([_, conf]) => {
       if (!conf) return;
-      const hasSpecific = conf.typeSpecific && conf.typeSpecific[opType] !== undefined;
-      if (hasSpecific && conf.typeSpecific[opType]?.dbKey === fieldKey) {
-        foundConf = conf.typeSpecific[opType];
-      } else if (!hasSpecific && conf.global?.dbKey === fieldKey) {
+      if (conf.typeSpecific && conf.typeSpecific[rawAction]?.dbKey === fieldKey) {
+        foundConf = conf.typeSpecific[rawAction];
+      } else if (conf.typeSpecific && dbOpType && conf.typeSpecific[dbOpType]?.dbKey === fieldKey) {
+        foundConf = conf.typeSpecific[dbOpType];
+      } else if (conf.global?.dbKey === fieldKey) {
         foundConf = conf.global;
       }
     });
     return foundConf;
   };
+
+  const rawActionFieldMaps: Record<string, Record<string, { colIdx: number; isRequired: boolean; mappingConf: ColMapping | null }>> = {};
+  const uniqueRawActions = Object.keys(stats);
+
+  uniqueRawActions.forEach(rawAction => {
+    const dbOpType = params.operationTypeMappings[rawAction] || 'unknown';
+    const fieldMap: Record<string, { colIdx: number; isRequired: boolean; mappingConf: ColMapping | null }> = {};
+    params.importFields.forEach(field => {
+      const colIdx = field.key === 'operation_type'
+        ? (params.operationTypeColumnIdx ?? -1)
+        : getMappedColIdxForField(field.key, rawAction, dbOpType, params.columnConfigMap, params.uiColumns);
+      const isRequired = field.is_required || isFieldRequiredForOpType(field.key, dbOpType);
+      const mappingConf = getColumnConfigForField(field.key, rawAction, dbOpType);
+      fieldMap[field.key] = { colIdx, isRequired, mappingConf };
+    });
+    rawActionFieldMaps[rawAction] = fieldMap;
+  });
 
   params.allRawRows.forEach((row, rowIdx) => {
     const rawAction = row[params.operationTypeColumnIdx!];
@@ -177,21 +179,17 @@ export function validateLiveStats(params: {
     const trimmedRaw = rawAction.trim();
     if (!stats[trimmedRaw]) return;
 
-    const opType = params.operationTypeMappings[trimmedRaw];
-    if (!opType) return;
+    const fieldMap = rawActionFieldMaps[trimmedRaw];
+    if (!fieldMap) return;
 
     stats[trimmedRaw].total++;
 
     const rowErrors: { fieldKey: string; fieldLabel: string; rawValue: string; errorMessage: string }[] = [];
 
     params.importFields.forEach(field => {
-      const colIdx = field.key === 'operation_type'
-        ? (params.operationTypeColumnIdx ?? -1)
-        : getMappedColIdxForField(field.key, opType, params.columnConfigMap, params.uiColumns);
+      const { colIdx, isRequired, mappingConf } = fieldMap[field.key];
       const isMapped = colIdx !== -1;
       const rawValue = isMapped ? row[colIdx] : '';
-
-      const isRequired = field.is_required || isFieldRequiredForOpType(field.key, opType);
 
       if (isRequired && !isMapped) {
         rowErrors.push({
@@ -203,9 +201,36 @@ export function validateLiveStats(params: {
         return;
       }
 
+      // Check ticker resolution failures (failing the row parsing)
+      if (field.key === 'name') {
+        const val = rawValue ? rawValue.trim() : '';
+        const enrichOption = mappingConf?.enrichAssetNames || 'when_empty';
+        const isEnrichingAssetNames = enrichOption === 'always' || (enrichOption === 'when_empty' && !val);
+        if (isEnrichingAssetNames) {
+          const tickerCol = fieldMap['ticker']?.colIdx ?? -1;
+          const ticker = tickerCol !== -1 && tickerCol < row.length ? row[tickerCol]?.trim() : '';
+          if (!ticker) {
+            rowErrors.push({
+              fieldKey: field.key,
+              fieldLabel: field.label,
+              rawValue: val,
+              errorMessage: 'Asset name auto-enrichment requires a mapped ticker, but ticker value is missing.'
+            });
+            return;
+          } else if (params.enrichedNames?.[ticker]?.includes('(Not Found)')) {
+            rowErrors.push({
+              fieldKey: field.key,
+              fieldLabel: field.label,
+              rawValue: val,
+              errorMessage: `Ticker '${ticker}' could not be resolved to a valid asset name.`
+            });
+            return;
+          }
+        }
+      }
+
       if (isMapped && rawValue && rawValue.trim()) {
         const val = rawValue.trim();
-        const mappingConf = getColumnConfigForField(field.key, opType) as ColMapping | null;
 
         if (field.type === 'numeric') {
           let cleaned = val;
@@ -322,9 +347,18 @@ export function getValidationErrors(params: {
     params.importFields.forEach(f => {
       const isRequired = f.is_required || isFieldRequiredForOpType(f.key, opType);
       if (isRequired) {
-        const colIdx = f.key === 'operation_type'
+        let colIdx = f.key === 'operation_type'
           ? (params.operationTypeColumnIdx ?? -1)
-          : getMappedColIdxForField(f.key, opType, params.columnConfigMap, params.uiColumns);
+          : getMappedColIdxForField(f.key, opType, opType, params.columnConfigMap, params.uiColumns);
+
+        if (colIdx === -1 && f.key !== 'operation_type') {
+          const rawActions = params.uniqueOperationTypes.filter(r => params.operationTypeMappings[r] === opType);
+          for (const rawAction of rawActions) {
+            colIdx = getMappedColIdxForField(f.key, rawAction, opType, params.columnConfigMap, params.uiColumns);
+            if (colIdx !== -1) break;
+          }
+        }
+
         if (colIdx === -1) {
           errors.push(`Required database field "${f.label}" is not mapped for "${opType}" transactions.`);
         }
