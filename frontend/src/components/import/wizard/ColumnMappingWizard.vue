@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { watch, onBeforeUnmount } from 'vue';
 import { Trash2 } from '@lucide/vue';
 import DiscardChangesConfirmModal from '../modals/DiscardChangesConfirmModal.vue';
 import DestinationFieldSelect from './DestinationFieldSelect.vue';
@@ -7,7 +7,7 @@ import NumericTransformations from './NumericTransformations.vue';
 import EnumValueMapper from './EnumValueMapper.vue';
 import LiveConversionPreview from './LiveConversionPreview.vue';
 import DateFormatSelector from './DateFormatSelector.vue';
-import { parseDateTimeWithFormat } from '../../../services/import/validation';
+import { useColumnMappingWizard } from './useColumnMappingWizard';
 
 const props = defineProps<{
   show: boolean;
@@ -33,6 +33,10 @@ const props = defineProps<{
     enumMappings?: Record<string, string>;
     dateFormat?: string;
   };
+  uiColumns?: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
+  columnConfigMap?: Record<string, { typeSpecific: Record<string, any> }>;
+  exampleRow?: string[];
+  operationTypeMappings?: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -45,229 +49,31 @@ const emit = defineEmits<{
     multiplier?: number;
     enumMappings?: Record<string, string>;
     dateFormat?: string;
+    enrichAssetNames?: 'never' | 'when_empty' | 'always';
+    enrichTransactionIds?: 'never' | 'when_empty' | 'always';
   }): void;
 }>();
 
-// Form states
-const selectedDbKey = ref('');
-const transformationType = ref<'none' | 'divisor' | 'multiplier'>('none');
-const transformationValue = ref<number | null>(null);
-const enumMappings = ref<Record<string, string>>({});
-const dateFormat = ref('auto');
-
-// Shake animation state
-const shouldShake = ref(false);
-
-// Custom exit confirmation state
-const showExitConfirm = ref(false);
-
-// Automated scope mapping based on activeOpType prop
-const scope = computed<'global' | 'type'>(() => props.activeOpType ? 'type' : 'global');
-
-// Detect unsaved changes (dirty state check)
-const isWizardDirty = computed(() => {
-  const initial = props.initialMapping;
-  const initialKey = initial?.dbKey || '';
-  if (selectedDbKey.value !== initialKey) return true;
-
-  // check transformations
-  const initialDiv = initial?.divisor;
-  const initialMul = initial?.multiplier;
-  const currentDiv = transformationType.value === 'divisor' ? transformationValue.value : undefined;
-  const currentMul = transformationType.value === 'multiplier' ? transformationValue.value : undefined;
-  if (currentDiv !== initialDiv || currentMul !== initialMul) return true;
-
-  // check enum mappings
-  const initialEnums = initial?.enumMappings || {};
-  const uniqueVals = props.uniqueCsvValues;
-  for (const val of uniqueVals) {
-    const initialVal = initialEnums[val] || '';
-    const currentVal = enumMappings.value[val] || '';
-    if (currentVal !== initialVal) return true;
-  }
-
-  // check date format
-  const initialDateFormat = initial?.dateFormat || 'auto';
-  if (dateFormat.value !== initialDateFormat) return true;
-
-  return false;
-});
-
-// Initialize form from props
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    if (props.initialMapping) {
-      selectedDbKey.value = props.initialMapping.dbKey || '';
-      if (props.initialMapping.divisor) {
-        transformationType.value = 'divisor';
-        transformationValue.value = props.initialMapping.divisor;
-      } else if (props.initialMapping.multiplier) {
-        transformationType.value = 'multiplier';
-        transformationValue.value = props.initialMapping.multiplier;
-      } else {
-        transformationType.value = 'none';
-        transformationValue.value = null;
-      }
-      enumMappings.value = { ...(props.initialMapping.enumMappings || {}) };
-      dateFormat.value = props.initialMapping.dateFormat || 'auto';
-    } else {
-      selectedDbKey.value = '';
-      transformationType.value = 'none';
-      transformationValue.value = null;
-      enumMappings.value = {};
-      dateFormat.value = 'auto';
-    }
-    showExitConfirm.value = false;
-  }
-}, { immediate: true });
-
-// Auto-initialize enum values when dbKey changes to an enum type
-watch(selectedDbKey, (newKey) => {
-  const field = props.importFields.find(f => f.key === newKey);
-  if (field && field.type === 'enum') {
-    // Retain any existing mappings, and initialize missing ones
-    const newMappings: Record<string, string> = {};
-    props.uniqueCsvValues.forEach(val => {
-      newMappings[val] = enumMappings.value[val] || '';
-    });
-    enumMappings.value = newMappings;
-  }
-});
-
-const selectedField = computed(() => {
-  return props.importFields.find(f => f.key === selectedDbKey.value);
-});
-
-// Live conversion engine
-const liveConversion = computed(() => {
-  if (!selectedDbKey.value) {
-    return { success: true, value: 'Unmapped (Column ignored)' };
-  }
-
-  const rawVal = props.exampleValue;
-  if (rawVal === undefined || rawVal === null || rawVal.trim() === '') {
-    if (selectedField.value?.is_required) {
-      return { success: false, error: 'Example cell is empty but this database field is required.' };
-    }
-    return { success: true, value: 'Empty value (Ignored)' };
-  }
-
-  const fieldType = selectedField.value?.type;
-
-  if (fieldType === 'numeric') {
-    // Clean string using selected decimal separator
-    let cleaned = rawVal.trim();
-    if (props.decimalSeparator !== '.') {
-      cleaned = cleaned.replace(props.decimalSeparator, '.');
-    }
-    // Remove thousands separator: if decimal is dot, strip commas, else strip dots
-    if (props.decimalSeparator === '.') {
-      cleaned = cleaned.replace(/,/g, '');
-    } else {
-      cleaned = cleaned.replace(/\./g, '').replace(/\s/g, '');
-    }
-
-    let num = parseFloat(cleaned);
-    if (isNaN(num)) {
-      return { success: false, error: `"${rawVal}" cannot be parsed as a valid numeric decimal.` };
-    }
-
-    // Apply transformation
-    if (transformationType.value === 'divisor' && transformationValue.value) {
-      num /= transformationValue.value;
-    } else if (transformationType.value === 'multiplier' && transformationValue.value) {
-      num *= transformationValue.value;
-    }
-
-    return { success: true, value: num.toString() };
-  }
-
-  if (fieldType === 'datetime') {
-    const cleaned = rawVal.trim();
-    const parsedDate = parseDateTimeWithFormat(cleaned, dateFormat.value);
-    if (!parsedDate) {
-      return { success: false, error: `"${rawVal}" cannot be parsed as a valid timestamp with format "${dateFormat.value}".` };
-    }
-    return { success: true, value: parsedDate.toISOString() };
-  }
-
-  if (fieldType === 'enum') {
-    const mapped = enumMappings.value[rawVal];
-    if (!mapped) {
-      return { success: false, error: `Value "${rawVal}" must be mapped to a DB enum option.` };
-    }
-    return { success: true, value: mapped };
-  }
-
-  // default is string
-  return { success: true, value: rawVal };
-});
-
-const isSaveDisabled = computed(() => {
-  if (!selectedDbKey.value) return false;
-  if (!liveConversion.value.success) return true;
-  
-  // If enum, check that the example value is mapped
-  if (selectedField.value?.type === 'enum') {
-    if (props.exampleValue && props.exampleValue.trim()) {
-      if (!enumMappings.value[props.exampleValue]) return true;
-    }
-  }
-
-  return false;
-});
-
-const handleSave = () => {
-  if (isSaveDisabled.value) return;
-
-  emit('save', {
-    dbKey: selectedDbKey.value,
-    scope: scope.value,
-    divisor: transformationType.value === 'divisor' ? (transformationValue.value || undefined) : undefined,
-    multiplier: transformationType.value === 'multiplier' ? (transformationValue.value || undefined) : undefined,
-    enumMappings: selectedField.value?.type === 'enum' ? enumMappings.value : undefined,
-    dateFormat: selectedField.value?.type === 'datetime' ? dateFormat.value : undefined
-  });
-};
-
-const handleClear = () => {
-  emit('clear');
-};
-
-const attemptClose = () => {
-  if (isWizardDirty.value) {
-    showExitConfirm.value = true;
-  } else {
-    emit('close');
-  }
-};
-
-// Enter key press triggers mapping application (or shakes conversion card if blocked)
-const onEnterPress = () => {
-  if (isSaveDisabled.value) {
-    shouldShake.value = true;
-    setTimeout(() => {
-      shouldShake.value = false;
-    }, 500);
-  } else {
-    handleSave();
-  }
-};
-
-const handleKeyDown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    e.stopPropagation();
-    onEnterPress();
-  } else if (e.key === 'Escape') {
-    e.stopPropagation(); // Stop Escape from bubbling to parent modal
-    if (showExitConfirm.value) {
-      showExitConfirm.value = false;
-    } else {
-      attemptClose();
-    }
-  }
-};
+const {
+  selectedDbKey,
+  transformationType,
+  transformationValue,
+  enumMappings,
+  dateFormat,
+  shouldShake,
+  showExitConfirm,
+  selectedField,
+  isTickerMapped,
+  hasPartialTickerMapping,
+  liveConversion,
+  isSaveDisabled,
+  localEnrichAssetNames,
+  localEnrichTransactionIds,
+  handleSave,
+  handleClear,
+  attemptClose,
+  handleKeyDown,
+} = useColumnMappingWizard(props, emit);
 
 watch(() => props.show, (newVal) => {
   if (newVal) {
@@ -275,7 +81,7 @@ watch(() => props.show, (newVal) => {
   } else {
     window.removeEventListener('keydown', handleKeyDown, true);
   }
-});
+}, { immediate: true });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeyDown, true);
@@ -346,6 +152,55 @@ onBeforeUnmount(() => {
             :uniqueCsvValues="uniqueCsvValues"
             v-model:enumMappings="enumMappings"
           />
+
+          <!-- Auto-Enrichment Option for Asset Name field -->
+          <div v-if="selectedDbKey === 'name'" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-primary);">
+              Auto-Enrich Asset Names
+            </label>
+            <p style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.1rem; margin-bottom: 0.5rem;">
+              Choose when to automatically fetch asset names using the ticker (requires Ticker column mapped).
+            </p>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem;">
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-primary); cursor: pointer;" :style="{ opacity: isTickerMapped ? 1 : 0.5 }">
+                <input type="radio" value="when_empty" v-model="localEnrichAssetNames" :disabled="!isTickerMapped" />
+                <span>Only when empty (blank in file)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-primary); cursor: pointer;" :style="{ opacity: isTickerMapped ? 1 : 0.5 }">
+                <input type="radio" value="always" v-model="localEnrichAssetNames" :disabled="!isTickerMapped" />
+                <span>Always (overwrite name from file)</span>
+              </label>
+            </div>
+            
+            <p v-if="!isTickerMapped" style="font-size: 0.65rem; color: var(--color-warning); font-weight: 500; margin-top: 0.25rem;">
+              ⚠️ Ticker column must be mapped first to use auto-enrichment.
+            </p>
+            <p v-else-if="hasPartialTickerMapping" style="font-size: 0.65rem; color: var(--color-warning); font-weight: 500; margin-top: 0.25rem;">
+              ⚠️ Ticker column is not mapped for some of the selected transaction types. Auto-enrichment will only apply to types with a mapped ticker.
+            </p>
+          </div>
+
+          <!-- Auto-Generate Option for Transaction ID field -->
+          <div v-if="selectedDbKey === 'transaction_id'" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-primary);">
+              Auto-Generate Transaction IDs
+            </label>
+            <p style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.1rem; margin-bottom: 0.5rem;">
+              Choose when to automatically generate deterministic transaction IDs (based on all row fields).
+            </p>
+            
+            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.25rem;">
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-primary); cursor: pointer;">
+                <input type="radio" value="when_empty" v-model="localEnrichTransactionIds" />
+                <span>Only when empty (blank in file)</span>
+              </label>
+              <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--text-primary); cursor: pointer;">
+                <input type="radio" value="always" v-model="localEnrichTransactionIds" />
+                <span>Always (overwrite ID from file)</span>
+              </label>
+            </div>
+          </div>
         </template>
 
         <!-- Live Conversion Preview Section -->

@@ -55,6 +55,7 @@ const {
   isWizardOpen,
   wizardCsvHeaderName,
   wizardExampleValue,
+  wizardExampleRow,
   wizardActiveOpType,
   wizardUniqueValues,
   wizardInitialMapping,
@@ -77,6 +78,7 @@ const {
   validationErrors,
   isValidCustomMapping,
   parsedPreviewRows,
+  enrichedNames,
   uniqueOperationTypes,
   activeDbOpTypes,
   exampleTransactions,
@@ -252,6 +254,7 @@ const onConfirmOverwrite = () => {
                     :exampleTransactions="exampleTransactions"
                     :liveValidationStats="liveValidationStats"
                     :validationErrors="validationErrors"
+                    :enrichedNames="enrichedNames"
                     @back="currentStep = 1"
                     @open-wizard="(payload: any) => openWizard(payload.colId, payload.opType, payload.targets, payload.rawAction)"
                     @prev-example="prevExampleForType"
@@ -316,7 +319,6 @@ const onConfirmOverwrite = () => {
     @confirm="emit('close')" 
   />
 
-  <!-- Wizard mapping popup modal -->
   <ColumnMappingWizard
     :show="isWizardOpen"
     :csvHeaderName="wizardCsvHeaderName"
@@ -328,6 +330,10 @@ const onConfirmOverwrite = () => {
     :decimalSeparator="importDecimalSep"
     :uniqueCsvValues="wizardUniqueValues"
     :initialMapping="wizardInitialMapping"
+    :uiColumns="uiColumns"
+    :columnConfigMap="columnConfigMap"
+    :exampleRow="wizardExampleRow"
+    :operationTypeMappings="operationTypeMappings"
     @close="isWizardOpen = false"
     @clear="handleWizardClear"
     @save="handleWizardSave"

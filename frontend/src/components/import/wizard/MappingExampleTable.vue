@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Plus, Trash2 } from '@lucide/vue';
+import type { ColMapping } from '../../../services/import/types';
 import DynamicComponent from '../../DynamicComponent.vue';
 import { useTableGridSelection } from './useTableGridSelection';
 
@@ -9,7 +10,8 @@ const props = defineProps<{
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
   operationTypeColumnIdx: number | null;
   columnConfigMap: Record<string, {
-    typeSpecific: Record<string, { dbKey: string; divisor?: number; multiplier?: number; enumMappings?: Record<string, string>; dateFormat?: string }>;
+    global?: ColMapping;
+    typeSpecific: Record<string, ColMapping>;
   }>;
   activeDbOpTypes: string[];
   uniqueOperationTypes: string[];
@@ -28,6 +30,7 @@ const props = defineProps<{
     failed: number;
     errors: any[];
   }>;
+  enrichedNames: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -75,6 +78,125 @@ const dbOpOptions = computed(() => {
     value: opt,
     label: opt
   }));
+});
+
+// Pre-compute Ticker Column Indices per Operation Type for O(1) loop searches
+const tickerColIdxMap = computed(() => {
+  const map: Record<string, number> = {};
+  props.exampleTransactions.forEach(example => {
+    const opType = example.opType;
+    const tickerCol = props.uiColumns.find(col => {
+      const conf = props.columnConfigMap?.[col.id];
+      const spec = conf?.typeSpecific[opType];
+      const glob = conf?.global;
+      return spec?.dbKey === 'ticker' || glob?.dbKey === 'ticker';
+    });
+    map[opType] = tickerCol ? tickerCol.colIdx : -1;
+  });
+  return map;
+});
+
+// Pre-compute Deterministic Transaction IDs per Row to avoid hashing during render loop
+const rowTxIdMap = computed(() => {
+  const map: Record<number, string> = {};
+  props.exampleTransactions.forEach(example => {
+    const serialized = example.csvRow.join(',');
+    let hash1 = 5381;
+    let hash2 = 52711;
+    for (let i = 0; i < serialized.length; i++) {
+      const char = serialized.charCodeAt(i);
+      hash1 = (hash1 * 33) ^ char;
+      hash2 = (hash2 * 37) ^ char;
+    }
+    const h1 = Math.abs(hash1).toString(16).padStart(8, '0');
+    const h2 = Math.abs(hash2).toString(16).padStart(8, '0');
+    const mockHash = (h1 + h2).slice(0, 16);
+    map[example.rowIdx] = `auto-${mockHash}`;
+  });
+  return map;
+});
+
+// Cache cell rendering states to optimize rendering speed and apply styling
+const cellInfoMap = computed(() => {
+  const map: Record<string, {
+    dbKey: string;
+    label: string;
+    displayValue: string;
+    valueColor: string;
+    valueFontWeight: string;
+  }> = {};
+
+  props.exampleTransactions.forEach(example => {
+    const opType = example.opType;
+    const csvRow = example.csvRow;
+    const rowIdx = example.rowIdx;
+
+    props.uiColumns.forEach(col => {
+      const colId = col.id;
+      const cellVal = csvRow[col.colIdx] || '';
+      const rawVal = cellVal.trim();
+      
+      // Get mapped key and user-facing field label
+      const dbKey = getResolvedKeyForCell(colId, opType);
+      const field = props.importFields.find(f => f.key === dbKey);
+      const label = field?.label || dbKey;
+
+      // Default values
+      let displayValue = cellVal || '—';
+      let valueColor = 'var(--text-primary)';
+      let valueFontWeight = '500';
+
+      if (dbKey === 'name') {
+        const tickerIdx = tickerColIdxMap.value[opType] ?? -1;
+        const ticker = tickerIdx !== -1 && tickerIdx < csvRow.length ? csvRow[tickerIdx]?.trim() : '';
+        
+        const specConf = props.columnConfigMap?.[colId]?.typeSpecific?.[opType];
+        const mode = specConf?.dbKey === 'name' ? (specConf.enrichAssetNames || 'when_empty') : 'when_empty';
+        if (mode === 'always') {
+          const resolved = ticker ? (props.enrichedNames[ticker] || 'Resolving name...') : 'No Ticker mapped';
+          displayValue = `→ ${resolved}`;
+          valueColor = (resolved.includes('(Not Found)') || resolved === 'No Ticker mapped') ? 'var(--color-danger)' : 'var(--color-success)';
+          valueFontWeight = 'bold';
+        } else if (mode === 'when_empty') {
+          if (!rawVal) {
+            const resolved = ticker ? (props.enrichedNames[ticker] || 'Resolving name...') : 'No Ticker mapped';
+            displayValue = `→ ${resolved}`;
+            valueColor = (resolved.includes('(Not Found)') || resolved === 'No Ticker mapped') ? 'var(--color-danger)' : 'var(--color-success)';
+            valueFontWeight = 'bold';
+          } else {
+            displayValue = cellVal;
+          }
+        }
+      } else if (dbKey === 'transaction_id') {
+        const mockId = rowTxIdMap.value[rowIdx] || '';
+        const specConf = props.columnConfigMap?.[colId]?.typeSpecific?.[opType];
+        const mode = specConf?.dbKey === 'transaction_id' ? (specConf.enrichTransactionIds || 'when_empty') : 'when_empty';
+        if (mode === 'always') {
+          displayValue = `→ ${mockId}`;
+          valueColor = 'var(--accent-color)';
+          valueFontWeight = 'bold';
+        } else if (mode === 'when_empty') {
+          if (!rawVal) {
+            displayValue = `→ ${mockId}`;
+            valueColor = 'var(--color-success)';
+            valueFontWeight = 'bold';
+          } else {
+            displayValue = cellVal;
+          }
+        }
+      }
+
+      map[`${colId}:::${opType}`] = {
+        dbKey,
+        label,
+        displayValue,
+        valueColor,
+        valueFontWeight
+      };
+    });
+  });
+
+  return map;
 });
 </script>
 
@@ -200,11 +322,22 @@ const dbOpOptions = computed(() => {
               style="vertical-align: middle; position: relative; padding: 0.15rem 0.3rem; max-width: 160px;"
             >
               <div style="display: flex; flex-direction: column; gap: 0.05rem; overflow: hidden;">
-                <span style="font-family: monospace; font-size: 0.7rem; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="example.csvRow[col.colIdx] || '—'">
-                  {{ example.csvRow[col.colIdx] || '—' }}
+                <!-- The value: displays the enriched/live resolved value if enriched, or the raw CSV value -->
+                <span 
+                  style="font-family: monospace; font-size: 0.7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" 
+                  :style="{ color: cellInfoMap[`${col.id}:::${example.opType}`]?.valueColor, fontWeight: cellInfoMap[`${col.id}:::${example.opType}`]?.valueFontWeight }"
+                  :title="cellInfoMap[`${col.id}:::${example.opType}`]?.displayValue"
+                >
+                  {{ cellInfoMap[`${col.id}:::${example.opType}`]?.displayValue }}
                 </span>
-                <span v-if="getResolvedKeyForCell(col.id, example.opType)" style="font-size: 0.65rem; color: var(--accent-color); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="importFields.find(f => f.key === getResolvedKeyForCell(col.id, example.opType))?.label || getResolvedKeyForCell(col.id, example.opType)">
-                  → {{ importFields.find(f => f.key === getResolvedKeyForCell(col.id, example.opType))?.label || getResolvedKeyForCell(col.id, example.opType) }}
+                
+                <!-- The mapping indicator: ALWAYS display the database field label in blue -->
+                <span 
+                  v-if="cellInfoMap[`${col.id}:::${example.opType}`]?.dbKey" 
+                  style="font-size: 0.65rem; color: var(--accent-color); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" 
+                  :title="cellInfoMap[`${col.id}:::${example.opType}`]?.label"
+                >
+                  → {{ cellInfoMap[`${col.id}:::${example.opType}`]?.label }}
                 </span>
               </div>
             </td>

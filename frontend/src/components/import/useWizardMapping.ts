@@ -24,6 +24,7 @@ export function useWizardMapping(
   const wizardUniqueValues = ref<string[]>([]);
   const wizardInitialMapping = ref<any>(null);
   const wizardTargetCells = ref<Array<{ colId: string; opType: string | null }>>([]);
+  const wizardExampleRow = ref<string[]>([]);
 
   const selectedExampleOffset = ref<Record<string, number>>({});
 
@@ -84,6 +85,16 @@ export function useWizardMapping(
     wizardExampleValue.value = setup.exampleValue;
     wizardUniqueValues.value = setup.uniqueValues;
     wizardInitialMapping.value = setup.initialMapping;
+
+    let exampleRow: string[] = [];
+    if (rawAction) {
+      const example = exampleTransactions.value.find((e: any) => e.opType === rawAction);
+      if (example?.csvRow) exampleRow = example.csvRow;
+    } else if (allRawRows.value.length > 0) {
+      exampleRow = allRawRows.value[0];
+    }
+    wizardExampleRow.value = exampleRow;
+
     isWizardOpen.value = true;
   };
 
@@ -163,6 +174,7 @@ export function useWizardMapping(
     isWizardOpen,
     wizardCsvHeaderName,
     wizardExampleValue,
+    wizardExampleRow,
     wizardActiveOpType,
     wizardColId,
     wizardColIdx,

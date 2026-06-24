@@ -302,20 +302,15 @@ export function useTableGridSelection(
   };
 
   const getResolvedKeyForCell = (colId: string, opType: string) => {
-    const dbOpType = props.operationTypeMappings[opType];
-    if (!dbOpType) {
-      return '';
-    }
-
     const conf = props.columnConfigMap[colId];
     if (!conf) return '';
 
-    // Only show a mapping if it was explicitly set for this row.
-    if (conf.typeSpecific[opType] !== undefined) {
+    if (conf.typeSpecific && conf.typeSpecific[opType] !== undefined) {
       return conf.typeSpecific[opType].dbKey || '';
     }
 
-    if (conf.typeSpecific[dbOpType] !== undefined) {
+    const dbOpType = props.operationTypeMappings[opType];
+    if (dbOpType && conf.typeSpecific && conf.typeSpecific[dbOpType] !== undefined) {
       return conf.typeSpecific[dbOpType].dbKey || '';
     }
 

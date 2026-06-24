@@ -4,13 +4,11 @@ import { useSchemaManagement } from './useSchemaManagement';
 import { useWizardMapping } from './useWizardMapping';
 import { useImportFileProcessor } from './useImportFileProcessor';
 import { useImportExecutor } from './useImportExecutor';
+import { useImportPreview } from './useImportPreview';
+import { useImportWizardComputeds } from './useImportWizardComputeds';
 import {
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
-  validateLiveStats,
-  parsePreviewRows,
-  getValidationErrors,
-  parseSchemaMappings,
-  groupRowsByOpType
+  parseSchemaMappings
 } from '../../services/import';
 
 interface Portfolio {
@@ -50,9 +48,6 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     uiColumns.value.forEach(col => {
       columnConfigMap.value[col.id] = { typeSpecific: {} };
     });
-    operationTypeMappings.value = {};
-    operationTypeColumnIdx.value = null;
-    currentStep.value = 1;
   };
 
   const handleColumnChange = () => {
@@ -118,84 +113,29 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     }
   };
 
+  // Previews & Enrichment Pipeline
+  const enrichedNames = ref<Record<string, string>>({});
+
   // Computeds
-  const uniqueOperationTypes = computed(() => {
-    if (operationTypeColumnIdx.value === null) return [];
-    const uniqueSet = new Set<string>();
-    allRawRows.value.forEach(row => {
-      const val = row[operationTypeColumnIdx.value!];
-      if (val && val.trim()) uniqueSet.add(val.trim());
-    });
-    return Array.from(uniqueSet);
-  });
-
-  const activeDbOpTypes = computed(() => {
-    const types = new Set<string>();
-    Object.values(operationTypeMappings.value).forEach(v => {
-      if (v) types.add(v);
-    });
-    return Array.from(types);
-  });
-
-  const matchingRowsByRawAction = computed(() => {
-    const result: Record<string, { csvRow: string[]; rowIdx: number }[]> = {};
-    if (operationTypeColumnIdx.value === null) return result;
-    allRawRows.value.forEach((row, idx) => {
-      const rawAction = row[operationTypeColumnIdx.value!];
-      if (rawAction) {
-        const trimmed = rawAction.trim();
-        if (!result[trimmed]) result[trimmed] = [];
-        result[trimmed].push({ csvRow: row, rowIdx: idx });
-      }
-    });
-    return result;
-  });
-
-  const matchingRowsByType = computed(() => {
-    return groupRowsByOpType(allRawRows.value, operationTypeColumnIdx.value, operationTypeMappings.value);
-  });
-
-  const liveValidationStats = computed(() => {
-    return validateLiveStats({
-      importFields: importFields.value,
-      importDelimiter: importDelimiter.value,
-      importDecimalSep: importDecimalSep.value,
-      columnConfigMap: columnConfigMap.value,
-      uiColumns: uiColumns.value,
-      activeDbOpTypes: activeDbOpTypes.value,
-      allRawRows: allRawRows.value,
-      operationTypeColumnIdx: operationTypeColumnIdx.value,
-      operationTypeMappings: operationTypeMappings.value
-    });
-  });
-
-  const validationErrors = computed(() => {
-    return getValidationErrors({
-      importFile: importFile.value,
-      operationTypeColumnIdx: operationTypeColumnIdx.value,
-      uniqueOperationTypes: uniqueOperationTypes.value,
-      operationTypeMappings: operationTypeMappings.value,
-      activeDbOpTypes: activeDbOpTypes.value,
-      importFields: importFields.value,
-      columnConfigMap: columnConfigMap.value,
-      uiColumns: uiColumns.value,
-      liveValidationStats: liveValidationStats.value
-    });
-  });
-
-  const isValidCustomMapping = computed(() => validationErrors.value.length === 0);
-
-  const parsedPreviewRows = computed(() => {
-    return parsePreviewRows({
-      fileText: fileText.value,
-      importDelimiter: importDelimiter.value,
-      importDecimalSep: importDecimalSep.value,
-      operationTypeColumnIdx: operationTypeColumnIdx.value,
-      operationTypeMappings: operationTypeMappings.value,
-      columnConfigMap: columnConfigMap.value,
-      uiColumns: uiColumns.value,
-      importFields: importFields.value
-    });
+  const {
+    uniqueOperationTypes,
+    activeDbOpTypes,
+    matchingRowsByRawAction,
+    matchingRowsByType,
+    liveValidationStats,
+    validationErrors,
+    isValidCustomMapping
+  } = useImportWizardComputeds({
+    importFile,
+    allRawRows,
+    operationTypeColumnIdx,
+    operationTypeMappings,
+    importFields,
+    importDelimiter,
+    importDecimalSep,
+    columnConfigMap,
+    uiColumns,
+    enrichedNames
   });
 
   const buildCustomMappingPayload = () => {
@@ -221,6 +161,19 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     allRawRows,
     operationTypeMappings
   );
+
+  const { parsedPreviewRows } = useImportPreview({
+    fileText,
+    importDelimiter,
+    importDecimalSep,
+    operationTypeColumnIdx,
+    operationTypeMappings,
+    columnConfigMap,
+    uiColumns,
+    importFields,
+    exampleTransactions: computed(() => wizardMapping.exampleTransactions.value),
+    enrichedNames
+  });
 
   const executor = useImportExecutor({
     portfolio: props.portfolio,
@@ -332,6 +285,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     isWizardOpen: wizardMapping.isWizardOpen,
     wizardCsvHeaderName: wizardMapping.wizardCsvHeaderName,
     wizardExampleValue: wizardMapping.wizardExampleValue,
+    wizardExampleRow: wizardMapping.wizardExampleRow,
     wizardActiveOpType: wizardMapping.wizardActiveOpType,
     wizardColId: wizardMapping.wizardColId,
     wizardColIdx: wizardMapping.wizardColIdx,
@@ -380,6 +334,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     validationErrors,
     isValidCustomMapping,
     parsedPreviewRows,
+    enrichedNames,
     uniqueOperationTypes,
     activeDbOpTypes,
     liveValidationStats,

@@ -17,6 +17,7 @@ const props = defineProps<{
   validationErrors: string[];
   saveMappingTemplate: boolean;
   mappingTemplateName: string;
+  enrichedNames: Record<string, string>;
 }>();
 
 const emit = defineEmits<{
@@ -63,6 +64,7 @@ const openVerificationModal = (dbOpType: string) => {
       :importFields="importFields"
       :exampleTransactions="exampleTransactions"
       :liveValidationStats="liveValidationStats"
+      :enrichedNames="enrichedNames"
       @open-wizard="(payload: any) => emit('open-wizard', payload)"
       @prev-example="(opType: string) => emit('prev-example', opType)"
       @next-example="(opType: string) => emit('next-example', opType)"
