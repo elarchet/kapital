@@ -37,7 +37,6 @@ from src.models.operation_enums import (
 )
 from src.models.portfolio import Portfolio
 from src.models.position import AssetType, Position
-from src.models.ui_marketplace import UIComponentOverride, UIComponentVariant
 from src.models.user import User
 
 __all__ = [
@@ -71,7 +70,5 @@ __all__ = [
     "TradeSide",
     "TransferInOperation",
     "TransferOutOperation",
-    "UIComponentOverride",
-    "UIComponentVariant",
     "User",
 ]

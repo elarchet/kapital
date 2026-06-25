@@ -11,6 +11,7 @@ This document defines the core architecture, stack definitions, subagent matrix,
 - **Clean Decoupling**: All business/financial logic resides in the backend. The frontend only presents data via the REST API endpoints.
   - **Directory Rules**: Stateful operations (DB calls, external services) belong in `backend/src/services/`. Pure, stateless financial calculations (equations, interest models) belong in `backend/src/logic/`.
 - **API Versioning**: All endpoints must be versioned under the `/api/v1/` prefix to prevent breaking changes.
+- **No Retro-Compatibility Constraints**: During beta development, backward-compatibility is not required. APIs, endpoints, and schemas can be aggressively cleaned up, simplified, or broken to optimize the architecture, without carrying legacy parameters or adapter layers.
 - **Tailwind First**: All styling must use Tailwind CSS v4 utility classes. Declare theme variables once in `frontend/src/style.css`. `<style scoped>` blocks must remain empty or near-empty.
 - **Tech Stack**: Vue.js, Tailwind CSS v4, Playwright, FastAPI (`Annotated` dependencies), SQLModel + Alembic, Polars, Pydantic v2 (Strict), SQLite/PostgreSQL, `uv`, Modern Python.
 - **Bulk Mutations & Performance**: Optimize bulk updates or imports by caching database lookups in-memory and using a single batch `db.commit()` in a try-except-rollback block at the service layer, avoiding N+1 queries and loop commits.

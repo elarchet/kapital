@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import { useKapitalStore } from '../store';
 import { usePreferencesStore } from '../store/preferences';
 import { api } from '../services/api';
-import { preloadComponents } from '../services/componentResolver';
 
 const router = useRouter();
 const store = useKapitalStore();
@@ -30,7 +29,6 @@ const handleLogin = async () => {
       store.fetchAllData(),
       preferencesStore.fetchPreferences()
     ]);
-    await preloadComponents();
     router.push('/');
   } catch (err: any) {
     error.value = err.message || 'Authentication failed. Please verify credentials.';

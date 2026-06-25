@@ -269,89 +269,15 @@ export const api = {
     return response.json();
   },
 
-  // UI Component Marketplace
+  // User Preferences
   async getUserPreferences(): Promise<any> {
-    return request<any>('/api/v1/user/preferences/');
+    return request<any>('/api/v1/auth/preferences');
   },
 
   async updateUserTheme(theme: string): Promise<any> {
-    return request<any>('/api/v1/user/preferences/theme', {
+    return request<any>('/api/v1/auth/theme', {
       method: 'PUT',
       body: JSON.stringify({ theme }),
     });
-  },
-
-  async getComponentVariants(componentKey?: string): Promise<any[]> {
-    const url = componentKey ? `/api/v1/user/preferences/variants?component_key=${componentKey}` : '/api/v1/user/preferences/variants';
-    return request<any[]>(url);
-  },
-
-  async createComponentVariant(data: {
-    component_key: string;
-    name: string;
-    description?: string;
-    asset_url: string;
-  }): Promise<any> {
-    return request<any>('/api/v1/user/preferences/variants', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  async deleteComponentVariant(variantId: number): Promise<any> {
-    return request<any>(`/api/v1/user/preferences/variants/${variantId}`, {
-      method: 'DELETE',
-    });
-  },
-
-  async setComponentOverride(componentKey: string, variantId: number): Promise<any> {
-    return request<any>('/api/v1/user/preferences/components', {
-      method: 'POST',
-      body: JSON.stringify({ component_key: componentKey, variant_id: variantId }),
-    });
-  },
-
-  async revertComponentOverride(componentKey: string): Promise<any> {
-    return request<any>(`/api/v1/user/preferences/components/${componentKey}`, {
-      method: 'DELETE',
-    });
-  },
-
-  async uploadComponentVariant(
-    componentKey: string,
-    name: string,
-    description: string | null,
-    file: File
-  ): Promise<any> {
-    const formData = new FormData();
-    formData.append('component_key', componentKey);
-    formData.append('name', name);
-    if (description !== null) {
-      formData.append('description', description);
-    }
-    formData.append('file', file);
-
-    const token = localStorage.getItem('kapital_token');
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const response = await fetch('/api/v1/user/preferences/upload', {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
-
-    if (!response.ok) {
-      let errorMsg = 'Failed to upload component file.';
-      try {
-        const errorData = await response.json();
-        if (errorData?.detail) errorMsg = errorData.detail;
-      } catch {}
-      throw new Error(errorMsg);
-    }
-
-    return response.json();
   }
 };

@@ -9,7 +9,7 @@ from src.auth import create_access_token, get_current_user
 from src.crud import user_crud
 from src.database import get_session
 from src.models.user import User
-from src.schemas.user import UserCreate, UserRead
+from src.schemas.user import ThemeUpdate, UserCreate, UserPreferencesRead, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -94,3 +94,54 @@ def read_user_me(
 ) -> User:
     """Retrieve the profile of the currently logged in user."""
     return current_user
+
+
+@router.get(
+    "/preferences",
+    response_model=UserPreferencesRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+    },
+)
+def read_user_preferences(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> dict:
+    """Retrieve the current user's global theme preference."""
+    if current_user.id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user record lacks a valid identifier.",
+        )
+
+    return {
+        "theme": current_user.theme,
+    }
+
+
+@router.put(
+    "/theme",
+    response_model=UserPreferencesRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+    },
+)
+def update_user_theme(
+    theme_in: ThemeUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_session)],
+) -> dict:
+    """Update the current user's global theme selection."""
+    if current_user.id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user record lacks a valid identifier.",
+        )
+
+    current_user.theme = theme_in.theme
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+
+    return {
+        "theme": current_user.theme,
+    }

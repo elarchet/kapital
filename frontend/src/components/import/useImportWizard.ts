@@ -56,7 +56,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     if (schemaMgmt.selectedSchemaId.value === -1) {
       isCustomMapping.value = true;
       schemaMgmt.selectedSchemaId.value = null;
-      initializeConfigs();
+      handleColumnChange();
     } else {
       const schema = schemaMgmt.availableSchemas.value.find(s => s.id === schemaMgmt.selectedSchemaId.value);
       if (schema) {
@@ -101,7 +101,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         uiColumns.value = parsed.uiColumns;
       } else {
         isCustomMapping.value = true;
-        initializeConfigs();
+        handleColumnChange();
       }
     }
   };

@@ -26,21 +26,4 @@ test('verify settings page themes and component overrides', async ({ page }) => 
   await slateDarkBtn.click();
   // Check that the checkmark icon appears (which has text-accent class)
   await expect(slateDarkBtn.locator('svg')).toBeVisible();
-
-  // 4. Check UI Component Overrides Display
-  const sidebarConfig = page.locator('.component-config-card', { hasText: 'Sidebar Nav' });
-  await expect(sidebarConfig).toBeVisible();
-
-  const chooseExtBtn = sidebarConfig.locator('button:has-text("Choose Extension")');
-  await expect(chooseExtBtn).toBeVisible();
-  await chooseExtBtn.click();
-
-  // 5. Verify the Modal opens
-  const modalHeader = page.locator('h3', { hasText: 'Extensions for: Sidebar Nav' });
-  await expect(modalHeader).toBeVisible();
-
-  // Close modal using the x button
-  const closeBtn = page.locator('.modal-header button');
-  await closeBtn.click();
-  await expect(modalHeader).not.toBeVisible();
 });

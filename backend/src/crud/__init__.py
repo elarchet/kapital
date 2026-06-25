@@ -5,7 +5,6 @@ from src.crud.import_file_schema import import_file_schema_crud
 from src.crud.operation import operation_crud
 from src.crud.portfolio import portfolio_crud
 from src.crud.position import position_crud
-from src.crud.ui_marketplace import ui_component_override_crud, ui_component_variant_crud
 from src.crud.user import user_crud
 from src.models.fee import Fee
 from src.models.financial_account import FinancialAccount
@@ -26,7 +25,5 @@ __all__ = [
     "operation_crud",
     "portfolio_crud",
     "position_crud",
-    "ui_component_override_crud",
-    "ui_component_variant_crud",
     "user_crud",
 ]

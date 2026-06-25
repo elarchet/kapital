@@ -19,7 +19,6 @@ from src.routers import (
     operation,
     portfolio,
     position,
-    ui_marketplace,
 )
 
 
@@ -55,7 +54,6 @@ app.include_router(financial_account.router, prefix="/api/v1")
 app.include_router(operation.router, prefix="/api/v1")
 app.include_router(import_file_schema.router, prefix="/api/v1")
 app.include_router(financial_info.router, prefix="/api/v1")
-app.include_router(ui_marketplace.router, prefix="/api/v1")
 
 # Mount Static Files for component uploads
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)

@@ -26,3 +26,11 @@ class UserRead(UserBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ThemeUpdate(BaseModel):
+    theme: str
+
+
+class UserPreferencesRead(BaseModel):
+    theme: str

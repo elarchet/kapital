@@ -34,17 +34,10 @@ from src.schemas.position import (
     PositionRead,
     PositionUpdate,
 )
-from src.schemas.ui_marketplace import (
-    ThemeUpdate,
-    UIComponentOverrideCreate,
-    UIComponentOverrideRead,
-    UIComponentVariantCreate,
-    UIComponentVariantRead,
-    UIComponentVariantUpdate,
-    UserPreferencesRead,
-)
 from src.schemas.user import (
+    ThemeUpdate,
     UserCreate,
+    UserPreferencesRead,
     UserRead,
     UserUpdate,
 )
@@ -71,11 +64,6 @@ __all__ = [
     "PositionRead",
     "PositionUpdate",
     "ThemeUpdate",
-    "UIComponentOverrideCreate",
-    "UIComponentOverrideRead",
-    "UIComponentVariantCreate",
-    "UIComponentVariantRead",
-    "UIComponentVariantUpdate",
     "UserCreate",
     "UserPreferencesRead",
     "UserRead",
