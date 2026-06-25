@@ -13,27 +13,26 @@ test('verify full portfolio and position lifecycle flow with custom modals', asy
   await expect(page).toHaveURL(/^(?!.*login).*$/);
   await expect(page.locator('h1')).toHaveText('Global Dashboard');
 
-  // 2. Create Portfolio Strategy Folder via Sidebar
-  const addPortfolioBtn = page.locator('button[title="Create Portfolio"]');
+  // 2. Create Portfolio Strategy Folder via Sidebar (directly creates and sets in rename mode)
+  const addPortfolioBtn = page.locator('button[title="Create Portfolio"]').first();
   await expect(addPortfolioBtn).toBeVisible();
   await addPortfolioBtn.click();
 
-  // Modal forms
-  const nameInput = page.locator('#portfolioName');
-  const descInput = page.locator('#portfolioDesc');
-  const submitBtn = page.locator('button:has-text("Create Portfolio")');
+  // Wait for the inline renaming input to appear in the sidebar
+  const renameInput = page.locator('.sidebar-nav input');
+  await expect(renameInput).toBeVisible();
 
+  // Rename the portfolio inline
   const portfolioName = `QA E2E Strategy ${Date.now()}`;
-  await nameInput.fill(portfolioName);
-  await descInput.fill('Formulated via Playwright E2E runner.');
-  await submitBtn.click();
+  await renameInput.fill(portfolioName);
+  await renameInput.press('Enter');
 
-  // 3. Navigate to the new Portfolio
+  // Verify rename input is gone and the sidebar link is updated
+  await expect(renameInput).not.toBeVisible();
   const portfolioLink = page.locator('.sidebar-nav a', { hasText: portfolioName });
   await expect(portfolioLink).toBeVisible();
-  await portfolioLink.click();
 
-  // Verify portfolio page loaded
+  // Verify portfolio page loaded and has the new name
   await expect(page.locator('.page-header h1')).toContainText(portfolioName);
 
   // 4. Open Add Position dropdown

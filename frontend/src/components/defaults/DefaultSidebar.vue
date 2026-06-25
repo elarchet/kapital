@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useKapitalStore } from '../../store';
 import { api } from '../../services/api';
@@ -15,18 +15,84 @@ import {
   ChevronUp
 } from '@lucide/vue';
 import { SIDEBAR_CONFIG } from '../../config/sidebar';
-
-
+import EmojiPicker from '../portfolio/EmojiPicker.vue';
 
 const router = useRouter();
 const route = useRoute();
 const store = useKapitalStore();
 
-const showCreateModal = ref(false);
-const newPortfolioName = ref('');
-const newPortfolioDesc = ref('');
 const isSubmitting = ref(false);
 const submitError = ref('');
+
+// Rename states
+const editingPortfolioId = ref<number | null>(null);
+const editingName = ref('');
+const renameInput = ref<HTMLInputElement[] | null>(null);
+
+// Drag and drop states
+const dragSrcId = ref<number | null>(null);
+const dragTargetIdx = ref<number | null>(null);
+
+const onDragStart = (e: DragEvent, id: number) => {
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(id));
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    e.dataTransfer.setDragImage(canvas, 0, 0);
+  }
+  setTimeout(() => { dragSrcId.value = id; }, 0);
+};
+
+const onContainerDragOver = (e: DragEvent) => {
+  e.preventDefault();
+  if (dragSrcId.value === null) return;
+
+  const container = e.currentTarget as HTMLElement;
+  // Get all children except the one currently being dragged (which has opacity-25/is visually moving)
+  // or simply filter out the dragged node using its ID or checking dragSrcId.
+  const items = (Array.from(container.children) as HTMLElement[]).filter(item => {
+    // If it's the element being dragged, exclude it from position checking to prevent layout shifting midpoints
+    return !item.classList.contains('opacity-25');
+  });
+
+  const srcIndex = store.portfolios.findIndex(p => p.id === dragSrcId.value);
+  if (srcIndex === -1) return;
+
+  let newIdx = items.length;
+  for (let i = 0; i < items.length; i++) {
+    const rect = items[i].getBoundingClientRect();
+    const mid = rect.top + rect.height / 2;
+    if (e.clientY < mid) {
+      newIdx = i;
+      break;
+    }
+  }
+
+  // Adjust target index based on original source position
+  // Because the dragged item is excluded, if newIdx is after the current position,
+  // we adjust by 0 or 1 to match the correct store index mapping.
+  let targetIdx = newIdx;
+  if (targetIdx > srcIndex) {
+    // Since we filtered it out, the target index maps to one slot higher in the full array
+  }
+
+  if (dragTargetIdx.value === targetIdx) return;
+  dragTargetIdx.value = targetIdx;
+
+  if (srcIndex === targetIdx) return;
+
+  const order = store.portfolios.map(p => p.id);
+  const [moved] = order.splice(srcIndex, 1);
+  order.splice(targetIdx, 0, moved);
+  store.updatePortfoliosOrder(order);
+};
+
+const onDragEnd = () => {
+  dragSrcId.value = null;
+  dragTargetIdx.value = null;
+};
 
 const handleLogout = () => {
   api.logout();
@@ -34,21 +100,63 @@ const handleLogout = () => {
   router.push('/login');
 };
 
-const handleCreatePortfolio = async () => {
-  if (!newPortfolioName.value.trim()) return;
+const startRename = (p: any) => {
+  editingPortfolioId.value = p.id;
+  editingName.value = p.name;
+};
+
+const cancelRename = () => {
+  editingPortfolioId.value = null;
+  editingName.value = '';
+};
+
+const saveRename = async (id: number) => {
+  const trimmed = editingName.value.trim();
+  if (!trimmed) {
+    cancelRename();
+    return;
+  }
+  try {
+    await store.updatePortfolio(id, { name: trimmed });
+  } catch (err) {
+    console.error('Failed to rename portfolio:', err);
+  } finally {
+    editingPortfolioId.value = null;
+  }
+};
+
+const handleDirectCreatePortfolio = async () => {
   isSubmitting.value = true;
   submitError.value = '';
   try {
-    await store.createPortfolio(newPortfolioName.value, newPortfolioDesc.value);
-    newPortfolioName.value = '';
-    newPortfolioDesc.value = '';
-    showCreateModal.value = false;
+    const count = store.portfolios.length + 1;
+    const name = `New Portfolio ${count}`;
+    const newPtf = await store.createPortfolio(name, '');
+    
+    await router.push({
+      path: `/portfolio/${newPtf.id}`,
+      state: { editNameInline: true }
+    });
+    editingPortfolioId.value = newPtf.id;
+    editingName.value = newPtf.name;
+  } catch (err: any) {
+    submitError.value = err.message || 'Failed to create portfolio';
   } finally {
     isSubmitting.value = false;
   }
 };
 
-// Write custom property for global CSS width consumption
+watch(editingPortfolioId, async (newVal) => {
+  if (newVal !== null) {
+    await nextTick();
+    if (renameInput.value && renameInput.value.length > 0) {
+      const el = renameInput.value[0];
+      el.focus();
+      el.select();
+    }
+  }
+});
+
 const updateSidebarWidthProperty = () => {
   const width = store.sidebarCollapsed 
     ? `${SIDEBAR_CONFIG.COLLAPSED_WIDTH}px` 
@@ -60,9 +168,20 @@ watch(() => [store.sidebarWidth, store.sidebarCollapsed], updateSidebarWidthProp
 
 onMounted(() => {
   updateSidebarWidthProperty();
+  
+  if (window.history.state && window.history.state.editNameInline && route.params.id) {
+    const id = Number(route.params.id);
+    const p = store.portfolios.find(ptf => ptf.id === id);
+    if (p) {
+      editingPortfolioId.value = id;
+      editingName.value = p.name;
+    }
+  }
 });
 
 const isResizing = ref(false);
+let activeMouseMoveHandler: ((e: MouseEvent) => void) | null = null;
+let activeMouseUpHandler: (() => void) | null = null;
 
 const startResize = (e: MouseEvent) => {
   e.preventDefault();
@@ -70,22 +189,24 @@ const startResize = (e: MouseEvent) => {
   document.body.style.cursor = 'ew-resize';
   document.body.style.userSelect = 'none';
 
-  const handleMouseMove = (event: MouseEvent) => {
+  activeMouseMoveHandler = (event: MouseEvent) => {
     if (!isResizing.value) return;
     const newWidth = event.clientX;
     store.setSidebarWidth(newWidth);
   };
 
-  const handleMouseUp = () => {
+  activeMouseUpHandler = () => {
     isResizing.value = false;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
+    if (activeMouseMoveHandler) window.removeEventListener('mousemove', activeMouseMoveHandler);
+    if (activeMouseUpHandler) window.removeEventListener('mouseup', activeMouseUpHandler);
+    activeMouseMoveHandler = null;
+    activeMouseUpHandler = null;
   };
 
-  window.addEventListener('mousemove', handleMouseMove);
-  window.addEventListener('mouseup', handleMouseUp);
+  window.addEventListener('mousemove', activeMouseMoveHandler);
+  window.addEventListener('mouseup', activeMouseUpHandler);
 };
 
 const showProfileMenu = ref(false);
@@ -95,21 +216,23 @@ const toggleProfileMenu = () => {
 const closeProfileMenu = () => {
   showProfileMenu.value = false;
 };
+
 onMounted(() => {
   window.addEventListener('click', closeProfileMenu);
 });
 onBeforeUnmount(() => {
   window.removeEventListener('click', closeProfileMenu);
+  if (activeMouseMoveHandler) window.removeEventListener('mousemove', activeMouseMoveHandler);
+  if (activeMouseUpHandler) window.removeEventListener('mouseup', activeMouseUpHandler);
 });
 </script>
 
 <template>
   <aside class="sidebar" :class="{ collapsed: store.sidebarCollapsed, 'is-resizing': isResizing }">
-    <!-- Resize handle border, only enabled when expanded -->
     <div v-if="!store.sidebarCollapsed" class="resize-handle" @mousedown="startResize"></div>
 
     <div class="sidebar-logo">
-      <div style="display: flex; align-items: center; gap: 0.75rem; overflow: hidden;">
+      <div class="flex items-center gap-3 overflow-hidden">
         <div class="logo-icon">K</div>
         <div v-show="!store.sidebarCollapsed" class="logo-text">Kapital</div>
       </div>
@@ -124,68 +247,127 @@ onBeforeUnmount(() => {
     </div>
 
     <nav class="sidebar-nav">
-      <!-- Section: Overview -->
       <div v-show="!store.sidebarCollapsed" class="nav-section-title">Overview</div>
       <router-link to="/" class="nav-link" :class="{ active: route.path === '/' }" title="Global View">
         <LayoutDashboard class="nav-icon" />
         <span v-show="!store.sidebarCollapsed">Global View</span>
       </router-link>
 
-
-      <!-- Section: Portfolios -->
-      <div v-if="!store.sidebarCollapsed" class="nav-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+      <div v-if="!store.sidebarCollapsed" class="nav-section-title flex justify-between items-center">
         <span>Portfolios</span>
         <button 
-          @click="showCreateModal = true" 
-          style="background: none; border: none; color: var(--text-tertiary); cursor: pointer; display: flex; align-items: center;"
+          @click="handleDirectCreatePortfolio" 
+          class="bg-transparent border-0 text-text-tertiary cursor-pointer flex items-center"
           title="Create Portfolio"
+          :disabled="isSubmitting"
         >
-          <PlusCircle style="width: 16px; height: 16px;" />
+          <PlusCircle class="w-4 h-4" />
         </button>
       </div>
       <div v-else class="nav-divider"></div>
 
-      <div v-if="store.loading && !store.portfolios.length" style="padding: 1rem; text-align: center; color: var(--text-tertiary);">
+      <div v-if="store.loading && !store.portfolios.length" class="p-4 text-center text-text-tertiary">
         <Loader class="nav-icon animate-spin mx-auto" />
       </div>
 
-      <div v-else-if="!store.portfolios.length && !store.sidebarCollapsed" style="padding: 0.5rem 0.75rem; font-size: 0.8rem; color: var(--text-tertiary); font-style: italic;">
+      <div v-else-if="!store.portfolios.length && !store.sidebarCollapsed" class="px-3 py-2 text-xs text-text-tertiary italic">
         No portfolios created yet.
       </div>
 
       <template v-else-if="store.portfolios.length">
-        <router-link 
-          v-for="p in store.portfolios" 
-          :key="p.id" 
-          :to="'/portfolio/' + p.id" 
-          class="nav-link"
-          :class="{ active: route.path === '/portfolio/' + p.id }"
-          :title="p.name"
-        >
-          <Folder class="nav-icon" />
-          <span v-show="!store.sidebarCollapsed" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ p.name }}</span>
-        </router-link>
+      <TransitionGroup name="portfolio-list" tag="div" class="flex flex-col gap-1"
+        @dragover="onContainerDragOver"
+      >
+          <div 
+            v-for="p in store.portfolios" 
+            :key="p.id"
+            draggable="true"
+            @dragstart="onDragStart($event, p.id)"
+            @dragend="onDragEnd"
+            class="transition-all duration-300"
+            :class="[
+              dragSrcId === p.id ? 'opacity-25 bg-bg-tertiary border border-dashed border-accent rounded-md' : ''
+            ]"
+          >
+            <!-- Router Link (When not editing) -->
+            <router-link
+              v-if="editingPortfolioId !== p.id"
+              :to="'/portfolio/' + p.id"
+              draggable="false"
+              class="nav-link relative group"
+              :class="[
+                { active: route.path === '/portfolio/' + p.id },
+                dragSrcId === p.id ? 'pointer-events-none' : ''
+              ]"
+              :title="p.name"
+            >
+              <!-- Emoji / Folder Icon Picker -->
+              <EmojiPicker
+                :modelValue="p.emoji"
+                :disabled="store.sidebarCollapsed"
+                @update:modelValue="store.setPortfolioEmoji(p.id, $event)"
+                class="mr-2"
+              />
+
+              <!-- Name Display -->
+              <div v-show="!store.sidebarCollapsed" class="flex-1 min-w-0">
+                <span 
+                  @dblclick.stop="startRename(p)" 
+                  class="block truncate select-none cursor-pointer"
+                >
+                  {{ p.name }}
+                </span>
+              </div>
+            </router-link>
+
+            <!-- Edit Input Div (When editing) -->
+            <div
+              v-else
+              class="nav-link relative group active flex items-center"
+              :title="p.name"
+            >
+              <EmojiPicker
+                :modelValue="p.emoji"
+                :disabled="store.sidebarCollapsed"
+                @update:modelValue="store.setPortfolioEmoji(p.id, $event)"
+                class="mr-2"
+              />
+
+              <!-- Name Input -->
+              <div v-show="!store.sidebarCollapsed" class="flex-1 min-w-0">
+                <input
+                  ref="renameInput"
+                  v-model="editingName"
+                  class="bg-bg-tertiary text-text-primary border-0 outline-none ring-0 p-0 px-1.5 w-full rounded text-[0.925rem] font-medium leading-tight"
+                  @keydown.enter="saveRename(p.id)"
+                  @keydown.esc="cancelRename"
+                  @blur="saveRename(p.id)"
+                  @click.stop.prevent
+                />
+              </div>
+            </div>
+          </div>
+        </TransitionGroup>
       </template>
 
       <!-- Separate entry for Unassigned Holdings fallback pool -->
       <router-link 
         v-if="store.hasUnassignedPositions"
         to="/portfolio/unassigned"
-        class="nav-link mt-2 border border-dashed border-[var(--border-color)] rounded-md hover:bg-bg-tertiary transition-colors"
+        class="nav-link mt-2 border border-dashed border-border-color rounded-md hover:bg-bg-tertiary transition-colors"
         :class="{ active: route.path === '/portfolio/unassigned' }"
         title="Unassigned Holdings"
       >
         <Folder class="nav-icon text-amber-500" />
-        <span v-show="!store.sidebarCollapsed" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary);">Unassigned Holdings</span>
+        <span v-show="!store.sidebarCollapsed" class="truncate text-text-secondary">Unassigned Holdings</span>
       </router-link>
 
-      <!-- Collapsed Add Portfolio Action -->
       <button 
         v-if="store.sidebarCollapsed"
-        @click="showCreateModal = true" 
-        class="nav-link"
+        @click="handleDirectCreatePortfolio" 
+        class="nav-link w-full border-none bg-transparent text-left flex justify-center py-3"
         title="Create Portfolio"
-        style="width: 100%; border: none; background: none; text-align: left; display: flex; justify-content: center; padding: 0.75rem 0;"
+        :disabled="isSubmitting"
       >
         <PlusCircle class="nav-icon" style="color: var(--accent-color);" />
       </button>
@@ -226,56 +408,12 @@ onBeforeUnmount(() => {
         
         <button 
           @click="handleLogout" 
-          class="flex items-center gap-2.5 px-4 py-2.5 text-xs text-color-danger hover:bg-color-danger-light transition-colors w-full text-left border-0 bg-transparent cursor-pointer"
+          class="flex items-center gap-2.5 px-4 py-2.5 text-xs text-danger-color hover:bg-danger-light transition-colors w-full text-left border-0 bg-transparent cursor-pointer"
         >
           <LogOut class="w-4 h-4" />
           <span>Sign Out</span>
         </button>
       </div>
     </div>
-
-    <!-- Create Portfolio Modal -->
-    <div v-if="showCreateModal" class="modal-overlay">
-      <div class="modal-card" style="max-width: 400px;">
-        <div class="modal-header">
-          <h3 class="table-title">New Portfolio</h3>
-          <button @click="showCreateModal = false" style="background: none; border: none; cursor: pointer; font-size: 1.25rem;">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="submitError" class="login-error" style="margin-bottom: 1rem;">
-            {{ submitError }}
-          </div>
-          <div class="form-group">
-            <label for="portfolioName">Name</label>
-            <input 
-              v-model="newPortfolioName" 
-              type="text" 
-              id="portfolioName" 
-              class="form-control" 
-              placeholder="e.g. Pension Fund"
-              required 
-            />
-          </div>
-          <div class="form-group">
-            <label for="portfolioDesc">Description</label>
-            <textarea 
-              v-model="newPortfolioDesc" 
-              id="portfolioDesc" 
-              class="form-control" 
-              placeholder="Brief strategy outline"
-              rows="3"
-            ></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button @click="showCreateModal = false" class="btn btn-sm">Cancel</button>
-          <button @click="handleCreatePortfolio" class="btn btn-sm btn-primary" :disabled="isSubmitting || !newPortfolioName.trim()">
-            <span v-if="isSubmitting">Creating...</span>
-            <span v-else>Create Portfolio</span>
-          </button>
-        </div>
-      </div>
-    </div>
   </aside>
 </template>
-

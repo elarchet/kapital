@@ -688,3 +688,8 @@ h6 {
 .badge-unknown {
   @apply bg-bg-tertiary text-text-secondary;
 }
+
+/* Sidebar portfolio drag and drop reordering animations */
+.portfolio-list-move {
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}

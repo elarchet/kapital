@@ -1,18 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useKapitalStore } from '../store';
 import DynamicComponent from '../components/DynamicComponent.vue';
 import ImportTransactionsModal from '../components/import/ImportTransactionsModal.vue';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  Layers, 
-  Grid,
-  Loader,
-  Trash2,
-  ArrowLeft
-} from '@lucide/vue';
+import StrategyHoldingsTable from '../components/portfolio/StrategyHoldingsTable.vue';
+import PortfolioAllocationBar from '../components/portfolio/PortfolioAllocationBar.vue';
+import PortfolioKpisGrid from '../components/portfolio/PortfolioKpisGrid.vue';
+import { useConfirmModal } from '../composables/useConfirmModal';
+import { Loader, ArrowLeft } from '@lucide/vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -22,6 +18,11 @@ const showCreatePosModal = ref(false);
 const showImportModal = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
 const initialImportFile = ref<File | null>(null);
+
+// Rename title states
+const isEditingTitle = ref(false);
+const editingTitleName = ref('');
+const titleInput = ref<HTMLInputElement | null>(null);
 
 const triggerImportFile = () => {
   if (fileInput.value) {
@@ -108,55 +109,14 @@ watch(() => route.params.id, () => {
   // Clear modal states when changing portfolios
   showCreatePosModal.value = false;
   showImportModal.value = false;
+  isEditingTitle.value = false;
 });
 
-const formatCurrency = (val: number, cur: string = 'EUR') => {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur }).format(val);
-};
+const { popupState, triggerPopup, handlePopupConfirm, handlePopupCancel } = useConfirmModal();
 
 const handleManualSuccess = async () => {
   showCreatePosModal.value = false;
   await store.fetchAllData();
-};
-
-// Dialog and alert states for unified premium components popups
-const popupState = ref<{
-  show: boolean;
-  title: string;
-  message: string;
-  confirmText?: string;
-  cancelText?: string;
-  variant?: 'danger' | 'warning' | 'info' | 'success';
-  hideCancel?: boolean;
-  onConfirm?: () => void;
-  onCancel?: () => void;
-}>({
-  show: false,
-  title: '',
-  message: '',
-});
-
-const triggerPopup = (config: Partial<typeof popupState.value>) => {
-  popupState.value = {
-    show: true,
-    title: '',
-    message: '',
-    confirmText: 'Confirm',
-    cancelText: 'Cancel',
-    variant: 'danger',
-    hideCancel: false,
-    ...config,
-  };
-};
-
-const handlePopupConfirm = () => {
-  popupState.value.show = false;
-  if (popupState.value.onConfirm) popupState.value.onConfirm();
-};
-
-const handlePopupCancel = () => {
-  popupState.value.show = false;
-  if (popupState.value.onCancel) popupState.value.onCancel();
 };
 
 const positionToDelete = ref<number | null>(null);
@@ -230,6 +190,34 @@ const handleMovePosition = async (posId: number, targetPortfolioId: number) => {
     });
   }
 };
+
+const startRenameTitle = () => {
+  if (portfolioId.value === 'unassigned') return;
+  isEditingTitle.value = true;
+  editingTitleName.value = portfolio.value?.name || '';
+  nextTick(() => {
+    if (titleInput.value) {
+      titleInput.value.focus();
+      titleInput.value.select();
+    }
+  });
+};
+
+const saveRenameTitle = async () => {
+  if (!isEditingTitle.value) return;
+  const trimmed = editingTitleName.value.trim();
+  if (!trimmed || trimmed === portfolio.value?.name) {
+    isEditingTitle.value = false;
+    return;
+  }
+  try {
+    await store.updatePortfolio(Number(portfolioId.value), { name: trimmed });
+  } catch (err) {
+    console.error('Failed to rename portfolio from title:', err);
+  } finally {
+    isEditingTitle.value = false;
+  }
+};
 </script>
 
 <template>
@@ -265,7 +253,28 @@ const handleMovePosition = async (posId: number, targetPortfolioId: number) => {
               <router-link to="/" style="color: var(--text-tertiary); display: flex; align-items: center;" title="Back to Global Dashboard">
                 <ArrowLeft style="width: 20px; height: 20px;" />
               </router-link>
-              <span>{{ portfolio.name }}</span>
+              
+              <span v-if="portfolioId === 'unassigned'">{{ portfolio.name }}</span>
+              <template v-else>
+                <input
+                  v-if="isEditingTitle"
+                  ref="titleInput"
+                  v-model="editingTitleName"
+                  class="bg-bg-tertiary text-text-primary border-0 outline-none ring-0 px-2 py-0 rounded w-full font-bold tracking-tight leading-none"
+                  style="font: inherit; font-size: 1.75rem;"
+                  @keydown.enter="saveRenameTitle"
+                  @keydown.esc="isEditingTitle = false"
+                  @blur="saveRenameTitle"
+                />
+                <span 
+                  v-else 
+                  @dblclick="startRenameTitle" 
+                  class="cursor-pointer select-none"
+                  title="Double click to rename"
+                >
+                  {{ portfolio.name }}
+                </span>
+              </template>
             </h1>
             <p>{{ portfolio.description || 'Custom asset strategy plan' }}</p>
           </div>
@@ -283,151 +292,31 @@ const handleMovePosition = async (posId: number, targetPortfolioId: number) => {
           </div>
         </header>
 
-        <div class="dashboard-content" style="margin-top: 1.5rem;">
+
+        <div class="dashboard-content mt-6">
           <!-- Metric Cards specific to this portfolio -->
-          <section class="metrics-grid" style="padding: 0;">
-            <div class="card kpi-card">
-              <div class="kpi-header">
-                <span>PORTFOLIO VALUATION</span>
-                <DollarSign style="width: 16px; height: 16px; color: var(--text-tertiary);" />
-              </div>
-              <div class="kpi-value">{{ formatCurrency(portfolioValue) }}</div>
-              <div class="kpi-trend up">
-                <TrendingUp style="width: 14px; height: 14px;" />
-                <span>+4.12% YTD</span>
-              </div>
-            </div>
-
-            <div class="card kpi-card">
-              <div class="kpi-header">
-                <span>ASSETS ENROLLED</span>
-                <Layers style="width: 16px; height: 16px; color: var(--text-tertiary);" />
-              </div>
-              <div class="kpi-value">{{ portfolioPositions.length }}</div>
-              <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.75rem;">
-                Distinct holdings registered in this folder
-              </p>
-            </div>
-
-            <div class="card kpi-card">
-              <div class="kpi-header">
-                <span>PORTFOLIO YIELD (EST.)</span>
-                <TrendingUp style="width: 16px; height: 16px; color: var(--text-tertiary);" />
-              </div>
-              <div class="kpi-value" style="color: var(--color-success);">
-                +{{ formatCurrency(portfolioValue * 0.091) }}
-              </div>
-              <div class="kpi-trend up" style="background-color: var(--color-success-light); color: var(--color-success);">
-                <span>Exceeding target allocations</span>
-              </div>
-            </div>
-          </section>
+          <PortfolioKpisGrid 
+            :value="portfolioValue"
+            :positions-count="portfolioPositions.length"
+            :is-consolidated="false"
+            :yield-multiplier="0.091"
+          />
 
           <!-- Visual Portfolio Allocation Bar -->
-          <section class="card" v-if="portfolioPositions.length > 0">
-            <h3 class="table-title" style="font-size: 1rem; margin-bottom: 0.25rem;">Strategy Asset Allocation</h3>
-            <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 1rem;">
-              Local distribution of asset weight inside {{ portfolio.name }}
-            </p>
-
-            <div class="allocation-bar-container">
-              <div class="allocation-bar">
-                <div 
-                  v-for="alloc in portfolioAllocations" 
-                  :key="alloc.type"
-                  class="allocation-segment"
-                  :style="{ width: alloc.percentage + '%', backgroundColor: alloc.color }"
-                  :title="alloc.type.toUpperCase() + ': ' + alloc.percentage.toFixed(1) + '%'"
-                ></div>
-              </div>
-
-              <div class="allocation-legend">
-                <div v-for="alloc in portfolioAllocations" :key="alloc.type" class="legend-item">
-                  <span class="legend-color" :style="{ backgroundColor: alloc.color }"></span>
-                  <span style="text-transform: capitalize; font-weight: 500;">
-                    {{ alloc.type }}: {{ alloc.percentage.toFixed(1) }}% ({{ formatCurrency(alloc.value) }})
-                  </span>
-                </div>
-              </div>
-            </div>
-          </section>
+          <PortfolioAllocationBar 
+            :allocations="portfolioAllocations"
+            :portfolioName="portfolio.name"
+          />
 
           <!-- Local Filtered Positions Table -->
-          <section class="table-container">
-            <div class="table-header-block">
-              <h3 class="table-title">Strategy Holdings</h3>
-              <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); background-color: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-                {{ portfolioPositions.length }} items
-              </span>
-            </div>
-
-            <div v-if="!portfolioPositions.length" class="empty-state">
-              <Grid class="empty-icon" />
-              <h3>This strategy folder is empty</h3>
-              <p style="font-size: 0.875rem; max-width: 320px; margin-top: 0.5rem; margin-bottom: 1.5rem;">
-                No financial sheet registered here. Record stock stocks, cash, or crypto tokens using the button below.
-              </p>
-              <button @click="showCreatePosModal = true" class="btn btn-sm btn-primary">
-                Add Strategy Holding
-              </button>
-            </div>
-
-            <div v-else class="table-wrapper">
-              <table class="premium-table">
-                <thead>
-                  <tr>
-                    <th>Asset Name</th>
-                    <th>Class</th>
-                    <th>Ticker / ISIN</th>
-                    <th>Quantity</th>
-                    <th>Est. Unit Price</th>
-                    <th>Current Value</th>
-                    <th v-if="portfolioId === 'unassigned'">Assign to Strategy</th>
-                    <th style="width: 50px;"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="pos in portfolioPositions" :key="pos.id">
-                    <td style="font-weight: 600;">{{ pos.name }}</td>
-                    <td>
-                      <span class="badge" :class="'badge-' + pos.asset_type">
-                        {{ pos.asset_type }}
-                      </span>
-                    </td>
-                    <td>
-                      <code style="font-size: 0.8rem; background-color: var(--bg-tertiary); padding: 0.125rem 0.35rem; border-radius: 4px;">
-                        {{ pos.ticker || '—' }}
-                      </code>
-                      <span v-if="pos.isin" style="color: var(--text-secondary); font-size: 0.75rem; margin-left: 0.5rem;">
-                        {{ pos.isin }}
-                      </span>
-                    </td>
-                    <td style="font-family: monospace; font-size: 0.875rem;">{{ pos.quantity }}</td>
-                    <td style="font-family: monospace;">{{ formatCurrency(pos.estimated_price || 0, pos.currency) }}</td>
-                    <td style="font-weight: 600; font-family: monospace;">
-                      {{ formatCurrency(pos.estimated_value || 0, pos.currency) }}
-                    </td>
-                    <td v-if="portfolioId === 'unassigned'">
-                      <select 
-                        @change="handleMovePosition(pos.id, Number(($event.target as HTMLSelectElement).value))"
-                        class="bg-bg-tertiary border border-border-color rounded text-xs px-2 py-1 text-text-primary focus:outline-none focus:border-accent-color cursor-pointer max-w-[180px]"
-                      >
-                        <option value="" disabled selected>Select active strategy...</option>
-                        <option v-for="p in store.portfolios" :key="p.id" :value="p.id">
-                          {{ p.name }}
-                        </option>
-                      </select>
-                    </td>
-                    <td>
-                      <button @click="handleDeletePosition(pos.id)" class="btn-logout" title="Remove Position" style="padding: 0.25rem;">
-                        <Trash2 style="width: 14px; height: 14px; color: var(--text-tertiary);" />
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <StrategyHoldingsTable 
+            :positions="portfolioPositions"
+            :portfolioId="portfolioId"
+            :portfolios="store.portfolios"
+            @delete-position="handleDeletePosition"
+            @move-position="({ posId, targetPortfolioId }) => handleMovePosition(posId, targetPortfolioId)"
+            @open-add-modal="showCreatePosModal = true"
+          />
         </div>
 
         <!-- Add Position Modal -->

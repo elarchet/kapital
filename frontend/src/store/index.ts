@@ -7,6 +7,7 @@ export interface Portfolio {
   name: string;
   description?: string;
   created_at: string;
+  emoji?: string | null;
 }
 
 export interface Position {
@@ -23,6 +24,34 @@ export interface Position {
   estimated_price?: number; 
   estimated_value?: number;
 }
+
+// Load emojis from localStorage
+const loadEmojis = (): Record<number, string> => {
+  try {
+    return JSON.parse(localStorage.getItem('kapital_portfolio_emojis') || '{}');
+  } catch {
+    return {};
+  }
+};
+
+// Save emojis to localStorage
+const saveEmojis = (emojis: Record<number, string>) => {
+  localStorage.setItem('kapital_portfolio_emojis', JSON.stringify(emojis));
+};
+
+// Load custom portfolio order from localStorage
+const loadOrder = (): number[] => {
+  try {
+    return JSON.parse(localStorage.getItem('kapital_portfolio_order') || '[]');
+  } catch {
+    return [];
+  }
+};
+
+// Save custom portfolio order to localStorage
+const saveOrder = (order: number[]) => {
+  localStorage.setItem('kapital_portfolio_order', JSON.stringify(order));
+};
 
 export const useKapitalStore = defineStore('kapital', {
   state: () => ({
@@ -119,8 +148,32 @@ export const useKapitalStore = defineStore('kapital', {
           api.getPortfolios(),
           api.getPositions(),
         ]);
-        this.portfolios = portfoliosData;
+        
+        // Merge emojis from localStorage
+        const emojis = loadEmojis();
+        const portfoliosWithEmojis = portfoliosData.map(p => ({
+          ...p,
+          emoji: emojis[p.id] || null
+        }));
+
+        // Sort based on loaded order from localStorage
+        const order = loadOrder();
+        if (order.length > 0) {
+          portfoliosWithEmojis.sort((a, b) => {
+            const indexA = order.indexOf(a.id);
+            const indexB = order.indexOf(b.id);
+            if (indexA === -1 && indexB === -1) return 0;
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+          });
+        }
+        
+        this.portfolios = portfoliosWithEmojis;
         this.positions = positionsData;
+
+        // Sync order list back to localStorage to include any new portfolios
+        this.saveCurrentOrder();
       } catch (err: any) {
         this.error = err.message || 'Failed to fetch data';
       } finally {
@@ -132,10 +185,33 @@ export const useKapitalStore = defineStore('kapital', {
       this.loading = true;
       try {
         const newPortfolio = await api.createPortfolio(name, description);
+        newPortfolio.emoji = null;
         this.portfolios.push(newPortfolio);
+        this.saveCurrentOrder();
         return newPortfolio;
       } catch (err: any) {
         this.error = err.message || 'Failed to create portfolio';
+        throw err;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async updatePortfolio(id: number, updates: { name?: string; description?: string }) {
+      this.loading = true;
+      try {
+        const existing = this.portfolios.find(p => p.id === id);
+        const name = updates.name !== undefined ? updates.name : (existing?.name || '');
+        const description = updates.description !== undefined ? updates.description : (existing?.description || '');
+        const updated = await api.updatePortfolio(id, name, description);
+        
+        const index = this.portfolios.findIndex(p => p.id === id);
+        if (index !== -1) {
+          this.portfolios[index] = { ...this.portfolios[index], name, description };
+        }
+        return updated;
+      } catch (err: any) {
+        this.error = err.message || 'Failed to update portfolio';
         throw err;
       } finally {
         this.loading = false;
@@ -147,13 +223,59 @@ export const useKapitalStore = defineStore('kapital', {
       try {
         await api.deletePortfolio(id);
         this.portfolios = this.portfolios.filter(p => p.id !== id);
-        // Do not filter out positions, they remain in state and become unassigned holdings
+        // Clean up localStorage for this ID
+        const emojis = loadEmojis();
+        if (emojis[id]) {
+          delete emojis[id];
+          saveEmojis(emojis);
+        }
+        this.saveCurrentOrder();
       } catch (err: any) {
         this.error = err.message || 'Failed to delete portfolio';
         throw err;
       } finally {
         this.loading = false;
       }
+    },
+
+    setPortfolioEmoji(id: number, emoji: string | null) {
+      const emojis = loadEmojis();
+      if (emoji) {
+        emojis[id] = emoji;
+      } else {
+        delete emojis[id];
+      }
+      saveEmojis(emojis);
+
+      const p = this.portfolios.find(item => item.id === id);
+      if (p) {
+        p.emoji = emoji;
+      }
+    },
+
+    saveCurrentOrder() {
+      const order = this.portfolios.map(p => p.id);
+      saveOrder(order);
+    },
+
+    updatePortfoliosOrder(orderedIds: number[]) {
+      const portfolioMap = new Map(this.portfolios.map(p => [p.id, p]));
+      const newPortfolios: Portfolio[] = [];
+      
+      orderedIds.forEach(id => {
+        const p = portfolioMap.get(id);
+        if (p) {
+          newPortfolios.push(p);
+          portfolioMap.delete(id);
+        }
+      });
+      
+      portfolioMap.forEach(p => {
+        newPortfolios.push(p);
+      });
+
+      this.portfolios = newPortfolios;
+      this.saveCurrentOrder();
     },
 
     async movePosition(id: number, portfolioId: number) {

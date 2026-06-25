@@ -13,19 +13,22 @@ test('verify position creation and deletion from global dashboard flow', async (
   await expect(page).toHaveURL(/^(?!.*login).*$/);
   await expect(page.locator('h1')).toHaveText('Global Dashboard');
 
-  // 2. Create Portfolio Strategy Folder via Sidebar to ensure we have a portfolio strategy
-  const addPortfolioBtn = page.locator('button[title="Create Portfolio"]');
+  // 2. Create Portfolio Strategy Folder via Sidebar (directly creates and sets in rename mode)
+  const addPortfolioBtn = page.locator('button[title="Create Portfolio"]').first();
   await expect(addPortfolioBtn).toBeVisible();
   await addPortfolioBtn.click();
 
-  const portfolioNameInput = page.locator('#portfolioName');
-  const portfolioDescInput = page.locator('#portfolioDesc');
-  const createPortfolioSubmitBtn = page.locator('button:has-text("Create Portfolio")');
+  // Wait for the inline renaming input to appear in the sidebar
+  const renameInput = page.locator('.sidebar-nav input');
+  await expect(renameInput).toBeVisible();
 
+  // Rename the portfolio inline
   const portfolioName = `Dashboard Portfolio ${Date.now()}`;
-  await portfolioNameInput.fill(portfolioName);
-  await portfolioDescInput.fill('E2E Strategy created from Dashboard Flow.');
-  await createPortfolioSubmitBtn.click();
+  await renameInput.fill(portfolioName);
+  await renameInput.press('Enter');
+
+  // Verify rename input is gone and the sidebar link is updated
+  await expect(renameInput).not.toBeVisible();
 
   // Navigate explicitly back to "/" (Global Dashboard) to make sure we are there
   await page.goto('/');
