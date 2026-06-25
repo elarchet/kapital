@@ -203,11 +203,11 @@ const cellInfoMap = computed(() => {
 <template>
   <div>
     <!-- Table Wrapper Container with maximized height -->
-    <div style="overflow: auto; max-height: calc(100vh - 300px); min-height: 250px; max-width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.5rem; position: relative;">
+    <div style="overflow: auto; max-height: calc(100vh - 300px); min-height: 250px; max-width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.5rem; position: relative; container-type: inline-size;">
       <table class="preview-table preview-table-double-sticky" style="margin-top: 0; min-width: 100%;">
         <thead>
           <tr>
-            <th style="min-width: 190px; max-width: 190px; width: 190px; padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center;">
+            <th style="min-width: var(--raw-action-width); max-width: var(--raw-action-width); width: var(--raw-action-width); padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center;">
               Raw Action
             </th>
             <th style="min-width: 170px; max-width: 170px; width: 170px; padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center;">
@@ -250,15 +250,15 @@ const cellInfoMap = computed(() => {
           <!-- Example rows per type -->
           <tr v-for="example in exampleTransactions" :key="example.opType">
             <!-- Column 1: Raw Action -->
-            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: 190px; max-width: 190px; width: 190px;">
+            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: var(--raw-action-width); max-width: var(--raw-action-width); width: var(--raw-action-width);">
               <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.25rem; padding: 0.05rem; overflow: hidden; width: 100%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.35rem; padding: 0.05rem; overflow: hidden; width: 100%;">
                   <!-- Left: Transaction type value badge -->
-                  <div style="flex: 1; min-width: 0; display: flex; align-items: center; overflow: hidden;">
+                  <div style="flex: 1; min-width: 0; display: flex; align-items: center;">
                     <span 
-                      class="badge" 
+                      class="badge max-w-full" 
                       :class="'badge-' + (operationTypeMappings[example.opType] || 'unknown')" 
-                      style="padding: 0.15rem 0.35rem; font-size: 0.65rem; text-transform: uppercase; width: fit-content; max-width: 90px; text-align: left; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;"
+                      style="padding: 0.15rem 0.45rem; font-size: 0.65rem; text-transform: uppercase; width: fit-content; text-align: left; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle;"
                       :title="example.opType"
                     >
                        {{ example.opType }}

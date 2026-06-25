@@ -586,6 +586,22 @@ h6 {
   @apply z-[6] bg-bg-tertiary;
 }
 
+.preview-table-double-sticky {
+  --raw-action-width: 190px;
+}
+
+@container (min-width: 600px) {
+  .preview-table-double-sticky {
+    --raw-action-width: 215px;
+  }
+}
+
+@container (min-width: 800px) {
+  .preview-table-double-sticky {
+    --raw-action-width: 240px;
+  }
+}
+
 .preview-table-double-sticky th:nth-child(1),
 .preview-table-double-sticky td:nth-child(1) {
   position: sticky !important;
@@ -608,7 +624,7 @@ h6 {
 .preview-table-double-sticky th:nth-child(2),
 .preview-table-double-sticky td:nth-child(2) {
   position: sticky !important;
-  left: 190px !important;
+  left: var(--raw-action-width, 190px) !important;
   z-index: 5 !important;
   background-color: var(--bg-secondary) !important;
   border-right: 2px solid var(--border-color) !important;

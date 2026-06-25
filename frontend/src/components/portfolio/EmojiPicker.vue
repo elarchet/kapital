@@ -74,11 +74,11 @@ const activePicker = ref<symbol | null>(null);
 </script>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { onMounted, onBeforeUnmount, computed } from 'vue';
 import { Folder } from '@lucide/vue';
 
 const props = defineProps<{
-  modelValue: string | null;
+  modelValue: string | null | undefined;
   disabled?: boolean;
 }>();
 
