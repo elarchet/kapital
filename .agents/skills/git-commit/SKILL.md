@@ -1,0 +1,44 @@
+---
+name: git-commit
+description: Guide and rules for Git commits, permissions, conventional commits format, and local verification before committing.
+---
+
+# Git Commit Workflow & Conventions
+
+This skill defines the strict protocol for creating git commits in the Kapital repository. It enforces permissions, author identity, formatting, and pre-commit checks.
+
+## 1. Commit Permission & Push Restrictions
+- **Zero Unsolicited Commits**: You must **never** run any commit command without first presenting the proposed changes (e.g., in a git diff format or detailed list) and receiving explicit, written confirmation from the user.
+- **Pushing is Forbidden**: You are **never** allowed to push changes to remote branches (`git push`). All commits must remain in the local working repository.
+
+## 2. Execution Protocol & Alias
+- **Custom Git Alias**: Always use the custom alias `git agent-commit` for all commits. This alias configures the commit with the `Antigravity Agent` identity.
+  - Example: `git agent-commit -m "feat(api): add export endpoint"`
+- **Never** use raw `git commit` as it may bypass the agent-commit identity config.
+
+## 3. Conventional Commit Format
+All commit messages must strictly comply with Conventional Commits rules to pass `commitizen check`:
+- **Format**: `<type>(<scope>): <description>` (e.g., `feat(frontend): implement transaction filtering`)
+- **Types**:
+  - `feat`: A new feature
+  - `fix`: A bug fix
+  - `docs`: Documentation updates
+  - `style`: Formatting, missing semi-colons, etc. (no production code change)
+  - `refactor`: Refactoring code without behavior changes
+  - `test`: Adding missing tests or correcting existing tests
+  - `chore`: Updating build tasks, package manager configs, etc.
+- **Rules**:
+  - Use lowercase for type and scope.
+  - Do not end the description with a period.
+  - Keep the first line short (under 72 characters).
+
+## 4. Atomic Commits
+- Stage only specific changes relevant to the single logical unit of work.
+- Use selective staging (e.g., `git add <file>` or `git add -p`) to avoid bundling unrelated modifications (e.g., temporary debug statements, unrelated refactoring) into a single commit.
+
+## 5. Pre-Commit Checklist & Verification
+Before requesting approval to commit, you must perform the following checks:
+1. **Local Test Run**: Ensure all tests in the affected modules pass. Run `uv run pytest backend/tests/test_...` for backend or Playwright for frontend.
+2. **Quality Control Hooks**: Run linting, quality, and verification checks (e.g., `prek` or equivalents running `ruff`, `ty`, `gitleaks`, and `commitizen`) to ensure zero errors prior to proposing the commit to the user.
+3. **Size Budget check**: Confirm compliance with size budget and folder structures as detailed in [development-workflow](file:///home/etien/dev/perso/kapital/.agents/skills/development-workflow/SKILL.md).
+4. **Ponytail Check**: Verify that YAGNI constraints are met and that any deliberate simplifications are marked with a `# ponytail:` comment per the guidelines in [ponytail.md](file:///home/etien/dev/perso/kapital/.agents/.rules/ponytail.md).

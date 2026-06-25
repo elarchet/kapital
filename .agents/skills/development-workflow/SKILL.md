@@ -15,10 +15,5 @@ This skill details behavioral protocols for commits, code structures, and size c
 - **Subfolders Over Flat Dirs**: Group related components into subfolders (e.g., `components/import/`). Never keep flat directories with many files.
 
 ## 2. Git & Verification Flow
-- **Execution Protocol**: Always use the custom alias `git agent-commit` for all commits (applies the `Antigravity Agent` identity).
-- **Atomic Commits**: One logical change = One commit. Stage only specific hunks or files for a single logical change (use `git add -p`).
-- **Commit Format**: Format messages yourself as strict Conventional Commits (e.g., `git agent-commit -m "type(scope): message"`) to pass `commitizen check`.
-- **Permissions**:
-  - **Committing**: Do not commit without presenting the changes and receiving explicit user approval.
-  - **Pushing**: `git push` in any form is strictly forbidden.
-- **Self-Correction**: If a test fails, analyze the logs and fix it before asking for help. Do not commit broken states.
+- **Git Commit Workflow**: Refer to and strictly follow the [git-commit](file:///home/etien/dev/perso/kapital/.agents/skills/git-commit/SKILL.md) skill for commit aliases, formatting conventions, permissions, and approval processes.
+- **Self-Correction**: If a test fails, analyze the logs and fix it before asking for help. Do not request commit approval for broken states.

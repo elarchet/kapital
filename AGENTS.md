@@ -15,7 +15,8 @@ This document defines the core architecture, stack definitions, subagent matrix,
 - **Tech Stack**: Vue.js, Tailwind CSS v4, Playwright, FastAPI (`Annotated` dependencies), SQLModel + Alembic, Polars, Pydantic v2 (Strict), SQLite/PostgreSQL, `uv`, Modern Python.
 - **Bulk Mutations & Performance**: Optimize bulk updates or imports by caching database lookups in-memory and using a single batch `db.commit()` in a try-except-rollback block at the service layer, avoiding N+1 queries and loop commits.
 - **Defensive Rendering**: Defensively use optional chaining (`?.`) when displaying dynamic rows, custom templates, or mapped fields to prevent UI crashes if some attributes are missing.
-- **No Unsolicited Commits**: Never perform git commits or push changes to the repository without explicit consent from the user. All code modifications must remain in the working directory staged or unstaged until approved.
+- **Ponytail / Minimalist Architecture**: Enforce YAGNI (You Ain't Gonna Need It) principles strictly. Avoid over-engineering, redundant file structures, and unnecessary abstractions. Consolidate logic into fewer, well-scoped files and prioritize standard library/native solutions as detailed in [.agents/.rules/ponytail.md](file:///home/etien/dev/perso/kapital/.agents/.rules/ponytail.md).
+- **Strict Commit Protocols**: Never perform git commits or push changes to the repository without explicit consent from the user. Refer to and strictly follow the [git-commit](file:///home/etien/dev/perso/kapital/.agents/skills/git-commit/SKILL.md) skill.
 - **Quality Control**: Automated hooks via `prek` running `ruff`, `ty`, `gitleaks`, and `commitizen`.
 
 ---
@@ -45,6 +46,15 @@ To guarantee absolute code quality and robust division of labor, the primary age
 ## 3. Active Skills Registry
 
 Skills are modular, on-demand instructions loaded only when required. They are stored in `.agents/skills/`.
+- **`backend-api`**: FastAPI router and endpoint design conventions.
+- **`database-models`**: SQLModel structures, schema validation, and bulk mutations.
+- **`development-workflow`**: Line budget checks, directory structures, and self-corrections.
+- **`financial-math`**: Decimal precision constraints and Polars performance trap mitigations.
+- **`frontend-vue`**: Vue 3 composition, decoupled representation, and Tailwind v4 theme utility rules.
+- **`generate-themed-component`**: Automated Vue component styling and interface contracts.
+- **`git-commit`**: Mandatory commit guidelines, aliases, Conventional Commits format, and permissions.
+- **`testing`**: Pytest standards, E2E Playwright verification, and factory mock conventions.
+
 - Automatically locate, read, and load relevant skills whenever a task maps to an existing skill framework.
 - Prioritize using these native skills over writing raw custom workflows from scratch.
 
@@ -58,4 +68,5 @@ Before writing code or asking for commit approval, you MUST explicitly answer an
 4. **Decoupled API**: Is all logic decoupled (frontend is representation/interaction only, business/financial logic is in the backend)?
 5. **Database Efficiency**: Did you avoid loop-based database commits and N+1 queries for batch operations?
 6. **Subagent Delegation**: Did you delegate task segments to the appropriate subagents (e.g. `tester` for tests, `frontend_designer` for layout/styles, `architect_critic` for final code reviews)?
+7. **Commit & Push Compliance**: Did you verify that you only commit after explicit user approval, using the `git agent-commit` alias and Conventional Commits format, and that no `git push` is executed?
 
