@@ -23,17 +23,18 @@ test('verify full portfolio and position lifecycle flow with custom modals', asy
   const descInput = page.locator('#portfolioDesc');
   const submitBtn = page.locator('button:has-text("Create Portfolio")');
 
-  await nameInput.fill('QA E2E Strategy');
+  const portfolioName = `QA E2E Strategy ${Date.now()}`;
+  await nameInput.fill(portfolioName);
   await descInput.fill('Formulated via Playwright E2E runner.');
   await submitBtn.click();
 
   // 3. Navigate to the new Portfolio
-  const portfolioLink = page.locator('.sidebar-nav a', { hasText: 'QA E2E Strategy' });
+  const portfolioLink = page.locator('.sidebar-nav a', { hasText: portfolioName });
   await expect(portfolioLink).toBeVisible();
   await portfolioLink.click();
 
   // Verify portfolio page loaded
-  await expect(page.locator('.page-header h1')).toContainText('QA E2E Strategy');
+  await expect(page.locator('.page-header h1')).toContainText(portfolioName);
 
   // 4. Open Add Position dropdown
   const addPositionBtn = page.locator('#btn-add-position-component');
@@ -84,4 +85,16 @@ test('verify full portfolio and position lifecycle flow with custom modals', asy
   await confirmModal.locator('button:has-text("Delete Position")').click();
   await expect(confirmModal).not.toBeVisible();
   await expect(nvdaRow).not.toBeVisible();
+
+  // 6. Delete Portfolio Strategy (Clean up)
+  const deletePortfolioBtn = page.locator('button[title="Delete Portfolio"]');
+  await expect(deletePortfolioBtn).toBeVisible();
+  await deletePortfolioBtn.click();
+
+  const deletePortfolioModal = page.locator('.fixed.inset-0', { hasText: 'Delete Strategy?' });
+  await expect(deletePortfolioModal).toBeVisible();
+  await deletePortfolioModal.locator('button:has-text("Delete Strategy")').click();
+
+  await expect(deletePortfolioModal).not.toBeVisible();
+  await expect(page.locator('h1')).toHaveText('Global Dashboard');
 });
