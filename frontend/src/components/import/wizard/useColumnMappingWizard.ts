@@ -221,18 +221,8 @@ export function useColumnMappingWizard(props: any, emit: any) {
         (localEnrichTransactionIds.value === 'when_empty' && !rawVal);
 
       if (shouldGenerate) {
-        // Generate a longer mock hash (16 chars) based on cells/exampleRow content
-        const serialized = props.exampleRow?.join(',') || '';
-        let hash1 = 5381;
-        let hash2 = 52711;
-        for (let i = 0; i < serialized.length; i++) {
-          const char = serialized.charCodeAt(i);
-          hash1 = (hash1 * 33) ^ char;
-          hash2 = (hash2 * 37) ^ char;
-        }
-        const h1 = Math.abs(hash1).toString(16).padStart(8, '0');
-        const h2 = Math.abs(hash2).toString(16).padStart(8, '0');
-        const mockHash = (h1 + h2).slice(0, 16);
+        // Generate a random mock hash for preview purposes
+        const mockHash = Math.random().toString(16).slice(2, 10).padStart(8, '0');
         return { success: true, value: `${rawVal || '—'} → auto-${mockHash} (Auto-Generated)` };
       }
       return { success: true, value: rawVal || '—' };

@@ -1,5 +1,27 @@
 import type { ColMapping, RowError } from './types';
 
+export function getColumnConfigForField(
+  columnConfigMap: Record<string | number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
+  fieldKey: string,
+  rawAction: string,
+  opType: string
+): ColMapping | null {
+  // ponytail: Consolidated duplicate config resolver helper.
+  let foundConf: ColMapping | null = null;
+  if (!columnConfigMap) return foundConf;
+  Object.entries(columnConfigMap).forEach(([_, conf]) => {
+    if (!conf) return;
+    if (conf.typeSpecific && conf.typeSpecific[rawAction]?.dbKey === fieldKey) {
+      foundConf = conf.typeSpecific[rawAction];
+    } else if (conf.typeSpecific && opType && conf.typeSpecific[opType]?.dbKey === fieldKey) {
+      foundConf = conf.typeSpecific[opType];
+    } else if (conf.global?.dbKey === fieldKey) {
+      foundConf = conf.global;
+    }
+  });
+  return foundConf;
+}
+
 export function parseDateTimeWithFormat(val: string, format?: string): Date | null {
   if (!val) return null;
   const cleaned = val.trim();
@@ -138,23 +160,6 @@ export function validateLiveStats(params: {
     }
   });
 
-  const getColumnConfigForField = (fieldKey: string, rawAction: string, dbOpType: string) => {
-    let foundConf: ColMapping | null = null;
-    if (!params.columnConfigMap) return foundConf;
-
-    Object.entries(params.columnConfigMap).forEach(([_, conf]) => {
-      if (!conf) return;
-      if (conf.typeSpecific && conf.typeSpecific[rawAction]?.dbKey === fieldKey) {
-        foundConf = conf.typeSpecific[rawAction];
-      } else if (conf.typeSpecific && dbOpType && conf.typeSpecific[dbOpType]?.dbKey === fieldKey) {
-        foundConf = conf.typeSpecific[dbOpType];
-      } else if (conf.global?.dbKey === fieldKey) {
-        foundConf = conf.global;
-      }
-    });
-    return foundConf;
-  };
-
   const rawActionFieldMaps: Record<string, Record<string, { colIdx: number; isRequired: boolean; mappingConf: ColMapping | null }>> = {};
   const uniqueRawActions = Object.keys(stats);
 
@@ -166,7 +171,7 @@ export function validateLiveStats(params: {
         ? (params.operationTypeColumnIdx ?? -1)
         : getMappedColIdxForField(field.key, rawAction, dbOpType, params.columnConfigMap, params.uiColumns);
       const isRequired = field.is_required || isFieldRequiredForOpType(field.key, dbOpType);
-      const mappingConf = getColumnConfigForField(field.key, rawAction, dbOpType);
+      const mappingConf = getColumnConfigForField(params.columnConfigMap, field.key, rawAction, dbOpType);
       fieldMap[field.key] = { colIdx, isRequired, mappingConf };
     });
     rawActionFieldMaps[rawAction] = fieldMap;

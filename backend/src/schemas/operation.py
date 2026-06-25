@@ -6,7 +6,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-from src.models.operation import (
+from src.models.operation_enums import (
     ExpenseCategory,
     InterestType,
     OrderStatus,

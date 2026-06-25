@@ -14,24 +14,26 @@ from src.models.import_file_schema import ImportFileSchema
 from src.models.institution import Institution
 from src.models.operation import (
     DividendOperation,
-    ExpenseCategory,
     ExpenseOperation,
     FeeOperation,
     FxRateChangeOperation,
     InterestOperation,
-    InterestType,
     Operation,
-    OrderStatus,
-    OrderType,
-    PaymentMethod,
-    RevenueCategory,
     RevenueOperation,
     StockSplitOperation,
     TaxOperation,
     TradeOperation,
-    TradeSide,
     TransferInOperation,
     TransferOutOperation,
+)
+from src.models.operation_enums import (
+    ExpenseCategory,
+    InterestType,
+    OrderStatus,
+    OrderType,
+    PaymentMethod,
+    RevenueCategory,
+    TradeSide,
 )
 from src.models.portfolio import Portfolio
 from src.models.position import AssetType, Position

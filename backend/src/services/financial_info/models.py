@@ -2,16 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
 from decimal import Decimal  # noqa: TC003
-from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
-
-
-class FinancialProviderName(StrEnum):
-    """Available financial data provider choices."""
-
-    YFINANCE = "yfinance"
-    DUMMY = "dummy"
 
 
 class TickerProfile(BaseModel):

@@ -27,8 +27,6 @@ from src.routers import (
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Handles startup actions (like auto table creation) and teardown context."""
     init_db()
-    # Ensure upload directory exists
-    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240
     yield
 
 

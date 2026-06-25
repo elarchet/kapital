@@ -2,13 +2,13 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../../services/api';
 import { useSchemaManagement } from './useSchemaManagement';
 import { useWizardMapping } from './useWizardMapping';
-import { useImportFileProcessor } from './useImportFileProcessor';
 import { useImportExecutor } from './useImportExecutor';
 import { useImportPreview } from './useImportPreview';
 import { useImportWizardComputeds } from './useImportWizardComputeds';
 import {
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
-  parseSchemaMappings
+  parseSchemaMappings,
+  parseCsvText
 } from '../../services/import';
 
 interface Portfolio {
@@ -41,14 +41,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const showExitConfirm = ref(false);
   const isDirty = computed(() => importFile.value !== null);
 
-  // Configuration helpers
-  const initializeConfigs = () => {
-    uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
-    columnConfigMap.value = {};
-    uiColumns.value.forEach(col => {
-      columnConfigMap.value[col.id] = { typeSpecific: {} };
-    });
-  };
+
 
   const handleColumnChange = () => {
     operationTypeMappings.value = {};
@@ -188,27 +181,48 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     importDelimiter,
     importDecimalSep,
     buildCustomMappingPayload,
-    initializeConfigs,
+    initializeConfigs: handleColumnChange,
     schemaDeleteTemplate: schemaMgmt.handleDeleteTemplate,
     emit,
   });
 
-  const { processFile } = useImportFileProcessor({
-    importFile,
-    fileText,
-    importFileHeaders,
-    allRawRows,
-    importDelimiter,
-    uiColumns,
-    currentStep,
-    autodetectedSchemaId: schemaMgmt.autodetectedSchemaId,
-    selectedSchemaId: schemaMgmt.selectedSchemaId,
-    isCustomMapping,
-    importError: executor.importError,
-    importSuccessSummary: executor.importSuccessSummary,
-    onSchemaSelect,
-    initializeConfigs,
-  });
+  const processFile = async (file: File) => {
+    importFile.value = file;
+    executor.importError.value = '';
+    executor.importSuccessSummary.value = null;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const text = e.target?.result as string;
+      fileText.value = text;
+      
+      const parsed = parseCsvText(text);
+      if (parsed.headers.length > 0) {
+        importDelimiter.value = parsed.delimiter;
+        importFileHeaders.value = parsed.headers;
+        handleColumnChange();
+        allRawRows.value = parsed.rawRows;
+        currentStep.value = 1;
+
+        try {
+          const detectRes = await api.detectImportFileSchema(parsed.headers);
+          if (detectRes.schema_id) {
+            schemaMgmt.autodetectedSchemaId.value = detectRes.schema_id;
+            schemaMgmt.selectedSchemaId.value = detectRes.schema_id;
+            isCustomMapping.value = false;
+          } else {
+            schemaMgmt.autodetectedSchemaId.value = null;
+            schemaMgmt.selectedSchemaId.value = null;
+            isCustomMapping.value = true;
+          }
+        } catch (err: any) {
+          console.error('Failed to autodetect schema:', err);
+          isCustomMapping.value = true;
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // Watchers & Life Cycle
   const requestClose = () => {
@@ -257,18 +271,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     { immediate: true }
   );
 
-  const selectedSchemaIdString = computed({
-    get() {
-      return schemaMgmt.selectedSchemaId.value !== null ? String(schemaMgmt.selectedSchemaId.value) : '';
-    },
-    set(val: string) {
-      if (val === '') {
-        schemaMgmt.selectedSchemaId.value = null;
-      } else {
-        schemaMgmt.selectedSchemaId.value = Number(val);
-      }
-      onSchemaSelect();
-    }
+  watch(() => schemaMgmt.selectedSchemaId.value, () => {
+    onSchemaSelect();
   });
 
   return {
@@ -277,7 +281,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     selectedSchemaId: schemaMgmt.selectedSchemaId,
     autodetectedSchemaId: schemaMgmt.autodetectedSchemaId,
     selectedSchema: schemaMgmt.selectedSchema,
-    selectedSchemaIdString,
+    selectedSchemaIdString: schemaMgmt.selectedSchemaIdString,
     showDeleteConfirm: schemaMgmt.showDeleteConfirm,
     isDeletingSchema: schemaMgmt.isDeletingSchema,
     handleDeleteTemplate: executor.handleDeleteTemplateWrapper,

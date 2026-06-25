@@ -14,7 +14,24 @@ from src.services.import_parsers import (
 )
 
 
-def resolve_fees_and_taxes(  # noqa: C901, PLR0912
+def resolve_enum_mapping(
+    schema_mappings: dict,
+    category: str,
+    raw_val: str | None,
+    default: str | None = None,
+) -> str | None:
+    # ponytail: Consolidated redundant enum mapping lookup logic to prevent duplication.
+    if not raw_val:
+        return default
+    trimmed = raw_val.strip()
+    mappings = schema_mappings.get("enum_mappings", {}).get(category, {})
+    for key, val_list in mappings.items():
+        if trimmed in val_list or trimmed == key:
+            return key
+    return default
+
+
+def resolve_fees_and_taxes(
     row: dict[str, str],
     columns: dict[str, Any],
     transformations: dict[str, Any],
@@ -32,16 +49,9 @@ def resolve_fees_and_taxes(  # noqa: C901, PLR0912
         fee_val = apply_transformation(transformations, "fee_amount", fee_val, op_type, csv_action)
         if fee_val and fee_val > 0:
             fee_curr = row.get(get_mapped_col(columns, "fee_currency", op_type, csv_action)) or currency
-            resolved_fee_type = "conversion"
             fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
-            if fee_type_col:
-                raw_fee_type = row.get(fee_type_col)
-                if raw_fee_type:
-                    fee_type_mappings = schema_mappings.get("enum_mappings", {}).get("fee_type", {})
-                    for key, val_list in fee_type_mappings.items():
-                        if raw_fee_type in val_list or raw_fee_type == key:
-                            resolved_fee_type = key
-                            break
+            raw_fee_type = row.get(fee_type_col) if fee_type_col else None
+            resolved_fee_type = resolve_enum_mapping(schema_mappings, "fee_type", raw_fee_type, default="conversion")
             try:
                 fee_type_enum = FeeType(resolved_fee_type)
             except ValueError:
@@ -62,16 +72,14 @@ def resolve_fees_and_taxes(  # noqa: C901, PLR0912
         tax_val = apply_transformation(transformations, "tax_amount", tax_val, op_type, csv_action)
         if tax_val and tax_val > 0:
             tax_curr = row.get(get_mapped_col(columns, "tax_currency", op_type, csv_action)) or currency
-            resolved_tax_type = "withholding_tax"
             fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
-            if fee_type_col:
-                raw_fee_type = row.get(fee_type_col)
-                if raw_fee_type:
-                    fee_type_mappings = schema_mappings.get("enum_mappings", {}).get("fee_type", {})
-                    for key, val_list in fee_type_mappings.items():
-                        if raw_fee_type in val_list or raw_fee_type == key:
-                            resolved_tax_type = key
-                            break
+            raw_fee_type = row.get(fee_type_col) if fee_type_col else None
+            resolved_tax_type = resolve_enum_mapping(
+                schema_mappings,
+                "fee_type",
+                raw_fee_type,
+                default="withholding_tax",
+            )
             try:
                 tax_type_enum = FeeType(resolved_tax_type)
             except ValueError:
@@ -113,7 +121,7 @@ def resolve_merchant_and_ref_fields(
     return merchant_name, merchant_category, source_reference, destination_reference
 
 
-def resolve_trade_fields(  # noqa: C901, PLR0912, PLR0915
+def resolve_trade_fields(  # noqa: C901, PLR0912
     row: dict[str, str],
     columns: dict[str, Any],
     schema_mappings: dict[str, Any],
@@ -130,26 +138,12 @@ def resolve_trade_fields(  # noqa: C901, PLR0912, PLR0915
         if not trade_side:
             trade_side_col = get_mapped_col(columns, "trade_side", op_type, csv_action)
             raw_trade_side = row.get(trade_side_col) if trade_side_col else None
-            if raw_trade_side:
-                trade_side_mappings = schema_mappings.get("enum_mappings", {}).get("trade_side", {})
-                for key, val_list in trade_side_mappings.items():
-                    if raw_trade_side in val_list or raw_trade_side == key:
-                        trade_side = key
-                        break
-            if not trade_side:
-                trade_side = "buy"
+            trade_side = resolve_enum_mapping(schema_mappings, "trade_side", raw_trade_side, default="buy")
 
         if not order_type_val:
             order_type_col = get_mapped_col(columns, "order_type", op_type, csv_action)
             raw_order_type = row.get(order_type_col) if order_type_col else None
-            if raw_order_type:
-                order_type_mappings = schema_mappings.get("enum_mappings", {}).get("order_type", {})
-                for key, val_list in order_type_mappings.items():
-                    if raw_order_type in val_list or raw_order_type == key:
-                        order_type_val = key
-                        break
-            if not order_type_val:
-                order_type_val = "market"
+            order_type_val = resolve_enum_mapping(schema_mappings, "order_type", raw_order_type, default="market")
 
     limit_price = None
     if op_type == "trade" and order_type_val in ("limit", "stop_limit"):
@@ -172,14 +166,7 @@ def resolve_trade_fields(  # noqa: C901, PLR0912, PLR0915
     if op_type == "trade":
         os_col = get_mapped_col(columns, "order_status", op_type, csv_action)
         raw_order_status = row.get(os_col) if os_col else None
-        if raw_order_status:
-            os_mappings = schema_mappings.get("enum_mappings", {}).get("order_status", {})
-            for key, val_list in os_mappings.items():
-                if raw_order_status in val_list or raw_order_status == key:
-                    order_status = key
-                    break
-        if not order_status:
-            order_status = "filled"
+        order_status = resolve_enum_mapping(schema_mappings, "order_status", raw_order_status, default="filled")
 
     order_placed_at = None
     filled_at = None
@@ -209,7 +196,7 @@ def resolve_trade_fields(  # noqa: C901, PLR0912, PLR0915
     )
 
 
-def resolve_category_fields(  # noqa: C901, PLR0912
+def resolve_category_fields(
     row: dict[str, str],
     columns: dict[str, Any],
     schema_mappings: dict[str, Any],
@@ -220,15 +207,8 @@ def resolve_category_fields(  # noqa: C901, PLR0912
     interest_type = None
     if op_type == "interest":
         it_col = get_mapped_col(columns, "interest_type", op_type, csv_action)
-        raw_it = row.get(it_col).strip() if (it_col and row.get(it_col)) else None
-        if raw_it:
-            it_mappings = schema_mappings.get("enum_mappings", {}).get("interest_type", {})
-            for key, val_list in it_mappings.items():
-                if raw_it in val_list or raw_it == key:
-                    interest_type = key
-                    break
-        if not interest_type:
-            interest_type = "cash_interest"
+        raw_it = row.get(it_col) if it_col else None
+        interest_type = resolve_enum_mapping(schema_mappings, "interest_type", raw_it, default="cash_interest")
 
     expense_category = None
     revenue_category = None
@@ -236,35 +216,16 @@ def resolve_category_fields(  # noqa: C901, PLR0912
     if op_type == "expense":
         ec_col = get_mapped_col(columns, "expense_category", op_type, csv_action)
         raw_ec = row.get(ec_col) if ec_col else None
-        if raw_ec:
-            ec_mappings = schema_mappings.get("enum_mappings", {}).get("expense_category", {})
-            for key, val_list in ec_mappings.items():
-                if raw_ec in val_list or raw_ec == key:
-                    expense_category = key
-                    break
-        if not expense_category:
-            expense_category = "other"
+        expense_category = resolve_enum_mapping(schema_mappings, "expense_category", raw_ec, default="other")
     elif op_type == "revenue":
         rc_col = get_mapped_col(columns, "revenue_category", op_type, csv_action)
         raw_rc = row.get(rc_col) if rc_col else None
-        if raw_rc:
-            rc_mappings = schema_mappings.get("enum_mappings", {}).get("revenue_category", {})
-            for key, val_list in rc_mappings.items():
-                if raw_rc in val_list or raw_rc == key:
-                    revenue_category = key
-                    break
-        if not revenue_category:
-            revenue_category = "other"
+        revenue_category = resolve_enum_mapping(schema_mappings, "revenue_category", raw_rc, default="other")
 
     if op_type in ("expense", "revenue"):
         pm_col = get_mapped_col(columns, "payment_method", op_type, csv_action)
         raw_pm = row.get(pm_col) if pm_col else None
-        if raw_pm:
-            pm_mappings = schema_mappings.get("enum_mappings", {}).get("payment_method", {})
-            for key, val_list in pm_mappings.items():
-                if raw_pm in val_list or raw_pm == key:
-                    payment_method = key
-                    break
+        payment_method = resolve_enum_mapping(schema_mappings, "payment_method", raw_pm)
 
     return interest_type, expense_category, revenue_category, payment_method
 

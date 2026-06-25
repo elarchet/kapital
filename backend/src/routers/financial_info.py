@@ -8,7 +8,6 @@ from src.auth import get_current_user
 from src.models.user import User
 from src.services.financial_info import (
     FinancialInfoService,
-    FinancialProviderName,
     FinancialsReport,
     HistoricalPrice,
     TickerProfile,
@@ -36,14 +35,10 @@ async def get_profile(
     ticker: Annotated[str, Path(description="The ticker symbol to fetch (e.g. AAPL)")],
     current_user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001
     service: Annotated[FinancialInfoService, Depends(get_financial_info_service)],
-    provider: Annotated[
-        FinancialProviderName,
-        Query(description="Financial provider source"),
-    ] = FinancialProviderName.YFINANCE,
 ) -> TickerProfile:
     """Fetch company metadata profile for a ticker symbol."""
     try:
-        return await service.get_profile(ticker, provider=provider)
+        return await service.get_profile(ticker)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -62,14 +57,10 @@ async def get_quote(
     ticker: Annotated[str, Path(description="The ticker symbol to fetch (e.g. AAPL)")],
     current_user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001
     service: Annotated[FinancialInfoService, Depends(get_financial_info_service)],
-    provider: Annotated[
-        FinancialProviderName,
-        Query(description="Financial provider source"),
-    ] = FinancialProviderName.YFINANCE,
 ) -> TickerQuote:
     """Fetch real-time ticker quote."""
     try:
-        return await service.get_quote(ticker, provider=provider)
+        return await service.get_quote(ticker)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -90,14 +81,10 @@ async def get_history(
     service: Annotated[FinancialInfoService, Depends(get_financial_info_service)],
     period: Annotated[str, Query(description="Historical period (e.g. 1mo, 1y)")] = "1mo",
     interval: Annotated[str, Query(description="Data points interval (e.g. 1d, 1wk)")] = "1d",
-    provider: Annotated[
-        FinancialProviderName,
-        Query(description="Financial provider source"),
-    ] = FinancialProviderName.YFINANCE,
 ) -> list[HistoricalPrice]:
     """Fetch historical price points for chart visualization."""
     try:
-        return await service.get_history(ticker, period=period, interval=interval, provider=provider)
+        return await service.get_history(ticker, period=period, interval=interval)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -116,14 +103,10 @@ async def get_financials(
     ticker: Annotated[str, Path(description="The ticker symbol to fetch (e.g. AAPL)")],
     current_user: Annotated[User, Depends(get_current_user)],  # noqa: ARG001
     service: Annotated[FinancialInfoService, Depends(get_financial_info_service)],
-    provider: Annotated[
-        FinancialProviderName,
-        Query(description="Financial provider source"),
-    ] = FinancialProviderName.YFINANCE,
 ) -> FinancialsReport:
     """Fetch fundamental financial statements (income statement, balance sheet, cashflow)."""
     try:
-        return await service.get_financials(ticker, provider=provider)
+        return await service.get_financials(ticker)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

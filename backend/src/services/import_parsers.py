@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 
 
 def parse_decimal_safe(val: str | None, decimal_sep: str = ".") -> Decimal | None:
@@ -41,20 +42,35 @@ def parse_datetime_safe(val: str, date_format: str | None = None) -> datetime:
         return datetime.now(UTC)
 
 
+def resolve_config_value(
+    config: Any,  # noqa: ANN401
+    db_key: str | None,
+    op_type: str | None,
+    raw_action: str | None = None,
+    default: Any = None,  # noqa: ANN401
+) -> Any:  # noqa: ANN401
+    # ponytail: Consolidated config cascade lookup (action -> op_type -> global) to reduce duplication.
+    if not isinstance(config, dict):
+        return config if config is not None else default
+    val = config.get(db_key) if db_key is not None else config
+    if isinstance(val, dict):
+        if "divisor" in val or "multiplier" in val:
+            return val
+        if raw_action and raw_action in val:
+            return val[raw_action]
+        if op_type and op_type in val:
+            return val[op_type]
+        return val.get("global", default)
+    return val if val is not None else default
+
+
 def get_date_format(
     date_formats: dict,
     db_key: str,
     op_type: str | None,
     raw_action: str | None = None,
 ) -> str | None:
-    val = date_formats.get(db_key)
-    if isinstance(val, dict):
-        if raw_action and raw_action in val:
-            return val[raw_action]
-        if op_type and op_type in val:
-            return val[op_type]
-        return val.get("global")
-    return val
+    return resolve_config_value(date_formats, db_key, op_type, raw_action)
 
 
 def get_mapped_col(
@@ -63,14 +79,7 @@ def get_mapped_col(
     op_type: str | None,
     raw_action: str | None = None,
 ) -> str | None:
-    val = columns.get(db_key)
-    if isinstance(val, dict):
-        if raw_action and raw_action in val:
-            return val[raw_action]
-        if op_type and op_type in val:
-            return val[op_type]
-        return val.get("global")
-    return val
+    return resolve_config_value(columns, db_key, op_type, raw_action)
 
 
 def get_transformation(
@@ -79,14 +88,7 @@ def get_transformation(
     op_type: str | None,
     raw_action: str | None = None,
 ) -> dict:
-    val = transformations.get(db_key, {})
-    if "divisor" in val or "multiplier" in val:
-        return val
-    if raw_action and raw_action in val:
-        return val[raw_action]
-    if op_type and op_type in val:
-        return val[op_type]
-    return val.get("global", {})
+    return resolve_config_value(transformations, db_key, op_type, raw_action, default={})
 
 
 def apply_transformation(

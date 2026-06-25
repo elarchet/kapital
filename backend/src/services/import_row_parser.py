@@ -10,6 +10,7 @@ from src.services.import_parsers import (
     get_mapped_col,
     parse_datetime_safe,
     parse_decimal_safe,
+    resolve_config_value,
 )
 from src.services.import_row_parser_helpers import (
     resolve_category_fields,
@@ -78,15 +79,8 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         legacy = schema_mappings.get("generate_auto_ids")
         enrich_opt = "when_empty" if legacy is not False else "never"
 
-    if isinstance(enrich_opt, dict):
-        if csv_action and csv_action in enrich_opt:
-            opt = enrich_opt[csv_action]
-        elif op_type and op_type in enrich_opt:
-            opt = enrich_opt[op_type]
-        else:
-            opt = enrich_opt.get("global") or "when_empty"
-    else:
-        opt = enrich_opt
+    # ponytail: Delegated config lookup to resolve_config_value helper
+    opt = resolve_config_value(enrich_opt, None, op_type, csv_action, default="when_empty")
 
     has_raw = bool(raw_transaction_id and raw_transaction_id.strip())
 

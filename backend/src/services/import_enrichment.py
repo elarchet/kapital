@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.services.import_parsers import resolve_config_value
+
 if TYPE_CHECKING:
     from sqlmodel import Session
 
@@ -9,15 +11,8 @@ if TYPE_CHECKING:
 
 
 def resolve_enrich_option(enrich_option: str | dict | None, csv_action: str | None, op_type: str | None) -> str:
-    if not enrich_option:
-        return "when_empty"
-    if not isinstance(enrich_option, dict):
-        return enrich_option
-    if csv_action and csv_action in enrich_option:
-        return enrich_option[csv_action]
-    if op_type and op_type in enrich_option:
-        return enrich_option[op_type]
-    return enrich_option.get("global") or "when_empty"
+    # ponytail: Delegated lookup to centralized resolve_config_value helper.
+    return resolve_config_value(enrich_option, None, op_type, csv_action, default="when_empty")
 
 
 async def run_enrichment_pipeline(

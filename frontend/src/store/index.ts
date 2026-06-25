@@ -42,30 +42,8 @@ export const useKapitalStore = defineStore('kapital', {
     // We will apply sensible mock pricing rules based on asset types for high visual premium fidelity.
     computedPositions(state): Position[] {
       return state.positions.map(pos => {
-        // Safe defaults for visualization
-        let estimatedPrice = 1.0;
-        if (pos.asset_type === 'cash') estimatedPrice = 1.0;
-        else if (pos.asset_type === 'stock') {
-          // Stable mock prices based on ticker
-          if (pos.ticker === 'AAPL') estimatedPrice = 175.50;
-          else if (pos.ticker === 'MSFT') estimatedPrice = 420.20;
-          else if (pos.ticker === 'NVDA') estimatedPrice = 875.00;
-          else estimatedPrice = 120.00;
-        } else if (pos.asset_type === 'crypto') {
-          if (pos.ticker === 'BTC') estimatedPrice = 67200.00;
-          else if (pos.ticker === 'ETH') estimatedPrice = 3500.00;
-          else estimatedPrice = 1.50;
-        } else if (pos.asset_type === 'etf') {
-          estimatedPrice = 85.00;
-        } else if (pos.asset_type === 'bond') {
-          estimatedPrice = 100.00;
-        } else if (pos.asset_type === 'commodity') {
-          if (pos.ticker === 'GOLD') estimatedPrice = 2300.00;
-          else estimatedPrice = 80.00;
-        } else {
-          estimatedPrice = 50.00;
-        }
-
+        // Temporary mock price (in production, use real-time tickers)
+        const estimatedPrice = pos.asset_type === 'cash' ? 1.0 : 100.0;
         const quantityNum = Number(pos.quantity);
         const estimatedValue = quantityNum * estimatedPrice;
 

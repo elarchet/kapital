@@ -15,11 +15,7 @@ from src.database import get_session
 from src.main import app
 from src.models import SABase
 from src.services.financial_info import (
-    BaseFinancialProvider,
     FinancialInfoService,
-    TickerProfile,
-    TickerQuote,
-    YFinanceProvider,
 )
 from tests.factories import UserFactory, set_factory_session
 from tests.test_api import get_auth_headers
@@ -62,7 +58,7 @@ def fixture_client(session):
 
 
 @pytest.mark.asyncio
-async def test_yfinance_provider_get_profile():
+async def test_service_get_profile():
     mock_info = {
         "symbol": "AAPL",
         "longName": "Apple Inc.",
@@ -76,12 +72,12 @@ async def test_yfinance_provider_get_profile():
         "marketCap": 3000000000000,
     }
 
-    with patch("src.services.financial_info.yfinance_provider.yf.Ticker") as mock_ticker_cls:
+    with patch("src.services.financial_info.service.yf.Ticker") as mock_ticker_cls:
         mock_ticker = MagicMock()
         mock_ticker.info = mock_info
         mock_ticker_cls.return_value = mock_ticker
 
-        provider = YFinanceProvider()
+        provider = FinancialInfoService()
         profile = await provider.get_profile("AAPL")
 
         assert profile.symbol == "AAPL"
@@ -91,7 +87,7 @@ async def test_yfinance_provider_get_profile():
 
 
 @pytest.mark.asyncio
-async def test_yfinance_provider_get_quote():
+async def test_service_get_quote():
     mock_fast_info = MagicMock()
     mock_fast_info.last_price = 150.50
     mock_fast_info.open = 149.00
@@ -116,13 +112,13 @@ async def test_yfinance_provider_get_quote():
         "ask": 150.55,
     }
 
-    with patch("src.services.financial_info.yfinance_provider.yf.Ticker") as mock_ticker_cls:
+    with patch("src.services.financial_info.service.yf.Ticker") as mock_ticker_cls:
         mock_ticker = MagicMock()
         mock_ticker.fast_info = mock_fast_info
         mock_ticker.info = mock_info
         mock_ticker_cls.return_value = mock_ticker
 
-        provider = YFinanceProvider()
+        provider = FinancialInfoService()
         quote = await provider.get_quote("AAPL")
 
         assert quote.symbol == "AAPL"
@@ -134,7 +130,7 @@ async def test_yfinance_provider_get_quote():
 
 
 @pytest.mark.asyncio
-async def test_yfinance_provider_get_history():
+async def test_service_get_history():
     df_history = pd.DataFrame(
         [
             {"Open": 150.0, "High": 152.0, "Low": 149.0, "Close": 151.5, "Volume": 5000000},
@@ -142,12 +138,12 @@ async def test_yfinance_provider_get_history():
         index=pd.DatetimeIndex(["2026-06-01"]),
     )
 
-    with patch("src.services.financial_info.yfinance_provider.yf.Ticker") as mock_ticker_cls:
+    with patch("src.services.financial_info.service.yf.Ticker") as mock_ticker_cls:
         mock_ticker = MagicMock()
         mock_ticker.history.return_value = df_history
         mock_ticker_cls.return_value = mock_ticker
 
-        provider = YFinanceProvider()
+        provider = FinancialInfoService()
         history = await provider.get_history("AAPL")
 
         assert len(history) == 1
@@ -157,7 +153,7 @@ async def test_yfinance_provider_get_history():
 
 
 @pytest.mark.asyncio
-async def test_yfinance_provider_get_financials():
+async def test_service_get_financials():
     df_income = pd.DataFrame(
         {pd.Timestamp("2023-09-30"): [383285000000, 96995000000]},
         index=["Total Revenue", "Net Income"],
@@ -171,44 +167,19 @@ async def test_yfinance_provider_get_financials():
         index=["Operating Cash Flow", "Investing Cash Flow"],
     )
 
-    with patch("src.services.financial_info.yfinance_provider.yf.Ticker") as mock_ticker_cls:
+    with patch("src.services.financial_info.service.yf.Ticker") as mock_ticker_cls:
         mock_ticker = MagicMock()
         mock_ticker.income_stmt = df_income
         mock_ticker.balance_sheet = df_balance
         mock_ticker.cashflow = df_cashflow
         mock_ticker_cls.return_value = mock_ticker
 
-        provider = YFinanceProvider()
+        provider = FinancialInfoService()
         report = await provider.get_financials("AAPL")
 
         assert len(report.income_statement) == 2
         assert report.income_statement[0].metric == "Total Revenue"
         assert report.income_statement[0].value == Decimal(383285000000)
-
-
-@pytest.mark.asyncio
-async def test_financial_info_service_custom_provider():
-    class DummyProvider(BaseFinancialProvider):
-        async def get_profile(self, ticker: str) -> TickerProfile:
-            return TickerProfile(symbol=ticker, name="Dummy Asset")
-
-        async def get_quote(self, ticker: str) -> TickerQuote:
-            return TickerQuote(symbol=ticker, price=Decimal("42.0"))
-
-        async def get_history(self, ticker: str, period: str = "1mo", interval: str = "1d") -> list:
-            return []
-
-        async def get_financials(self, ticker: str) -> any:
-            return None
-
-    service = FinancialInfoService()
-    service.register_provider("dummy", DummyProvider())
-
-    profile = await service.get_profile("DUMMY", provider="dummy")
-    assert profile.name == "Dummy Asset"
-
-    quote = await service.get_quote("DUMMY", provider="dummy")
-    assert quote.price == Decimal("42.0")
 
 
 def test_api_endpoints(client: TestClient, session: Session):
@@ -265,7 +236,7 @@ def test_api_endpoints(client: TestClient, session: Session):
         index=["Operating Cash Flow"],
     )
 
-    with patch("src.services.financial_info.yfinance_provider.yf.Ticker") as mock_ticker_cls:
+    with patch("src.services.financial_info.service.yf.Ticker") as mock_ticker_cls:
         mock_ticker = MagicMock()
         mock_ticker.info = mock_info
         mock_ticker.fast_info = mock_fast_info
