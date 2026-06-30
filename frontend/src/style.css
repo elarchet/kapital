@@ -6,6 +6,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+html {
+  font-size: 75%;
+}
+
 :root {
   /* Clean Slate Palette */
   --bg-primary: #f8fafc;
@@ -163,7 +167,7 @@ h6 {
 
 /* Glass Header for Page Info */
 .page-header {
-  @apply bg-white/80 backdrop-blur-md border-b border-border-color py-6 px-8 flex justify-between items-center sticky top-0 z-10;
+  @apply bg-white/80 backdrop-blur-md border-b border-border-color h-[6rem] px-8 flex justify-between items-center sticky top-0 z-10;
 }
 
 .page-title-group h1 {
@@ -230,7 +234,7 @@ h6 {
 }
 
 .sidebar-logo {
-  @apply py-8 px-6 flex items-center justify-between gap-3 border-b border-border-color;
+  @apply h-[6rem] px-6 flex items-center justify-between gap-3 border-b border-border-color;
 }
 
 /* Resize & Collapse Interface Elements */
@@ -261,15 +265,15 @@ h6 {
 
 /* Collapsed Sidebar overrides */
 .sidebar.collapsed .sidebar-logo {
-  @apply flex-col gap-3 py-6 px-2 justify-center;
+  @apply flex-col gap-3 h-[6rem] py-4 px-2 items-center justify-center;
 }
 
 .sidebar.collapsed .nav-link {
-  @apply justify-center py-3 px-0 gap-0;
+  @apply justify-center py-1.5 px-0 gap-0;
 }
 
 .sidebar.collapsed .sidebar-profile {
-  @apply justify-center py-6 px-0;
+  @apply justify-center py-3 px-0;
 }
 
 .logo-icon {
@@ -282,15 +286,15 @@ h6 {
 }
 
 .sidebar-nav {
-  @apply flex-1 py-6 px-4 overflow-y-auto;
+  @apply flex-1 py-4 px-3 overflow-y-auto;
 }
 
 .nav-section-title {
-  @apply text-[0.75rem] font-bold uppercase text-text-tertiary tracking-wider pl-3 mb-3 mt-6;
+  @apply text-[0.75rem] font-bold uppercase text-text-tertiary tracking-wider pl-3 mb-1.5 mt-4;
 }
 
 .nav-link {
-  @apply flex items-center gap-3 p-3 text-text-secondary no-underline font-medium text-[0.925rem] rounded-sm transition-all duration-150 ease-in-out cursor-pointer;
+  @apply flex items-center gap-3 py-1.5 px-3 text-text-secondary no-underline font-medium text-[0.925rem] rounded-sm transition-all duration-150 ease-in-out cursor-pointer;
 }
 
 .nav-link:hover {
@@ -306,7 +310,7 @@ h6 {
 }
 
 .sidebar-profile {
-  @apply p-6 border-t border-border-color flex items-center justify-between;
+  @apply py-3 px-4 border-t border-border-color flex items-center justify-between;
 }
 
 .profile-info {

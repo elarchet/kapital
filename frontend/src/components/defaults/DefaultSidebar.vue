@@ -232,7 +232,7 @@ onBeforeUnmount(() => {
     <div v-if="!store.sidebarCollapsed" class="resize-handle" @mousedown="startResize"></div>
 
     <div class="sidebar-logo">
-      <div class="flex items-center gap-3 overflow-hidden">
+      <div class="flex items-center gap-3 overflow-hidden" :class="{ 'justify-center w-full': store.sidebarCollapsed }">
         <div class="logo-icon">K</div>
         <div v-show="!store.sidebarCollapsed" class="logo-text">Kapital</div>
       </div>
@@ -306,7 +306,7 @@ onBeforeUnmount(() => {
                 :modelValue="p.emoji"
                 :disabled="store.sidebarCollapsed"
                 @update:modelValue="store.setPortfolioEmoji(p.id, $event)"
-                class="mr-2"
+                :class="store.sidebarCollapsed ? 'mr-0' : 'mr-2'"
               />
 
               <!-- Name Display -->
@@ -330,7 +330,7 @@ onBeforeUnmount(() => {
                 :modelValue="p.emoji"
                 :disabled="store.sidebarCollapsed"
                 @update:modelValue="store.setPortfolioEmoji(p.id, $event)"
-                class="mr-2"
+                :class="store.sidebarCollapsed ? 'mr-0' : 'mr-2'"
               />
 
               <!-- Name Input -->
@@ -365,7 +365,7 @@ onBeforeUnmount(() => {
       <button 
         v-if="store.sidebarCollapsed"
         @click="handleDirectCreatePortfolio" 
-        class="nav-link w-full border-none bg-transparent text-left flex justify-center py-3"
+        class="nav-link w-full border-none bg-transparent text-left flex justify-center py-1.5"
         title="Create Portfolio"
         :disabled="isSubmitting"
       >
@@ -376,9 +376,10 @@ onBeforeUnmount(() => {
     <div class="sidebar-profile relative">
       <button 
         @click.stop="toggleProfileMenu" 
-        class="flex items-center justify-between w-full p-2 hover:bg-bg-tertiary rounded-md transition-colors text-left border-0 bg-transparent cursor-pointer"
+        class="flex items-center w-full p-2 hover:bg-bg-tertiary rounded-md transition-colors text-left border-0 bg-transparent cursor-pointer"
+        :class="store.sidebarCollapsed ? 'justify-center' : 'justify-between'"
       >
-        <div class="flex items-center gap-3 overflow-hidden">
+        <div :class="['flex items-center overflow-hidden', store.sidebarCollapsed ? 'justify-center' : 'gap-3']">
           <div class="avatar bg-accent text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0">
             SE
           </div>
@@ -392,7 +393,8 @@ onBeforeUnmount(() => {
 
       <div 
         v-if="showProfileMenu" 
-        class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-bg-secondary border border-border-color rounded-md shadow-lg py-1 z-50 flex flex-col"
+        class="absolute bottom-full mb-2 w-48 bg-bg-secondary border border-border-color rounded-md shadow-lg py-1 z-50 flex flex-col"
+        :class="store.sidebarCollapsed ? 'left-2 translate-x-0' : 'left-1/2 -translate-x-1/2'"
         @click.stop
       >
         <router-link 
