@@ -32,4 +32,13 @@ This skill details how to write and execute unit and integration tests.
   PATH="/home/etien/dev/perso/kapital/.node-dist/bin:$PATH" npx playwright test
   ```
 - The dev server (`npm run dev`) is automatically launched and managed by Playwright's `webServer` config block.
+- **Terminal-Visible Exit Codes & Reporters**: Always use a dual-reporter setup combining a terminal-friendly reporter (`list` or `line`) with the `html` reporter in `playwright.config.ts`.
+  - The `html` reporter alone prints **no** error details to terminal stdout/stderr, causing test failures to be completely silent/invisible to automated CLI-based runners and agent loops.
+  - Recommended config format:
+    ```typescript
+    reporter: [
+      ['list', { printFailuresInline: true }],
+      ['html', { open: 'on-failure' }]
+    ]
+    ```
 

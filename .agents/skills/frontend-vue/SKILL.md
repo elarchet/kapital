@@ -16,6 +16,17 @@ This skill governs the development of the frontend single-page application (SPA)
 - Design tokens (colors, spacing, typography) must be declared once under the `@theme` directive in `frontend/src/style.css`.
 - Avoid hardcoded custom spacing or raw color codes in the Tailwind classes.
 - `<style scoped>` blocks in Vue files must be empty or near-empty. Never redeclare styles achievable via Tailwind utility classes.
+- **Dense & Scalable Layout Design (75% Zoom)**:
+  - When the layout needs to be condensed/scaled down, declare `html { font-size: 75%; }` in the global CSS to scale all `rem` values down proportionally.
+  - Never use fixed pixel heights (e.g., `h-[96px]`) for primary header bars and logos; instead, use relative scaling values (e.g., `h-[6rem]`) to keep adjacent elements aligned horizontally across different scaling values.
+  - To maximize data density, prefer tight vertical paddings (like `py-1.5` instead of `py-3`) and margins on navigational list elements.
+- **Collapsed Sidebar/Navigation Centering Rules**:
+  - Ensure all icons, logo initials, and avatar components align cleanly in the center when the navigation sidebar collapses.
+  - Use conditional classes like `:class="store.sidebarCollapsed ? 'mr-0' : 'mr-2'"` to prevent right/left spacing shifts in collapsed state when label text is hidden.
+  - Explicitly center flex elements in collapsed containers using `:class=\"{ 'justify-center w-full': store.sidebarCollapsed }\"`.
+- **Popover Positioning in Collapsed Mode**:
+  - Always verify absolute popovers (e.g. user profile menus) don't overflow off-screen when the parent sidebar collapses.
+  - Use conditional coordinates, e.g. `:class=\"store.sidebarCollapsed ? 'left-2 translate-x-0' : 'left-1/2 -translate-x-1/2'\"`.
 
 ## 3. Subfolder Organization
 - Avoid flat components directories. Place related components in logical subdirectories (e.g., `components/import/`, `components/portfolio/`).
