@@ -16,7 +16,6 @@ from decimal import Decimal
 
 import pytest
 from sqlalchemy import inspect, select
-from sqlmodel import Session, SQLModel, create_engine
 
 from src.models import (
     AssetType,
@@ -33,7 +32,6 @@ from src.models import (
     PaymentMethod,
     RevenueCategory,
     RevenueOperation,
-    SABase,
     StockSplitOperation,
     TaxOperation,
     TradeOperation,
@@ -59,30 +57,11 @@ from tests.factories import (
     TransferInOperationFactory,
     TransferOutOperationFactory,
     UserFactory,
-    set_factory_session,
 )
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(name="engine")
-def fixture_engine():
-    """In-memory SQLite engine with all tables created."""
-    eng = create_engine("sqlite://", echo=False)
-    SQLModel.metadata.create_all(eng)
-    SABase.metadata.create_all(eng)
-    return eng
-
-
-@pytest.fixture(name="session")
-def fixture_session(engine):
-    """Yield a fresh session per test."""
-    with Session(engine) as s:
-        set_factory_session(s)
-        yield s
-        set_factory_session(None)
 
 
 @pytest.fixture(name="seed")

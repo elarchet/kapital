@@ -4,46 +4,19 @@ from typing import cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import select
 
 from src.models import (
     Portfolio,
     Position,
     User,
 )
-from src.models.base import SABase
 from src.services.financial_info import TickerProfile
 from src.services.import_service import import_portfolio_transactions
 from tests.factories import (
     PortfolioFactory,
     UserFactory,
-    set_factory_session,
 )
-
-
-@pytest.fixture(name="engine")
-def fixture_engine():
-    """In-memory SQLite engine with all tables created."""
-    eng = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=False,
-    )
-    SQLModel.metadata.create_all(eng)
-    SABase.metadata.create_all(eng)
-    return eng
-
-
-@pytest.fixture(name="session")
-def fixture_session(engine):
-    """Yield a fresh session per test."""
-    with Session(engine) as s:
-        set_factory_session(s)
-        yield s
-        set_factory_session(None)
 
 
 @pytest.mark.asyncio

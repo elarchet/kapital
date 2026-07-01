@@ -36,7 +36,11 @@ test('verify custom dropdown keyboard navigation and filtering', async ({ page }
   await expect(page.locator('.page-header h1')).toContainText(portfolioName);
 
   // 3. Trigger Import modal by setting files on the hidden input
-  await page.setInputFiles('input[type="file"]', '../from_2026-01-01_to_2026-05-25_MTc3OTczMDI0NzIwNw.csv');
+  await page.setInputFiles('input[type="file"]', {
+    name: 'test.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('Action,Time,ISIN,Ticker,Name,Notes,ID,No. of shares,Price / share,Currency (Price / share),Exchange rate,Result,Currency (Result),Total,Currency (Total),Withholding tax,Currency (Withholding tax),Currency conversion from amount,Currency (Currency conversion from amount),Currency conversion to amount,Currency (Currency conversion to amount),Currency conversion fee,Currency (Currency conversion fee),Merchant name,Merchant category\n')
+  });
 
   // Verify the Import Transactions Modal is open (as a drawer)
   const importHeader = page.locator('h3', { hasText: 'Import Transactions' });

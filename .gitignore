@@ -31,5 +31,4 @@ examples/
 *.csv
 
 # Database files
-*.sqlite
 *.db

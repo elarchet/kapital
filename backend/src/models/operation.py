@@ -23,7 +23,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    text,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -183,7 +183,7 @@ class Operation(SABase):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
-        server_default=text("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"),
+        server_default=func.now(),
     )
 
     # -- relationships ---------------------------------------------------------

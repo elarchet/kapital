@@ -90,8 +90,6 @@ ipython_config.py
 
 # Local databases
 *.db
-*.sqlite
-*.sqlite3
 
 # Static uploads
 static/uploads/

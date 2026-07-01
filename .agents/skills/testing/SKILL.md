@@ -9,7 +9,7 @@ This skill details how to write and execute unit and integration tests.
 
 ## 1. Pytest & Async Testing
 - Use `pytest` and `pytest-asyncio` for all backend code.
-- Focus on testing logic and service layers independently of the DB where possible, or use SQLite in-memory for DB tests.
+- Focus on testing logic and service layers independently of the DB where possible, or use a PostgreSQL test database for DB tests.
 - Target 100% test coverage for all financial calculation modules (`backend/src/services/` or `backend/src/logic/`).
 - **Test Suite Splitting**: Strictly respect the ~400-line budget limit for all test files (e.g., `test_*.py`). Split large test files into focused feature tests (e.g., `test_import_custom.py`) to keep files highly readable, maintainable, and within line budget limits.
 
@@ -29,7 +29,7 @@ This skill details how to write and execute unit and integration tests.
 - Write E2E test files in `frontend/e2e/` with `.spec.ts` extensions.
 - Execute Playwright E2E tests from the `frontend/` directory with:
   ```bash
-  PATH="/home/etien/dev/perso/kapital/.node-dist/bin:$PATH" npx playwright test
+  npx playwright test
   ```
 - The dev server (`npm run dev`) is automatically launched and managed by Playwright's `webServer` config block.
 - **Terminal-Visible Exit Codes & Reporters**: Always use a dual-reporter setup combining a terminal-friendly reporter (`list` or `line`) with the `html` reporter in `playwright.config.ts`.

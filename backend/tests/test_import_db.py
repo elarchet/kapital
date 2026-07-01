@@ -2,39 +2,19 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel
-
-from src.models import AssetType, OrderStatus, OrderType, TradeOperation, TradeSide
-from src.models.base import SABase
+from src.models import AssetType, OrderStatus, OrderType, TradeSide
 from src.services.import_db import (
     check_duplicate_operation,
     find_or_create_position,
     get_or_create_cash_position,
     get_or_create_institution_and_account,
 )
+from tests.factories import PortfolioFactory, TradeOperationFactory
 
-
-@pytest.fixture(name="engine")
-def fixture_engine():
-    eng = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=False,
-    )
-    SQLModel.metadata.create_all(eng)
-    SABase.metadata.create_all(eng)
-    return eng
-
-
-@pytest.fixture(name="session")
-def fixture_session(engine):
-    with Session(engine) as session:
-        yield session
+if TYPE_CHECKING:
+    from sqlmodel import Session
 
 
 def test_get_or_create_institution_and_account(session: Session):
@@ -55,16 +35,18 @@ def test_get_or_create_institution_and_account(session: Session):
 
 
 def test_find_or_create_position(session: Session):
+    portfolio = PortfolioFactory()
+    session.flush()
     op_info_cash = {"currency": "USD"}
 
     # 1. Cash, does not exist
-    pos1, created1 = find_or_create_position(session, 1, op_info_cash, is_cash_op=True)
+    pos1, created1 = find_or_create_position(session, portfolio.id, op_info_cash, is_cash_op=True)
     assert created1 is True
     assert pos1.asset_type == AssetType.CASH
     assert pos1.currency == "USD"
 
     # 2. Cash, exists
-    pos2, created2 = find_or_create_position(session, 1, op_info_cash, is_cash_op=True)
+    pos2, created2 = find_or_create_position(session, portfolio.id, op_info_cash, is_cash_op=True)
     assert created2 is False
     assert pos2.id == pos1.id
 
@@ -75,7 +57,7 @@ def test_find_or_create_position(session: Session):
         "name": "Apple Inc",
         "currency": "USD",
     }
-    pos3, created3 = find_or_create_position(session, 1, op_info_stock, is_cash_op=False)
+    pos3, created3 = find_or_create_position(session, portfolio.id, op_info_stock, is_cash_op=False)
     assert created3 is True
     assert pos3.asset_type == AssetType.STOCK
 
@@ -86,12 +68,12 @@ def test_find_or_create_position(session: Session):
         "name": "Vanguard FTSE All-World",
         "currency": "EUR",
     }
-    pos4, created4 = find_or_create_position(session, 1, op_info_etf, is_cash_op=False)
+    pos4, created4 = find_or_create_position(session, portfolio.id, op_info_etf, is_cash_op=False)
     assert created4 is True
     assert pos4.asset_type == AssetType.ETF
 
     # 5. Non-cash, exists by ISIN
-    pos5, created5 = find_or_create_position(session, 1, op_info_stock, is_cash_op=False)
+    pos5, created5 = find_or_create_position(session, portfolio.id, op_info_stock, is_cash_op=False)
     assert created5 is False
     assert pos5.id == pos3.id
 
@@ -102,7 +84,7 @@ def test_find_or_create_position(session: Session):
         "name": "Apple Inc",
         "currency": "USD",
     }
-    pos6, created6 = find_or_create_position(session, 1, op_info_ticker, is_cash_op=False)
+    pos6, created6 = find_or_create_position(session, portfolio.id, op_info_ticker, is_cash_op=False)
     assert created6 is False
     assert pos6.id == pos3.id
 
@@ -113,17 +95,14 @@ def test_find_or_create_position(session: Session):
         "name": "Apple Inc",
         "currency": "USD",
     }
-    pos7, created7 = find_or_create_position(session, 1, op_info_name, is_cash_op=False)
+    pos7, created7 = find_or_create_position(session, portfolio.id, op_info_name, is_cash_op=False)
     assert created7 is False
     assert pos7.id == pos3.id
 
 
 def test_check_duplicate_operation(session: Session):
     # Needs a real operation to test
-    op = TradeOperation(
-        position_id=1,
-        financial_account_id=1,
-        operation_type="trade",
+    op = TradeOperationFactory(
         executed_at=datetime(2026, 1, 1, tzinfo=UTC),
         total_amount=Decimal(100),
         quantity=Decimal(10),
@@ -134,16 +113,15 @@ def test_check_duplicate_operation(session: Session):
         order_type=OrderType.MARKET,
         order_status=OrderStatus.FILLED,
     )
-    session.add(op)
-    session.commit()
+    session.flush()
 
     # Match by transaction_id
     op_info1 = {"transaction_id": "tx_123"}
-    assert check_duplicate_operation(session, 1, op_info1) is True
+    assert check_duplicate_operation(session, op.position_id, op_info1) is True
 
     # No match by transaction_id
     op_info2 = {"transaction_id": "tx_999"}
-    assert check_duplicate_operation(session, 1, op_info2) is False
+    assert check_duplicate_operation(session, op.position_id, op_info2) is False
 
     # Match by attributes (with quantity)
     op_info3 = {
@@ -153,13 +131,12 @@ def test_check_duplicate_operation(session: Session):
         "total_amount": Decimal(100),
         "quantity": Decimal(10),
     }
-    assert check_duplicate_operation(session, 1, op_info3) is True
+    assert check_duplicate_operation(session, op.position_id, op_info3) is True
 
     # Match by attributes (without quantity - None)
-    op2 = TradeOperation(
-        position_id=1,
-        financial_account_id=1,
-        operation_type="trade",
+    _op2 = TradeOperationFactory(
+        position=op.position,
+        financial_account=op.financial_account,
         executed_at=datetime(2026, 1, 2, tzinfo=UTC),
         total_amount=Decimal(200),
         quantity=None,
@@ -170,8 +147,7 @@ def test_check_duplicate_operation(session: Session):
         order_type=OrderType.MARKET,
         order_status=OrderStatus.FILLED,
     )
-    session.add(op2)
-    session.commit()
+    session.flush()
 
     op_info4 = {
         "transaction_id": "",
@@ -180,16 +156,18 @@ def test_check_duplicate_operation(session: Session):
         "total_amount": Decimal(200),
         "quantity": None,
     }
-    assert check_duplicate_operation(session, 1, op_info4) is True
+    assert check_duplicate_operation(session, op.position_id, op_info4) is True
 
 
 def test_get_or_create_cash_position(session: Session):
+    portfolio = PortfolioFactory()
+    session.flush()
     # 1. Does not exist
-    pos1, created1 = get_or_create_cash_position(session, 1, "USD")
+    pos1, created1 = get_or_create_cash_position(session, portfolio.id, "USD")
     assert created1 is True
     assert pos1.currency == "USD"
 
     # 2. Exists
-    pos2, created2 = get_or_create_cash_position(session, 1, "USD")
+    pos2, created2 = get_or_create_cash_position(session, portfolio.id, "USD")
     assert created2 is False
     assert pos2.id == pos1.id

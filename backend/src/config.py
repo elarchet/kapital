@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Database
-    DATABASE_URL: str = "sqlite:///./kapital.db"
+    DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/kapital"
 
     # UI Component Marketplace Asset uploads
     UPLOAD_DIR: str = "static/uploads"

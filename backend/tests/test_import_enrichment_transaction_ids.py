@@ -3,46 +3,19 @@ from __future__ import annotations
 from typing import cast
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import select
 
 from src.models import (
     Operation,
     Portfolio,
     User,
 )
-from src.models.base import SABase
 from src.schemas.operation import OperationRead
 from src.services.import_service import import_portfolio_transactions
 from tests.factories import (
     PortfolioFactory,
     UserFactory,
-    set_factory_session,
 )
-
-
-@pytest.fixture(name="engine")
-def fixture_engine():
-    """In-memory SQLite engine with all tables created."""
-    eng = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=False,
-    )
-    SQLModel.metadata.create_all(eng)
-    SABase.metadata.create_all(eng)
-    return eng
-
-
-@pytest.fixture(name="session")
-def fixture_session(engine):
-    """Yield a fresh session per test."""
-    with Session(engine) as s:
-        set_factory_session(s)
-        yield s
-        set_factory_session(None)
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from collections.abc import AsyncGenerator  # noqa: TC003
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from src.config import settings
-from src.database import init_db
 from src.routers import (
     auth,
     financial_account,
@@ -24,8 +25,12 @@ from src.routers import (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
-    """Handles startup actions (like auto table creation) and teardown context."""
-    init_db()
+    """Handles startup actions (like auto table creation, migrations) and teardown context."""
+    if "pytest" in sys.modules:
+        # During tests, database tables are managed by fixtures in conftest.py
+        pass
+    else:
+        subprocess.run(["alembic", "upgrade", "head"], check=True)  # noqa: ASYNC221, S607
     yield
 
 

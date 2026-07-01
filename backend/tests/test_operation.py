@@ -1,17 +1,10 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-import pytest
 from fastapi import status
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel
 
-from src.database import get_session
-from src.main import app
-from src.models.base import SABase
 from tests.factories import (
     FinancialAccountFactory,
     InstitutionFactory,
@@ -19,41 +12,11 @@ from tests.factories import (
     PositionFactory,
     TradeOperationFactory,
     UserFactory,
-    set_factory_session,
 )
 
-
-@pytest.fixture(name="engine")
-def fixture_engine():
-    """In-memory SQLite engine with all tables created."""
-    eng = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=False,
-    )
-    SQLModel.metadata.create_all(eng)
-    SABase.metadata.create_all(eng)
-    return eng
-
-
-@pytest.fixture(name="session")
-def fixture_session(engine):
-    with Session(engine) as s:
-        set_factory_session(s)
-        yield s
-        set_factory_session(None)
-
-
-@pytest.fixture(name="client")
-def fixture_client(session):
-    def override_get_session():
-        yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
+if TYPE_CHECKING:
+    from fastapi.testclient import TestClient
+    from sqlmodel import Session
 
 
 def get_auth_headers(client: TestClient, email: str, password: str = "SeedP@ss1!") -> dict[str, str]:

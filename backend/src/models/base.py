@@ -11,7 +11,7 @@ Provides:
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, text
+from sqlalchemy import DateTime, func
 from sqlalchemy.orm import DeclarativeBase, registry
 from sqlmodel import Field, SQLModel
 
@@ -43,7 +43,7 @@ class TimestampMixin:
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         sa_column_kwargs={
-            "server_default": text("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"),
+            "server_default": func.now(),
         },
         nullable=False,
     )
@@ -51,7 +51,7 @@ class TimestampMixin:
         default_factory=lambda: datetime.now(UTC),
         sa_type=DateTime(timezone=True),
         sa_column_kwargs={
-            "server_default": text("(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"),
+            "server_default": func.now(),
             "onupdate": lambda: datetime.now(UTC),
         },
         nullable=False,

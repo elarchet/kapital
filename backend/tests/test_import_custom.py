@@ -5,121 +5,78 @@ from decimal import Decimal
 from typing import cast
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import select
 
-from src.database import get_session
-from src.main import app
 from src.models import Operation, Portfolio, Position, User
-from src.models.base import SABase
 from src.models.import_file_schema import ImportFileSchema
 from src.services.import_service import import_portfolio_transactions
 from tests.factories import (
     PortfolioFactory,
     UserFactory,
-    set_factory_session,
 )
 
 
-@pytest.fixture(name="engine")
-def fixture_engine():
-    """In-memory SQLite engine with all tables created and default schema seeded."""
-    eng = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=False,
+@pytest.fixture(autouse=True)
+def seed_trading_212(session):
+    t212_mappings = {
+        "columns": {
+            "operation_type": "Action",
+            "executed_at": "Time",
+            "isin": "ISIN",
+            "ticker": "Ticker",
+            "name": "Name",
+            "notes": "Notes",
+            "transaction_id": "ID",
+            "quantity": "No. of shares",
+            "unit_price": "Price / share",
+            "price_currency": "Currency (Price / share)",
+            "currency": "Currency (Total)",
+            "total_amount": "Total",
+            "exchange_rate": "Exchange rate",
+            "fee_amount": "Currency conversion fee",
+            "fee_currency": "Currency (Currency conversion fee)",
+            "tax_amount": "Withholding tax",
+            "tax_currency": "Currency (Withholding tax)",
+            "merchant_name": "Merchant name",
+            "merchant_category": "Merchant category",
+            "interest_type": "Action",
+        },
+        "type_mappings": {
+            "buy": ["Market buy", "Limit buy", "Stock split open"],
+            "sell": ["Market sell", "Limit sell", "Stock split close"],
+            "dividend": ["Dividend (Dividend)", "Dividend (Dividend manufactured payment)", "Dividend adjustment"],
+            "interest": ["Interest on cash", "Lending interest", "Spending cashback"],
+            "transfer_in": ["Deposit"],
+            "transfer_out": ["Withdrawal"],
+            "expense": ["Card debit"],
+            "revenue": ["Card credit"],
+            "fx_rate_change": ["Currency conversion"],
+        },
+        "enum_mappings": {
+            "interest_type": {
+                "cash_interest": ["Interest on cash"],
+                "lending_interest": ["Lending interest"],
+                "cashback": ["Spending cashback"],
+            },
+        },
+        "scaling": {
+            "unit_price": {
+                "GBX": 0.01,
+            },
+            "total_amount": {
+                "GBX": 0.01,
+            },
+        },
+    }
+    schema_obj = ImportFileSchema(
+        name="Trading 212",
+        is_public=True,
+        delimiter=",",
+        decimal_separator=".",
+        mappings=json.dumps(t212_mappings),
     )
-    SQLModel.metadata.create_all(eng)
-    SABase.metadata.create_all(eng)
-
-    # Seed default templates
-    with Session(eng) as session:
-        t212_mappings = {
-            "columns": {
-                "operation_type": "Action",
-                "executed_at": "Time",
-                "isin": "ISIN",
-                "ticker": "Ticker",
-                "name": "Name",
-                "notes": "Notes",
-                "transaction_id": "ID",
-                "quantity": "No. of shares",
-                "unit_price": "Price / share",
-                "price_currency": "Currency (Price / share)",
-                "currency": "Currency (Total)",
-                "total_amount": "Total",
-                "exchange_rate": "Exchange rate",
-                "fee_amount": "Currency conversion fee",
-                "fee_currency": "Currency (Currency conversion fee)",
-                "tax_amount": "Withholding tax",
-                "tax_currency": "Currency (Withholding tax)",
-                "merchant_name": "Merchant name",
-                "merchant_category": "Merchant category",
-                "interest_type": "Action",
-            },
-            "type_mappings": {
-                "buy": ["Market buy", "Limit buy", "Stock split open"],
-                "sell": ["Market sell", "Limit sell", "Stock split close"],
-                "dividend": ["Dividend (Dividend)", "Dividend (Dividend manufactured payment)", "Dividend adjustment"],
-                "interest": ["Interest on cash", "Lending interest", "Spending cashback"],
-                "transfer_in": ["Deposit"],
-                "transfer_out": ["Withdrawal"],
-                "expense": ["Card debit"],
-                "revenue": ["Card credit"],
-                "fx_rate_change": ["Currency conversion"],
-            },
-            "enum_mappings": {
-                "interest_type": {
-                    "cash_interest": ["Interest on cash"],
-                    "lending_interest": ["Lending interest"],
-                    "cashback": ["Spending cashback"],
-                },
-            },
-            "scaling": {
-                "unit_price": {
-                    "GBX": 0.01,
-                },
-                "total_amount": {
-                    "GBX": 0.01,
-                },
-            },
-        }
-        schema_obj = ImportFileSchema(
-            name="Trading 212",
-            is_public=True,
-            delimiter=",",
-            decimal_separator=".",
-            mappings=json.dumps(t212_mappings),
-        )
-        session.add(schema_obj)
-        session.commit()
-
-    return eng
-
-
-@pytest.fixture(name="session")
-def fixture_session(engine):
-    """Yield a fresh session per test."""
-    with Session(engine) as s:
-        set_factory_session(s)
-        yield s
-        set_factory_session(None)
-
-
-@pytest.fixture(name="client")
-def fixture_client(session):
-    """Yield a TestClient with database session overridden."""
-
-    def override_get_session():
-        yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
+    session.add(schema_obj)
+    session.commit()
 
 
 @pytest.mark.asyncio
