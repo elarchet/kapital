@@ -135,7 +135,7 @@ def read_operations(
             .offset(skip)
             .limit(limit)
         )
-        return list(db.exec(statement).scalars().all())
+        return list(db.exec(statement).all())
 
     # If no filter is applied, return all operations across all positions of portfolios owned by the user
     statement = (
@@ -146,7 +146,7 @@ def read_operations(
         .offset(skip)
         .limit(limit)
     )
-    return list(db.execute(statement).scalars().all())
+    return list(db.exec(statement).all())
 
 
 @router.get(
@@ -174,7 +174,7 @@ def read_operation(
         .join(Portfolio, Position.portfolio_id == Portfolio.id)
         .where(Operation.id == operation_id, Portfolio.user_id == current_user.id)
     )
-    operation = db.exec(statement).scalars().first()
+    operation = db.exec(statement).first()
     if not operation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -209,7 +209,7 @@ def update_operation(
         .join(Portfolio, Position.portfolio_id == Portfolio.id)
         .where(Operation.id == operation_id, Portfolio.user_id == current_user.id)
     )
-    operation = db.exec(statement).scalars().first()
+    operation = db.exec(statement).first()
     if not operation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -256,7 +256,7 @@ def delete_operation(
         .join(Portfolio, Position.portfolio_id == Portfolio.id)
         .where(Operation.id == operation_id, Portfolio.user_id == current_user.id)
     )
-    operation = db.exec(statement).scalars().first()
+    operation = db.exec(statement).first()
     if not operation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
