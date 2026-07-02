@@ -317,3 +317,72 @@ async def test_import_without_transaction_id(session):
 
     ops = session.exec(select(Operation).where(Operation.position_id == pos.id)).all()
     assert len(ops) == 2
+
+
+@pytest.mark.asyncio
+async def test_import_stock_split_schema_driven(session):
+    # Setup test portfolio and user
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    # Custom mapping config utilizing split_sub_type column and enum_mappings
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "ticker": "Symbol",
+            "total_amount": "Total",
+            "currency": "Curr",
+            "quantity": "Shares",
+            "split_sub_type": "SubType",
+        },
+        "type_mappings": {
+            "buy": ["BUY"],
+            "stock_split": ["SPLIT"],
+        },
+        "enum_mappings": {
+            "split_sub_type": {
+                "close": ["PRE_SPLIT"],
+                "open": ["POST_SPLIT"],
+            },
+        },
+    }
+
+    # CSV has buy trade followed by stock split pre/post rows mapped via split_sub_type
+    csv_content = (
+        b"Type,Date,Asset,Symbol,Total,Curr,Shares,SubType\n"
+        b"BUY,2026-06-01 12:00:00,Nvidia,NVDA,1000.0,USD,10.0,\n"
+        b"SPLIT,2026-06-02 12:00:00,Nvidia,NVDA,0.0,USD,10.0,PRE_SPLIT\n"
+        b"SPLIT,2026-06-02 12:00:00,Nvidia,NVDA,0.0,USD,100.0,POST_SPLIT\n"
+    )
+
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["operations_imported"] == 2  # 1 buy trade, 1 combined stock split
+    pos = session.exec(
+        select(Position).where(Position.portfolio_id == portfolio.id, Position.ticker == "NVDA"),
+    ).first()
+    assert pos is not None
+    # 10 shares bought, then split 1 to 10 (+90 shares). Net = 100.0 shares.
+    assert pos.quantity == Decimal("100.0")
+
+    # Verify StockSplitOperation details
+    split_op = session.exec(
+        select(Operation).where(Operation.position_id == pos.id, Operation.operation_type == "stock_split"),
+    ).first()
+    assert split_op is not None
+    assert split_op.split_ratio == Decimal("10.0")
+    assert split_op.pre_split_quantity == Decimal("10.0")
+    assert split_op.quantity == Decimal("90.0")  # net delta shares added

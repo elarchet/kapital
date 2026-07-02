@@ -336,7 +336,11 @@ class TransferOutOperation(Operation):
 
 
 class StockSplitOperation(Operation):
-    """A stock split — ``split_ratio`` is required (e.g. 4.0 for a 4-for-1)."""
+    """A stock split — ``split_ratio`` is required (e.g. 4.0 for a 4-for-1).
+
+    ``pre_split_quantity`` preserves the original share count (broker "close" row)
+    before the split was applied, enabling full audit reconciliation.
+    """
 
     __mapper_args__: ClassVar[dict[str, object]] = {
         "polymorphic_identity": "stock_split",
@@ -344,6 +348,11 @@ class StockSplitOperation(Operation):
 
     split_ratio: Mapped[Decimal | None] = mapped_column(
         Numeric(precision=12, scale=6),
+        nullable=True,
+        default=None,
+    )
+    pre_split_quantity: Mapped[Decimal | None] = mapped_column(
+        Numeric(precision=20, scale=8),
         nullable=True,
         default=None,
     )

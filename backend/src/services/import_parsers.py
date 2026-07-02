@@ -113,32 +113,66 @@ def apply_transformation(
 
 
 def combine_stock_splits(parsed_operations: list[dict]) -> list[dict]:
-    """Combine split close and split open rows into a single stock_split operation."""
-    processed_ops = []
-    skip_indices = set()
+    """Combine paired split rows into a single stock_split operation.
 
-    for i in range(len(parsed_operations)):
+    Supports two CSV formats:
+    - **Two-row format**: broker emits a "close" (pre-split) row and an "open"
+      (post-split) row. The rows are paired by ticker and timestamp (≤60s apart).
+      Pairing is driven by ``split_sub_type`` when available, with fallback to
+      legacy hardcoded ``csv_action`` strings for backward-compatible schemas.
+    - **Single-row / combined format**: broker emits one row already representing
+      the net share change.  ``split_sub_type == "combined"`` or no sub-type at
+      all causes the row to pass through unchanged.
+
+    Sets ``pre_split_quantity`` (the "close" share count) for full audit trail.
+    """
+    processed_ops: list[dict] = []
+    skip_indices: set[int] = set()
+
+    def _is_close(op: dict) -> bool:
+        return op.get("split_sub_type") == "close"
+
+    def _is_open(op: dict) -> bool:
+        return op.get("split_sub_type") == "open"
+
+    for i, op_data in enumerate(parsed_operations):
         if i in skip_indices:
             continue
 
-        op_data = parsed_operations[i]
-        is_split_close = op_data["csv_action"] == "Stock split close"
-        if is_split_close and i + 1 < len(parsed_operations):
+        if op_data.get("op_type") != "stock_split":
+            processed_ops.append(op_data)
+            continue
+
+        # Combined single-row: pass through, just ensure split_ratio is set
+        if op_data.get("split_sub_type") == "combined" or (not _is_close(op_data) and not _is_open(op_data)):
+            processed_ops.append(op_data)
+            continue
+
+        # Two-row format: look for the matching "open" row immediately after
+        if _is_close(op_data) and i + 1 < len(parsed_operations):
             next_op = parsed_operations[i + 1]
-            if (
-                next_op["csv_action"] == "Stock split open"
-                and next_op["ticker"] == op_data["ticker"]
-                and abs((next_op["executed_at"] - op_data["executed_at"]).total_seconds()) <= 60  # noqa: PLR2004
-            ):
+            same_ticker = next_op.get("ticker") == op_data.get("ticker") or (
+                next_op.get("isin") and next_op.get("isin") == op_data.get("isin")
+            )
+            within_time_window = (
+                abs((next_op["executed_at"] - op_data["executed_at"]).total_seconds()) <= 60  # noqa: PLR2004
+            )
+            if _is_open(next_op) and same_ticker and within_time_window:
                 close_qty = op_data["quantity"] or Decimal(1)
                 open_qty = next_op["quantity"] or Decimal(1)
                 split_ratio = open_qty / close_qty
 
                 op_data["op_type"] = "stock_split"
                 op_data["split_ratio"] = split_ratio
-                op_data["quantity"] = open_qty - close_qty
-                op_data["notes"] = f"Stock split 1 to {split_ratio:.4f}"
+                op_data["pre_split_quantity"] = close_qty
+                op_data["quantity"] = open_qty - close_qty  # net delta added to position
+                op_data["notes"] = f"Stock split 1:{split_ratio:.4f}"
+                op_data["split_sub_type"] = "combined"  # mark as resolved
                 skip_indices.add(i + 1)
+                processed_ops.append(op_data)
+                continue
 
+        # Orphaned close row (no matching open) — pass through as-is
         processed_ops.append(op_data)
+
     return processed_ops
