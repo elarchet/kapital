@@ -11,7 +11,9 @@ from src.database import get_session
 from src.models.portfolio import Portfolio
 from src.models.position import Position
 from src.models.user import User
+from src.schemas.cost_basis import CostBasisRead
 from src.schemas.position import PositionCreate, PositionRead, PositionUpdate
+from src.services.cost_basis_service import CostBasisResult, get_position_cost_basis
 
 router = APIRouter(prefix="/positions", tags=["positions"])
 
@@ -95,6 +97,34 @@ def read_positions(
         .limit(limit)
     )
     return list(db.exec(statement).all())
+
+
+@router.get(
+    "/{position_id}/cost_basis",
+    response_model=CostBasisRead,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+        status.HTTP_404_NOT_FOUND: {"description": "Position not found."},
+    },
+)
+def read_position_cost_basis(
+    position_id: Annotated[int, Path(description="The ID of the position to retrieve cost basis for")],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_session)],
+) -> CostBasisResult:
+    """Retrieve the split-adjusted cost basis details for a specific position."""
+    if current_user.id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user record lacks a valid identifier.",
+        )
+    position = position_crud.get_by_owner(db, id=position_id, user_id=current_user.id)
+    if not position:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Position not found or not owned by user.",
+        )
+    return get_position_cost_basis(db, position_id=position_id)
 
 
 @router.get(

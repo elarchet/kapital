@@ -38,9 +38,13 @@ def fixture_engine():
 
     eng = create_engine(db_url, echo=False)
 
-    # Ensure clean database tables
-    SQLModel.metadata.drop_all(eng)
-    SABase.metadata.drop_all(eng)
+    # Ensure clean database tables (including custom PostgreSQL types/enums)
+    with eng.connect() as conn, conn.begin():
+        conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        conn.execute(text("CREATE SCHEMA public"))
+        # Grant privileges back to public
+        conn.execute(text("GRANT ALL ON SCHEMA public TO public"))
+
     SQLModel.metadata.create_all(eng)
     SABase.metadata.create_all(eng)
 
