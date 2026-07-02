@@ -45,6 +45,8 @@ class OperationBase(BaseModel):
     source_reference: str | None = Field(default=None, max_length=300)
     destination_reference: str | None = Field(default=None, max_length=300)
     split_ratio: Decimal | None = None
+    pre_split_quantity: Decimal | None = None
+    split_sub_type: str | None = Field(default=None, max_length=20)  # "close" | "open" | "combined"
     source_currency: str | None = Field(default=None, max_length=3)
     target_currency: str | None = Field(default=None, max_length=3)
     exchange_rate: Decimal | None = None
@@ -137,6 +139,8 @@ class OperationUpdate(BaseModel):
     source_reference: str | None = Field(default=None, max_length=300)
     destination_reference: str | None = Field(default=None, max_length=300)
     split_ratio: Decimal | None = None
+    pre_split_quantity: Decimal | None = None
+    split_sub_type: str | None = Field(default=None, max_length=20)
     source_currency: str | None = Field(default=None, max_length=3)
     target_currency: str | None = Field(default=None, max_length=3)
     exchange_rate: Decimal | None = None
