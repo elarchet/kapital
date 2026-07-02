@@ -4,6 +4,11 @@ This document defines the core architecture, stack definitions, subagent matrix,
 
 ---
 
+## 0. Conversation Startup Protocol
+- **Immediate Branching**: At the start of ANY new conversation, you MUST immediately apply the `stacked-branches` skill. Run its housekeeping steps (fetch, prune) to ensure the local repository is up to date, and directly create a new branch to answer the user's request for the new feature/task before writing any code.
+
+---
+
 ## 1. Core Architecture & Tech Stack
 
 ### Constitutional Guidelines
@@ -17,7 +22,7 @@ This document defines the core architecture, stack definitions, subagent matrix,
 - **Bulk Mutations & Performance**: Optimize bulk updates or imports by caching database lookups in-memory and using a single batch `db.commit()` in a try-except-rollback block at the service layer, avoiding N+1 queries and loop commits.
 - **Defensive Rendering**: Defensively use optional chaining (`?.`) when displaying dynamic rows, custom templates, or mapped fields to prevent UI crashes if some attributes are missing.
 - **Ponytail / Minimalist Architecture**: Enforce YAGNI (You Ain't Gonna Need It) principles strictly. Avoid over-engineering, redundant file structures, and unnecessary abstractions. Consolidate logic into fewer, well-scoped files and prioritize standard library/native solutions as detailed in [.agents/.rules/ponytail.md](file:///home/etien/dev/perso/kapital/.agents/.rules/ponytail.md).
-- **Strict Commit Protocols**: Never perform git commits or push changes to the repository without explicit consent from the user. Refer to and strictly follow the [git-commit](file:///home/etien/dev/perso/kapital/.agents/skills/git-commit/SKILL.md) skill.
+- **Strict Commit Protocols**: Never perform git commits or push changes to the repository without explicit consent from the user. **You must ALWAYS explain your changes fully before asking for this consent.** Refer to and strictly follow the [git-commit](file:///home/etien/dev/perso/kapital/.agents/skills/git-commit/SKILL.md) skill.
 - **Quality Control**: Automated hooks via `prek` running `ruff`, `ty`, `gitleaks`, and `commitizen`.
 
 ---
@@ -70,6 +75,6 @@ Before writing code or asking for commit approval, you MUST explicitly answer an
 4. **Decoupled API**: Is all logic decoupled (frontend is representation/interaction only, business/financial logic is in the backend)?
 5. **Database Efficiency**: Did you avoid loop-based database commits and N+1 queries for batch operations?
 6. **Subagent Delegation**: Did you delegate task segments to the appropriate subagents (e.g. `tester` for tests, `frontend_designer` for layout/styles, `architect_critic` for final code reviews)?
-7. **Commit & Push Compliance**: Did you verify that you only commit after explicit user approval, using the `git agent-commit` alias and Conventional Commits format, and that pushes target only feature branches (never `main`)?
+7. **Commit & Push Compliance**: Did you explain your changes fully before asking for explicit user approval? Did you verify that you only commit after this approval, using the `git agent-commit` alias and Conventional Commits format, and that pushes target only feature branches (never `main`)?
 8. **Stacked Branch Hygiene**: If the user is ready for the next feature, follow the `stacked-branches` skill — push current feature, scaffold next branch on top (not on main), and rebase onto main when the parent merges. The agent auto-detects whether to stack or branch from main by checking for pending feature branches after housekeeping.
 
