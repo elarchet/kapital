@@ -59,7 +59,7 @@ const isFieldRelevant = (fieldKey: string, opType: string) => {
     return ['source_currency', 'target_currency', 'source_reference', 'destination_reference'].includes(fieldKey);
   }
   if (opType === 'stock_split') {
-    return ['ticker', 'isin', 'quantity'].includes(fieldKey);
+    return ['ticker', 'isin', 'quantity', 'split_sub_type'].includes(fieldKey);
   }
   if (opType === 'fee') {
     return ['fee_amount', 'fee_currency', 'fee_type'].includes(fieldKey);

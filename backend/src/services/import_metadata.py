@@ -263,5 +263,13 @@ IMPORT_METADATA = {
                 "other",
             ],
         },
+        # -- Stock split sub-type --
+        {
+            "key": "split_sub_type",
+            "label": "Split Sub-type",
+            "is_required": False,
+            "type": "enum",
+            "enum_values": ["close", "open", "combined"],
+        },
     ],
 }

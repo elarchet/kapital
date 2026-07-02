@@ -285,11 +285,12 @@ async def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
                 continue
 
             # Create Operation using compressed schema initializer to save code space
+            internal_keys = frozenset(("op_type", "fees", "csv_action", "split_sub_type", "name_was_set"))
             op_data_dict = {
                 "operation_type": op_info["op_type"],
                 "position_id": 0,  # Dummy value for validation
                 "financial_account_id": financial_account.id,
-                **{k: v for k, v in op_info.items() if k not in ("op_type", "fees", "csv_action")},
+                **{k: v for k, v in op_info.items() if k not in internal_keys},
             }
             op_in = OperationCreate(**op_data_dict)
 

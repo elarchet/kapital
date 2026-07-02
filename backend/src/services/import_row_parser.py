@@ -14,6 +14,7 @@ from src.services.import_parsers import (
 )
 from src.services.import_row_parser_helpers import (
     resolve_category_fields,
+    resolve_enum_mapping,
     resolve_fees_and_taxes,
     resolve_fx_rate_change_fields,
     resolve_merchant_and_ref_fields,
@@ -215,6 +216,13 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         notes=notes,
     )
 
+    # Extract split_sub_type for stock splits (schema-driven close/open/combined)
+    split_sub_type: str | None = None
+    if op_type == "stock_split":
+        split_sub_type_col = get_mapped_col(columns, "split_sub_type", op_type, csv_action)
+        raw_sub_type = row.get(split_sub_type_col) if split_sub_type_col else None
+        split_sub_type = resolve_enum_mapping(schema_mappings, "split_sub_type", raw_sub_type, default=None)
+
     return {
         "op_type": op_type,
         "ticker": ticker,
@@ -253,4 +261,5 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         "revenue_category": revenue_category,
         "payment_method": payment_method,
         "interest_type": interest_type,
+        "split_sub_type": split_sub_type,
     }
