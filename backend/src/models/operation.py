@@ -15,16 +15,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, ClassVar
 
-from sqlalchemy import (
-    DateTime,
-    Enum,
-    ForeignKey,
-    Index,
-    Numeric,
-    String,
-    Text,
-    func,
-)
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import SABase
@@ -51,12 +42,7 @@ from src.models.operation_enums import (
 
 
 class Operation(SABase):
-    """Base operation — the single ``operation`` table.
-
-    Every subclass maps to this same table via the ``operation_type``
-    discriminator column.  Columns specific to a subclass are nullable
-    at the DB level and only populated for the relevant type.
-    """
+    """Base operation — the single ``operation`` table mapped via single-table inheritance."""
 
     __tablename__ = "operation"
 
@@ -229,12 +215,7 @@ class Operation(SABase):
 
 
 class TradeOperation(Operation):
-    """A trade order — buy or sell, with order type semantics.
-
-    ``trade_side`` (BUY/SELL) and ``order_type`` (MARKET/LIMIT/STOP/STOP_LIMIT)
-    are required.  For LIMIT/STOP_LIMIT orders, ``limit_price`` is expected.
-    For STOP/STOP_LIMIT orders, ``stop_price`` is expected.
-    """
+    """A trade order (buy or sell) with order type semantics."""
 
     __mapper_args__: ClassVar[dict[str, object]] = {"polymorphic_identity": "trade"}
 
@@ -336,11 +317,7 @@ class TransferOutOperation(Operation):
 
 
 class StockSplitOperation(Operation):
-    """A stock split — ``split_ratio`` is required (e.g. 4.0 for a 4-for-1).
-
-    ``pre_split_quantity`` preserves the original share count (broker "close" row)
-    before the split was applied, enabling full audit reconciliation.
-    """
+    """A stock split — ``split_ratio`` is required, and ``pre_split_quantity`` enables reconciliation."""
 
     __mapper_args__: ClassVar[dict[str, object]] = {
         "polymorphic_identity": "stock_split",
@@ -359,11 +336,7 @@ class StockSplitOperation(Operation):
 
 
 class FxRateChangeOperation(Operation):
-    """A currency exchange operation.
-
-    ``source_currency``, ``target_currency``, and ``exchange_rate`` are
-    required.
-    """
+    """A currency exchange operation with source, target currency, and exchange rate."""
 
     __mapper_args__: ClassVar[dict[str, object]] = {
         "polymorphic_identity": "fx_rate_change",
@@ -401,6 +374,7 @@ class RevenueOperation(Operation):
 
 
 __all__ = [
+    "OPERATION_TYPE_MAP",
     "DividendOperation",
     "ExpenseCategory",
     "ExpenseOperation",
@@ -421,3 +395,17 @@ __all__ = [
     "TransferInOperation",
     "TransferOutOperation",
 ]
+
+OPERATION_TYPE_MAP: dict[str, type[Operation]] = {
+    "trade": TradeOperation,
+    "dividend": DividendOperation,
+    "fee": FeeOperation,
+    "tax": TaxOperation,
+    "interest": InterestOperation,
+    "transfer_in": TransferInOperation,
+    "transfer_out": TransferOutOperation,
+    "stock_split": StockSplitOperation,
+    "fx_rate_change": FxRateChangeOperation,
+    "expense": ExpenseOperation,
+    "revenue": RevenueOperation,
+}

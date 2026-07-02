@@ -3,10 +3,9 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, status
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from src.auth import create_access_token, get_current_user
-from src.crud import user_crud
 from src.database import get_session
 from src.models.user import User
 from src.schemas.user import ThemeUpdate, UserCreate, UserPreferencesRead, UserRead
@@ -47,13 +46,18 @@ def register_user(
     db: Annotated[Session, Depends(get_session)],
 ) -> User:
     """Register a new user, checking that the email is unique."""
-    existing_user = user_crud.get_by_email(db, email=user_in.email)
+    existing_user = db.exec(select(User).where(User.email == user_in.email, User.is_active == True)).first()  # noqa: E712
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A user with this email address already exists.",
         )
-    return user_crud.create(db, obj_in=user_in)
+    db_user = User(email=user_in.email, hashed_password="")
+    db_user.set_password(user_in.password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
 
 @router.post(
@@ -71,7 +75,9 @@ def login_for_access_token(
     Note: The OAuth2 standard specifies the field name as `username`, but
     this API expects the registered `email` address in that field.
     """
-    user = user_crud.authenticate(db, email=form_data.username, password=form_data.password)
+    user = db.exec(select(User).where(User.email == form_data.username, User.is_active == True)).first()  # noqa: E712
+    if not user or not user.verify_password(form_data.password):
+        user = None
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

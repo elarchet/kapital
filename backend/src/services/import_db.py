@@ -4,7 +4,6 @@ from decimal import Decimal
 
 from sqlmodel import Session, select
 
-from src.crud import position_crud
 from src.models import (
     AssetType,
     FinancialAccount,
@@ -85,7 +84,10 @@ def find_or_create_position(
                 quantity=Decimal("0.0"),
                 currency=op_info["currency"],
             )
-            position = position_crud.create(db, obj_in=position_in)
+            position = Position(**position_in.model_dump())
+            db.add(position)
+            db.commit()
+            db.refresh(position)
             created = True
     else:
         cash_currency = op_info["currency"]
@@ -106,7 +108,10 @@ def find_or_create_position(
                 quantity=Decimal("0.0"),
                 currency=cash_currency,
             )
-            position = position_crud.create(db, obj_in=position_in)
+            position = Position(**position_in.model_dump())
+            db.add(position)
+            db.commit()
+            db.refresh(position)
             created = True
     return position, created
 
@@ -150,6 +155,9 @@ def get_or_create_cash_position(db: Session, portfolio_id: int, currency: str) -
             quantity=Decimal("0.0"),
             currency=currency,
         )
-        cash_pos = position_crud.create(db, obj_in=position_in)
+        cash_pos = Position(**position_in.model_dump())
+        db.add(cash_pos)
+        db.commit()
+        db.refresh(cash_pos)
         created = True
     return cash_pos, created

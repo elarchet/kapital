@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from src.auth import get_current_user
-from src.crud import institution_crud
 from src.database import get_session
 from src.models.institution import Institution
 from src.schemas.institution import InstitutionCreate, InstitutionRead, InstitutionUpdate
@@ -25,7 +25,11 @@ def create_institution(
     db: Annotated[Session, Depends(get_session)],
 ) -> Institution:
     """Create a new master financial institution (banks/brokers/exchanges)."""
-    return institution_crud.create(db, obj_in=institution_in)
+    db_obj = Institution(**institution_in.model_dump())
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
 
 
 @router.get("/", response_model=list[InstitutionRead])
@@ -35,7 +39,8 @@ def read_institutions(
     limit: Annotated[int, Query(ge=1, le=1000, description="Max number of institutions to return")] = 100,
 ) -> list[Institution]:
     """Retrieve list of active master financial institutions."""
-    return institution_crud.get_multi(db, skip=skip, limit=limit)
+    statement = select(Institution).where(Institution.is_active == True).offset(skip).limit(limit)  # noqa: E712
+    return list(db.exec(statement).all())
 
 
 @router.get(
@@ -50,7 +55,9 @@ def read_institution(
     db: Annotated[Session, Depends(get_session)],
 ) -> Institution:
     """Retrieve details of a specific financial institution."""
-    institution = institution_crud.get(db, id=institution_id)
+    institution = db.exec(
+        select(Institution).where(Institution.id == institution_id, Institution.is_active),
+    ).first()
     if not institution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -72,13 +79,22 @@ def update_institution(
     db: Annotated[Session, Depends(get_session)],
 ) -> Institution:
     """Update details of a specific financial institution."""
-    institution = institution_crud.get(db, id=institution_id)
+    institution = db.exec(
+        select(Institution).where(Institution.id == institution_id, Institution.is_active),
+    ).first()
     if not institution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Institution not found.",
         )
-    return institution_crud.update(db, db_obj=institution, obj_in=institution_in)
+    update_data = institution_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(institution, key, value)
+    institution.updated_at = datetime.now(UTC)
+    db.add(institution)
+    db.commit()
+    db.refresh(institution)
+    return institution
 
 
 @router.delete(
@@ -93,11 +109,16 @@ def delete_institution(
     db: Annotated[Session, Depends(get_session)],
 ) -> Institution:
     """Soft delete a specific financial institution."""
-    institution = institution_crud.get(db, id=institution_id)
+    institution = db.exec(
+        select(Institution).where(Institution.id == institution_id, Institution.is_active),
+    ).first()
     if not institution:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Institution not found.",
         )
-    institution_crud.remove(db, id=institution_id)
+    institution.is_active = False
+    institution.deleted_at = datetime.now(UTC)
+    db.add(institution)
+    db.commit()
     return institution

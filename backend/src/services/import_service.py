@@ -10,11 +10,11 @@ from sqlmodel import select
 if TYPE_CHECKING:
     from sqlmodel import Session
 
-from src.crud import import_file_schema_crud
-from src.crud.operation import OPERATION_TYPE_MAP
 from src.models import (
+    OPERATION_TYPE_MAP,
     AssetType,
     Fee,
+    ImportFileSchema,
     Operation,
     Position,
 )
@@ -37,7 +37,11 @@ def autodetect_schema(db: Session, headers: list[str], user_id: int) -> int | No
 
     Returns the ID of the best-matching schema, or None.
     """
-    schemas = import_file_schema_crud.get_multi_by_user_or_public(db, user_id=user_id)
+    statement = select(ImportFileSchema).where(
+        (ImportFileSchema.user_id == user_id) | ImportFileSchema.is_public,
+        ImportFileSchema.is_active == True,  # noqa: E712
+    )
+    schemas = list(db.exec(statement).all())
     best_schema_id = None
     max_matches = 0
 
@@ -77,7 +81,12 @@ async def import_portfolio_transactions(  # noqa: C901, PLR0912, PLR0915
     decimal_separator = "."
 
     if schema_id is not None:
-        schema = import_file_schema_crud.get_by_owner_or_public(db, id=schema_id, user_id=user_id)
+        statement = select(ImportFileSchema).where(
+            ImportFileSchema.id == schema_id,
+            (ImportFileSchema.user_id == user_id) | ImportFileSchema.is_public,
+            ImportFileSchema.is_active == True,  # noqa: E712
+        )
+        schema = db.exec(statement).first()
         if not schema:
             raise ValueError(f"Import schema with id {schema_id} not found.")
         schema_mappings = json.loads(schema.mappings)
