@@ -8,7 +8,8 @@ description: Guide and rules for Git commits, permissions, conventional commits 
 This skill defines the strict protocol for creating git commits in the Kapital repository. It enforces permissions, author identity, formatting, and pre-commit checks.
 
 ## 1. Commit Permission & Push Restrictions
-- **Zero Unsolicited Commits**: You must **never** run any commit command without first presenting the proposed changes (e.g., in a git diff format or detailed list) and receiving explicit, written confirmation from the user.
+- **Explain Before Asking**: When you make changes, you MUST ALWAYS explain what you did FIRST. Never ask the user to authorize a git commit or push before you have fully explained the changes.
+- **Zero Unsolicited Commits/Pushes**: You must **never** run any commit or push command without first presenting the proposed changes (e.g., in a git diff format or detailed list) and receiving explicit, written confirmation from the user.
 - **Pushing to Feature Branches is Allowed**: You are allowed to push changes to remote feature branches (e.g., `git push origin <feature-branch>`) after receiving explicit user approval for the commits. Pushing directly to `main` remains strictly forbidden.
 
 ## 2. Execution Protocol & Alias

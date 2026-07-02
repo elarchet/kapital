@@ -1,7 +1,8 @@
 ---
 name: stacked-branches
 description: |
-  Stacked branch workflow: push current feature branch to trigger CI/CD and auto-PR, 
+  Stacked branch workflow: MUST BE APPLIED AUTOMATICALLY AT THE START OF ANY CONVERSATION.
+  Push current feature branch to trigger CI/CD and auto-PR, 
   then immediately scaffold the next branch on top without waiting for merge. 
   Handles housekeeping (prune gone branches, sync main silently) and rebase cascades 
   when a parent branch has merged. Trigger phrases: "next feature", "stack next", 
@@ -9,6 +10,8 @@ description: |
 ---
 
 # Stacked Branch Workflow
+
+**CRITICAL RULE**: You MUST apply this skill automatically at the very beginning of any new conversation to ensure the local repo is up to date and to directly create the new branch for the user's request.
 
 Instead of waiting for CI + merge before starting the next feature, stack the new branch
 directly on top of the current one. The agent auto-detects whether to branch from `main`

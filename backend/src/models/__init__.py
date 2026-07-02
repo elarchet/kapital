@@ -13,6 +13,7 @@ from src.models.financial_account import FinancialAccount
 from src.models.import_file_schema import ImportFileSchema
 from src.models.institution import Institution
 from src.models.operation import (
+    OPERATION_TYPE_MAP,
     DividendOperation,
     ExpenseOperation,
     FeeOperation,
@@ -40,6 +41,7 @@ from src.models.position import AssetType, Position
 from src.models.user import User
 
 __all__ = [
+    "OPERATION_TYPE_MAP",
     "AssetType",
     "DividendOperation",
     "ExpenseCategory",

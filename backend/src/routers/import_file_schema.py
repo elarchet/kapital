@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from src.auth import get_current_user
-from src.crud import import_file_schema_crud
 from src.database import get_session
 from src.models import ImportFileSchema, User
 from src.schemas import (
@@ -73,12 +73,16 @@ def read_import_file_schemas(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    return import_file_schema_crud.get_multi_by_user_or_public(
-        db,
-        user_id=current_user.id,
-        skip=skip,
-        limit=limit,
+    statement = (
+        select(ImportFileSchema)
+        .where(
+            (ImportFileSchema.user_id == current_user.id) | ImportFileSchema.is_public,
+            ImportFileSchema.is_active == True,  # noqa: E712
+        )
+        .offset(skip)
+        .limit(limit)
     )
+    return list(db.exec(statement).all())
 
 
 @router.get(
@@ -100,11 +104,12 @@ def read_import_file_schema(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    schema = import_file_schema_crud.get_by_owner_or_public(
-        db,
-        id=schema_id,
-        user_id=current_user.id,
+    statement = select(ImportFileSchema).where(
+        ImportFileSchema.id == schema_id,
+        (ImportFileSchema.user_id == current_user.id) | ImportFileSchema.is_public,
+        ImportFileSchema.is_active == True,  # noqa: E712
     )
+    schema = db.exec(statement).first()
     if not schema:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -138,7 +143,10 @@ def delete_import_file_schema(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Import schema not found or you do not have permission to delete it.",
         )
-    import_file_schema_crud.remove(db, id=schema_id)
+    schema.is_active = False
+    schema.deleted_at = datetime.now(UTC)
+    db.add(schema)
+    db.commit()
     return schema
 
 
@@ -189,4 +197,11 @@ def update_import_file_schema(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Import schema not found or you do not have permission to edit it.",
         )
-    return import_file_schema_crud.update(db, db_obj=schema, obj_in=schema_in)
+    update_data = schema_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(schema, key, value)
+    schema.updated_at = datetime.now(UTC)
+    db.add(schema)
+    db.commit()
+    db.refresh(schema)
+    return schema

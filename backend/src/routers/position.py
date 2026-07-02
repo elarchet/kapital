@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlmodel import Session, select
 
 from src.auth import get_current_user
-from src.crud import portfolio_crud, position_crud
 from src.database import get_session
 from src.models.portfolio import Portfolio
 from src.models.position import Position
@@ -39,13 +39,23 @@ def create_position(
             detail="Current user record lacks a valid identifier.",
         )
     # Validate portfolio ownership
-    portfolio = portfolio_crud.get_by_owner(db, id=position_in.portfolio_id, user_id=current_user.id)
+    portfolio = db.exec(
+        select(Portfolio).where(
+            Portfolio.id == position_in.portfolio_id,
+            Portfolio.user_id == current_user.id,
+            Portfolio.is_active,
+        ),
+    ).first()
     if not portfolio:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Parent portfolio not found or not owned by user.",
         )
-    return position_crud.create(db, obj_in=position_in)
+    db_obj = Position(**position_in.model_dump())
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
 
 
 @router.get(
@@ -74,19 +84,30 @@ def read_positions(
         )
 
     if portfolio_id is not None:
-        portfolio = portfolio_crud.get_by_owner(db, id=portfolio_id, user_id=current_user.id)
+        portfolio = db.exec(
+            select(Portfolio).where(
+                Portfolio.id == portfolio_id,
+                Portfolio.user_id == current_user.id,
+                Portfolio.is_active,
+            ),
+        ).first()
         if not portfolio:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Portfolio not found or not owned by user.",
             )
-        return position_crud.get_multi_by_portfolio(
-            db,
-            portfolio_id=portfolio_id,
-            user_id=current_user.id,
-            skip=skip,
-            limit=limit,
+        statement = (
+            select(Position)
+            .join(Portfolio)
+            .where(
+                Position.portfolio_id == portfolio_id,
+                Portfolio.user_id == current_user.id,
+                Position.is_active == True,  # noqa: E712
+            )
+            .offset(skip)
+            .limit(limit)
         )
+        return list(db.exec(statement).all())
 
     # If no portfolio filter is applied, return all positions across all portfolios owned by the user
     statement = (
@@ -118,7 +139,11 @@ def read_position_cost_basis(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    position = position_crud.get_by_owner(db, id=position_id, user_id=current_user.id)
+    position = db.exec(
+        select(Position)
+        .join(Portfolio)
+        .where(Position.id == position_id, Portfolio.user_id == current_user.id, Position.is_active),
+    ).first()
     if not position:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -146,7 +171,11 @@ def read_position(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    position = position_crud.get_by_owner(db, id=position_id, user_id=current_user.id)
+    position = db.exec(
+        select(Position)
+        .join(Portfolio)
+        .where(Position.id == position_id, Portfolio.user_id == current_user.id, Position.is_active),
+    ).first()
     if not position:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -175,7 +204,11 @@ def update_position(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    position = position_crud.get_by_owner(db, id=position_id, user_id=current_user.id)
+    position = db.exec(
+        select(Position)
+        .join(Portfolio)
+        .where(Position.id == position_id, Portfolio.user_id == current_user.id, Position.is_active),
+    ).first()
     if not position:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -183,13 +216,26 @@ def update_position(
         )
     # If portfolio_id is changing, validate the new portfolio belongs to the user
     if position_in.portfolio_id is not None:
-        portfolio = portfolio_crud.get_by_owner(db, id=position_in.portfolio_id, user_id=current_user.id)
+        portfolio = db.exec(
+            select(Portfolio).where(
+                Portfolio.id == position_in.portfolio_id,
+                Portfolio.user_id == current_user.id,
+                Portfolio.is_active,
+            ),
+        ).first()
         if not portfolio:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="New portfolio not found or not owned by user.",
             )
-    return position_crud.update(db, db_obj=position, obj_in=position_in)
+    update_data = position_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(position, key, value)
+    position.updated_at = datetime.now(UTC)
+    db.add(position)
+    db.commit()
+    db.refresh(position)
+    return position
 
 
 @router.delete(
@@ -211,11 +257,18 @@ def delete_position(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    position = position_crud.get_by_owner(db, id=position_id, user_id=current_user.id)
+    position = db.exec(
+        select(Position)
+        .join(Portfolio)
+        .where(Position.id == position_id, Portfolio.user_id == current_user.id, Position.is_active),
+    ).first()
     if not position:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Position not found.",
         )
-    position_crud.remove(db, id=position_id)
+    position.is_active = False
+    position.deleted_at = datetime.now(UTC)
+    db.add(position)
+    db.commit()
     return position

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, UploadFile, status
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from src.auth import get_current_user
-from src.crud import portfolio_crud
 from src.database import get_session
 from src.models.portfolio import Portfolio
 from src.models.user import User
@@ -38,7 +38,11 @@ def create_portfolio(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    return portfolio_crud.create_with_owner(db, obj_in=portfolio_in, user_id=current_user.id)
+    db_obj = Portfolio(**portfolio_in.model_dump(), user_id=current_user.id)
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
 
 
 @router.get(
@@ -60,7 +64,10 @@ def read_portfolios(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    return portfolio_crud.get_multi_by_owner(db, user_id=current_user.id, skip=skip, limit=limit)
+    statement = (
+        select(Portfolio).where(Portfolio.user_id == current_user.id, Portfolio.is_active).offset(skip).limit(limit)
+    )
+    return list(db.exec(statement).all())
 
 
 @router.get("/import-metadata", response_model=dict)
@@ -90,7 +97,13 @@ def read_portfolio(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    portfolio = portfolio_crud.get_by_owner(db, id=portfolio_id, user_id=current_user.id)
+    portfolio = db.exec(
+        select(Portfolio).where(
+            Portfolio.id == portfolio_id,
+            Portfolio.user_id == current_user.id,
+            Portfolio.is_active,
+        ),
+    ).first()
     if not portfolio:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -119,13 +132,26 @@ def update_portfolio(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    portfolio = portfolio_crud.get_by_owner(db, id=portfolio_id, user_id=current_user.id)
+    portfolio = db.exec(
+        select(Portfolio).where(
+            Portfolio.id == portfolio_id,
+            Portfolio.user_id == current_user.id,
+            Portfolio.is_active,
+        ),
+    ).first()
     if not portfolio:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Portfolio not found.",
         )
-    return portfolio_crud.update(db, db_obj=portfolio, obj_in=portfolio_in)
+    update_data = portfolio_in.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(portfolio, key, value)
+    portfolio.updated_at = datetime.now(UTC)
+    db.add(portfolio)
+    db.commit()
+    db.refresh(portfolio)
+    return portfolio
 
 
 @router.delete(
@@ -147,14 +173,22 @@ def delete_portfolio(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user record lacks a valid identifier.",
         )
-    portfolio = portfolio_crud.get_by_owner(db, id=portfolio_id, user_id=current_user.id)
+    portfolio = db.exec(
+        select(Portfolio).where(
+            Portfolio.id == portfolio_id,
+            Portfolio.user_id == current_user.id,
+            Portfolio.is_active,
+        ),
+    ).first()
     if not portfolio:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Portfolio not found.",
         )
-    # Generic base remove method handles soft deletes if model inherits from SoftDeleteMixin
-    portfolio_crud.remove(db, id=portfolio_id)
+    portfolio.is_active = False
+    portfolio.deleted_at = datetime.now(UTC)
+    db.add(portfolio)
+    db.commit()
     return portfolio
 
 
@@ -187,7 +221,13 @@ async def import_portfolio_positions(
         )
 
     # Validate portfolio ownership
-    portfolio = portfolio_crud.get_by_owner(db, id=portfolio_id, user_id=current_user.id)
+    portfolio = db.exec(
+        select(Portfolio).where(
+            Portfolio.id == portfolio_id,
+            Portfolio.user_id == current_user.id,
+            Portfolio.is_active,
+        ),
+    ).first()
     if not portfolio:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
