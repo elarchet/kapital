@@ -40,7 +40,8 @@ const onFileSelected = (e: Event) => {
 };
 
 const portfolioId = computed(() => {
-  const idParam = route.params.id;
+  const params = route.params as Record<string, string>;
+  const idParam = params.id;
   if (idParam === 'unassigned') return 'unassigned';
   return Number(idParam);
 });
@@ -105,7 +106,7 @@ onMounted(async () => {
   await store.fetchAllData();
 });
 
-watch(() => route.params.id, () => {
+watch(() => (route.params as Record<string, string>).id, () => {
   // Clear modal states when changing portfolios
   showCreatePosModal.value = false;
   showImportModal.value = false;

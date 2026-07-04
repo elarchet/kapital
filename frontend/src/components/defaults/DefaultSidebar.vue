@@ -169,7 +169,7 @@ watch(() => [store.sidebarWidth, store.sidebarCollapsed], updateSidebarWidthProp
 onMounted(() => {
   updateSidebarWidthProperty();
   
-  if (window.history.state && window.history.state.editNameInline && route.params.id) {
+  if (window.history.state && window.history.state.editNameInline && 'id' in route.params && route.params.id) {
     const id = Number(route.params.id);
     const p = store.portfolios.find(ptf => ptf.id === id);
     if (p) {
