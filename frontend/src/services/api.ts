@@ -121,10 +121,20 @@ export const api = {
     });
   },
 
-  async updatePortfolio(id: number, name: string, description: string = ''): Promise<any> {
+  async updatePortfolio(
+    id: number,
+    updates: Partial<{ name: string; description: string; emoji: string | null; sort_order: number }>
+  ): Promise<any> {
     return request<any>(`/api/v1/portfolios/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify(updates),
+    });
+  },
+
+  async reorderPortfolios(portfolioIds: number[]): Promise<void> {
+    return request<void>('/api/v1/portfolios/reorder', {
+      method: 'POST',
+      body: JSON.stringify(portfolioIds),
     });
   },
 

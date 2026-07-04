@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class PortfolioBase(BaseModel):
     name: str = Field(max_length=200)
     description: str | None = Field(default=None, max_length=1000)
+    emoji: str | None = Field(default=None, max_length=20)
+    sort_order: int = Field(default=0)
 
 
 class PortfolioCreate(PortfolioBase):
@@ -17,6 +19,8 @@ class PortfolioCreate(PortfolioBase):
 class PortfolioUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
+    emoji: str | None = Field(default=None, max_length=20)
+    sort_order: int | None = Field(default=None)
 
 
 class PortfolioRead(PortfolioBase):

@@ -65,7 +65,11 @@ def read_portfolios(
             detail="Current user record lacks a valid identifier.",
         )
     statement = (
-        select(Portfolio).where(Portfolio.user_id == current_user.id, Portfolio.is_active).offset(skip).limit(limit)
+        select(Portfolio)
+        .where(Portfolio.user_id == current_user.id, Portfolio.is_active)
+        .order_by(Portfolio.sort_order, Portfolio.id)
+        .offset(skip)
+        .limit(limit)
     )
     return list(db.exec(statement).all())
 
@@ -76,6 +80,50 @@ def get_import_metadata(
 ) -> dict:
     """Return metadata about importable fields, including required flags and enum values."""
     return IMPORT_METADATA
+
+
+@router.post(
+    "/reorder",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Current user record lacks a valid identifier."},
+    },
+)
+def reorder_portfolios(
+    portfolio_ids: list[int],
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_session)],
+) -> None:
+    """Reorder portfolios in bulk by updating their sort_order."""
+    if current_user.id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user record lacks a valid identifier.",
+        )
+
+    # Fetch all active portfolios belonging to the authenticated user
+    portfolios = db.exec(
+        select(Portfolio).where(
+            Portfolio.user_id == current_user.id,
+            Portfolio.is_active,
+        ),
+    ).all()
+
+    portfolio_map = {p.id: p for p in portfolios if p.id is not None}
+
+    # Batch update sort_order in a single transaction/session commit
+    try:
+        for idx, p_id in enumerate(portfolio_ids):
+            if p_id in portfolio_map:
+                portfolio_map[p_id].sort_order = idx
+                db.add(portfolio_map[p_id])
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update portfolio order: {e!s}",
+        ) from e
 
 
 @router.get(

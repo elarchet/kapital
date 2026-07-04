@@ -136,6 +136,60 @@ def test_portfolio_crud_and_gating(client: TestClient, session: Session):
     assert len(response.json()) == 0
 
 
+def test_portfolio_emoji_and_reorder(client: TestClient, session: Session):
+    user = UserFactory(email="emoji_test@example.com")
+    session.commit()
+    headers = get_auth_headers(client, user.email)
+
+    # 1. Create portfolio with emoji
+    payload = {
+        "name": "P1",
+        "description": "D1",
+        "emoji": "💼",
+    }
+    response = client.post("/api/v1/portfolios/", json=payload, headers=headers)
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["emoji"] == "💼"
+    assert data["sort_order"] == 0
+    p1_id = data["id"]
+
+    # 2. Update emoji to another value
+    update_payload = {"emoji": "🚀"}
+    response = client.put(f"/api/v1/portfolios/{p1_id}", json=update_payload, headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["emoji"] == "🚀"
+
+    # Update emoji to None
+    update_payload = {"emoji": None}
+    response = client.put(f"/api/v1/portfolios/{p1_id}", json=update_payload, headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["emoji"] is None
+
+    # 3. Create two more portfolios to test reordering
+    p2 = PortfolioFactory(user=user, name="P2", sort_order=0)
+    p3 = PortfolioFactory(user=user, name="P3", sort_order=0)
+    session.commit()
+
+    # Get portfolios, initial order by default (sort_order=0 for all, so sorted by id asc: P1, P2, P3)
+    response = client.get("/api/v1/portfolios/", headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    p_list = response.json()
+    assert len(p_list) == 3
+    assert [p["name"] for p in p_list] == ["P1", "P2", "P3"]
+
+    # Reorder portfolios (P3 first, then P1, then P2)
+    reorder_payload = [p3.id, p1_id, p2.id]
+    response = client.post("/api/v1/portfolios/reorder", json=reorder_payload, headers=headers)
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    # Get portfolios and assert the new sorted order
+    response = client.get("/api/v1/portfolios/", headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    p_list_new = response.json()
+    assert [p["name"] for p in p_list_new] == ["P3", "P1", "P2"]
+
+
 # ---------------------------------------------------------------------------
 # 3. Position CRUD Tests with Portfolio Gating
 # ---------------------------------------------------------------------------

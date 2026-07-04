@@ -19,6 +19,8 @@ class Portfolio(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(nullable=False, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
+    emoji: str | None = Field(default=None, max_length=20)
+    sort_order: int = Field(default=0, nullable=False)
 
     # -- foreign keys ----------------------------------------------------------
     user_id: int = Field(foreign_key="user.id", nullable=False, index=True)
