@@ -35,3 +35,9 @@ This skill governs the development of the frontend single-page application (SPA)
 ## 4. Defensive Rendering & Orchestration
 - **Optional Chaining**: When rendering dynamic rows, custom templates, or preview tables where keys/columns or data might be missing, always use optional chaining (`?.`) or fallback checks.
 - **Composables Orchestration**: For complex UI panels or wizards (like the import wizard), do not pack all logic into a single component or hook. Separate concerns by orchestrating multiple focused sub-composables (e.g., separating executor, parser/processor, and UI mapping wizards) from the parent view/component.
+
+## 5. Routing (Vue Router v5)
+- The project uses **file-based routing** via Vue Router v5 built-in capabilities.
+- All routes must be created as `.vue` files inside the `frontend/src/pages/` directory (e.g., `[id].vue` for dynamic parameters).
+- Use the `definePage()` macro within the page component to define route metadata (e.g., `meta: { requiresAuth: true }`, or overriding route `name`).
+- Do not manually register routes in `src/router/index.ts`.
