@@ -25,33 +25,7 @@ export interface Position {
   estimated_value?: number;
 }
 
-// Load emojis from localStorage
-const loadEmojis = (): Record<number, string> => {
-  try {
-    return JSON.parse(localStorage.getItem('kapital_portfolio_emojis') || '{}');
-  } catch {
-    return {};
-  }
-};
 
-// Save emojis to localStorage
-const saveEmojis = (emojis: Record<number, string>) => {
-  localStorage.setItem('kapital_portfolio_emojis', JSON.stringify(emojis));
-};
-
-// Load custom portfolio order from localStorage
-const loadOrder = (): number[] => {
-  try {
-    return JSON.parse(localStorage.getItem('kapital_portfolio_order') || '[]');
-  } catch {
-    return [];
-  }
-};
-
-// Save custom portfolio order to localStorage
-const saveOrder = (order: number[]) => {
-  localStorage.setItem('kapital_portfolio_order', JSON.stringify(order));
-};
 
 export const useKapitalStore = defineStore('kapital', {
   state: () => ({
@@ -149,31 +123,8 @@ export const useKapitalStore = defineStore('kapital', {
           api.getPositions(),
         ]);
         
-        // Merge emojis from localStorage
-        const emojis = loadEmojis();
-        const portfoliosWithEmojis = portfoliosData.map(p => ({
-          ...p,
-          emoji: emojis[p.id] || null
-        }));
-
-        // Sort based on loaded order from localStorage
-        const order = loadOrder();
-        if (order.length > 0) {
-          portfoliosWithEmojis.sort((a, b) => {
-            const indexA = order.indexOf(a.id);
-            const indexB = order.indexOf(b.id);
-            if (indexA === -1 && indexB === -1) return 0;
-            if (indexA === -1) return 1;
-            if (indexB === -1) return -1;
-            return indexA - indexB;
-          });
-        }
-        
-        this.portfolios = portfoliosWithEmojis;
+        this.portfolios = portfoliosData;
         this.positions = positionsData;
-
-        // Sync order list back to localStorage to include any new portfolios
-        this.saveCurrentOrder();
       } catch (err: any) {
         this.error = err.message || 'Failed to fetch data';
       } finally {
@@ -185,9 +136,7 @@ export const useKapitalStore = defineStore('kapital', {
       this.loading = true;
       try {
         const newPortfolio = await api.createPortfolio(name, description);
-        newPortfolio.emoji = null;
         this.portfolios.push(newPortfolio);
-        this.saveCurrentOrder();
         return newPortfolio;
       } catch (err: any) {
         this.error = err.message || 'Failed to create portfolio';
@@ -197,17 +146,13 @@ export const useKapitalStore = defineStore('kapital', {
       }
     },
 
-    async updatePortfolio(id: number, updates: { name?: string; description?: string }) {
+    async updatePortfolio(id: number, updates: { name?: string; description?: string; emoji?: string | null; sort_order?: number }) {
       this.loading = true;
       try {
-        const existing = this.portfolios.find(p => p.id === id);
-        const name = updates.name !== undefined ? updates.name : (existing?.name || '');
-        const description = updates.description !== undefined ? updates.description : (existing?.description || '');
-        const updated = await api.updatePortfolio(id, name, description);
-        
+        const updated = await api.updatePortfolio(id, updates);
         const index = this.portfolios.findIndex(p => p.id === id);
         if (index !== -1) {
-          this.portfolios[index] = { ...this.portfolios[index], name, description };
+          this.portfolios[index] = { ...this.portfolios[index], ...updates };
         }
         return updated;
       } catch (err: any) {
@@ -223,13 +168,6 @@ export const useKapitalStore = defineStore('kapital', {
       try {
         await api.deletePortfolio(id);
         this.portfolios = this.portfolios.filter(p => p.id !== id);
-        // Clean up localStorage for this ID
-        const emojis = loadEmojis();
-        if (emojis[id]) {
-          delete emojis[id];
-          saveEmojis(emojis);
-        }
-        this.saveCurrentOrder();
       } catch (err: any) {
         this.error = err.message || 'Failed to delete portfolio';
         throw err;
@@ -238,27 +176,23 @@ export const useKapitalStore = defineStore('kapital', {
       }
     },
 
-    setPortfolioEmoji(id: number, emoji: string | null) {
-      const emojis = loadEmojis();
-      if (emoji) {
-        emojis[id] = emoji;
-      } else {
-        delete emojis[id];
-      }
-      saveEmojis(emojis);
-
-      const p = this.portfolios.find(item => item.id === id);
-      if (p) {
-        p.emoji = emoji;
+    async setPortfolioEmoji(id: number, emoji: string | null) {
+      this.loading = true;
+      try {
+        await api.updatePortfolio(id, { emoji });
+        const p = this.portfolios.find(item => item.id === id);
+        if (p) {
+          p.emoji = emoji;
+        }
+      } catch (err: any) {
+        this.error = err.message || 'Failed to update portfolio emoji';
+        throw err;
+      } finally {
+        this.loading = false;
       }
     },
 
-    saveCurrentOrder() {
-      const order = this.portfolios.map(p => p.id);
-      saveOrder(order);
-    },
-
-    updatePortfoliosOrder(orderedIds: number[]) {
+    async updatePortfoliosOrder(orderedIds: number[]) {
       const portfolioMap = new Map(this.portfolios.map(p => [p.id, p]));
       const newPortfolios: Portfolio[] = [];
       
@@ -274,8 +208,20 @@ export const useKapitalStore = defineStore('kapital', {
         newPortfolios.push(p);
       });
 
+      const previousPortfolios = [...this.portfolios];
       this.portfolios = newPortfolios;
-      this.saveCurrentOrder();
+
+      this.loading = true;
+      try {
+        const activeOrderedIds = newPortfolios.map(p => p.id);
+        await api.reorderPortfolios(activeOrderedIds);
+      } catch (err: any) {
+        this.portfolios = previousPortfolios; // revert state
+        this.error = err.message || 'Failed to update portfolio order';
+        throw err;
+      } finally {
+        this.loading = false;
+      }
     },
 
     async movePosition(id: number, portfolioId: number) {
