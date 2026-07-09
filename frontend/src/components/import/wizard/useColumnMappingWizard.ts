@@ -341,6 +341,11 @@ export function useColumnMappingWizard(props: any, emit: any) {
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
+      const target = e.target as HTMLElement;
+      // Allow buttons and inputs to handle Enter natively
+      if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('button'))) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       onEnterPress();

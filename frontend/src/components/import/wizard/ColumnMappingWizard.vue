@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, onBeforeUnmount } from 'vue';
+import { watch, onBeforeUnmount, ref, nextTick } from 'vue';
 import { Trash2 } from '@lucide/vue';
 import DiscardChangesConfirmModal from '../modals/DiscardChangesConfirmModal.vue';
 import DestinationFieldSelect from './DestinationFieldSelect.vue';
@@ -8,6 +8,8 @@ import EnumValueMapper from './EnumValueMapper.vue';
 import LiveConversionPreview from './LiveConversionPreview.vue';
 import DateFormatSelector from './DateFormatSelector.vue';
 import { useColumnMappingWizard } from './useColumnMappingWizard';
+
+const wizardContainerRef = ref<HTMLElement | null>(null);
 
 const props = defineProps<{
   show: boolean;
@@ -79,6 +81,12 @@ const {
 watch(() => props.show, (newVal) => {
   if (newVal) {
     window.addEventListener('keydown', handleKeyDown, true); // Use capture phase to intercept Escape early
+    nextTick(() => {
+      if (wizardContainerRef.value) {
+        const btn = wizardContainerRef.value.querySelector('.overflow-y-auto button') as HTMLButtonElement;
+        if (btn) btn.focus();
+      }
+    });
   } else {
     window.removeEventListener('keydown', handleKeyDown, true);
   }
@@ -91,7 +99,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="show" class="fixed inset-0 w-screen h-screen bg-slate-900/20 backdrop-blur-[2px] flex items-center justify-center z-[200] px-2 sm:px-4 animate-[fadeIn_0.15s_ease-out_forwards]" @click.self="attemptClose">
-    <div class="w-full max-w-[650px] max-h-[92vh] bg-bg-secondary border border-border-color rounded-md shadow-lg flex flex-col overflow-hidden animate-[slideUp_0.2s_ease-out]" style="position: relative;">
+    <div ref="wizardContainerRef" class="w-full max-w-[650px] max-h-[92vh] bg-bg-secondary border border-border-color rounded-md shadow-lg flex flex-col overflow-hidden animate-[slideUp_0.2s_ease-out]" style="position: relative;">
       
       <!-- Custom exit confirmation dialog -->
       <DiscardChangesConfirmModal 

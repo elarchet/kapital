@@ -46,6 +46,42 @@ const emit = defineEmits<{
   (e: 'sort-column', payload: { colKey: 'raw' | 'db'; direction: 'asc' | 'desc' }): void;
 }>();
 
+// --- Manual Sticky Header Logic ---
+const tableWrapperRef = ref<HTMLElement | null>(null);
+const stickyTranslateY = ref(0);
+
+const handleScroll = (e?: Event) => {
+  if (!tableWrapperRef.value) return;
+  // Fallback to searching DOM if event target isn't useful, but prioritize closest
+  const scrollContainer = tableWrapperRef.value.closest('.overflow-y-auto') || document.documentElement;
+  
+  const containerRect = scrollContainer.getBoundingClientRect();
+  const wrapperRect = tableWrapperRef.value.getBoundingClientRect();
+
+  const offset = containerRect.top - wrapperRect.top;
+
+  if (offset > 0) {
+    const maxOffset = wrapperRect.height - 40; // rough header height
+    stickyTranslateY.value = Math.min(offset, maxOffset);
+  } else {
+    stickyTranslateY.value = 0;
+  }
+};
+
+onMounted(() => {
+  // Use capture: true because 'scroll' events do NOT bubble.
+  // This guarantees we catch the scroll event on ANY scrollable ancestor, regardless of Vue mounting order!
+  window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+  window.addEventListener('resize', handleScroll);
+  // Initial check in case it's already scrolled
+  setTimeout(handleScroll, 100);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', handleScroll, { capture: true });
+  window.removeEventListener('resize', handleScroll);
+});
+
 const {
   copiedMapping,
   recentlyFlashed,
@@ -232,7 +268,8 @@ const cellInfoMap = computed(() => {
   <div class="select-none">
     <!-- Single unified scrollable table — header and body never desync -->
     <div
-      style="overflow-x: auto; overflow-y: auto; max-width: 100%; margin-bottom: 0.5rem; position: relative;"
+      ref="tableWrapperRef"
+      style="width: 100%; overflow-x: auto; margin-bottom: 0.5rem; position: relative; scroll-snap-type: x mandatory; overscroll-behavior-x: none;"
     >
       <table
         class="preview-table preview-table-double-sticky"
@@ -240,15 +277,17 @@ const cellInfoMap = computed(() => {
         style="margin-top: 0; min-width: 100%; border: none; border-collapse: separate; border-spacing: 0;"
       >
         <!-- ── Sticky Header ─────────────────────────────────────────── -->
-        <thead style="position: sticky; top: 0; z-index: 20;">
+        <thead ref="theadRef" style="position: relative; z-index: 20;">
           <tr>
             <!-- Frozen: Raw Action -->
             <th
               class="group select-none"
               :style="{
+                transform: `translateY(${stickyTranslateY}px)`, backgroundColor: 'var(--bg-tertiary)', boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
                 minWidth: rawActionWidth + 'px', maxWidth: rawActionWidth + 'px', width: rawActionWidth + 'px',
                 padding: '0.2rem 0.35rem', fontWeight: 700, color: 'var(--text-secondary)',
-                textAlign: 'center', boxSizing: 'border-box', position: 'relative'
+                textAlign: 'center', boxSizing: 'border-box', position: 'relative',
+                scrollSnapAlign: 'start'
               }"
             >
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; position: relative;">
@@ -286,10 +325,12 @@ const cellInfoMap = computed(() => {
             <th
               class="group select-none"
               :style="{
+                transform: `translateY(${stickyTranslateY}px)`, backgroundColor: 'var(--bg-tertiary)', boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
                 minWidth: dbTypeWidth + 'px', maxWidth: dbTypeWidth + 'px', width: dbTypeWidth + 'px',
                 padding: '0.2rem 0.35rem', fontWeight: 700, color: 'var(--text-secondary)',
                 textAlign: 'center', boxSizing: 'border-box', position: 'relative',
-                left: rawActionWidth + 'px'
+                left: rawActionWidth + 'px',
+                scrollSnapAlign: 'start'
               }"
             >
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; position: relative;">
@@ -328,9 +369,11 @@ const cellInfoMap = computed(() => {
               v-for="(col) in uiColumns"
               :key="col.id"
               :style="{
+                transform: `translateY(${stickyTranslateY}px)`, backgroundColor: 'var(--bg-tertiary)', boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
                 minWidth: (col.width || 180) + 'px', maxWidth: (col.width || 180) + 'px',
                 width: (col.width || 180) + 'px', padding: '0.2rem 0.35rem',
-                verticalAlign: 'top', boxSizing: 'border-box', position: 'relative'
+                verticalAlign: 'top', boxSizing: 'border-box', position: 'relative',
+                scrollSnapAlign: 'start'
               }"
               class="group select-none"
             >
