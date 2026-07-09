@@ -2,31 +2,17 @@
 
 Import everything from here for convenience::
 
-    from src.models import User, Portfolio, Position, TradeOperation, ...
+    from src.models import User, Portfolio, Position, RawTransaction, Allocation, ...
 """
 
 from __future__ import annotations
 
+from src.models.allocation import Allocation, AllocationMethod
 from src.models.base import SABase, SoftDeleteMixin, TimestampMixin
 from src.models.fee import Fee, FeeType
 from src.models.financial_account import FinancialAccount
 from src.models.import_file_schema import ImportFileSchema
 from src.models.institution import Institution
-from src.models.operation import (
-    OPERATION_TYPE_MAP,
-    DividendOperation,
-    ExpenseOperation,
-    FeeOperation,
-    FxRateChangeOperation,
-    InterestOperation,
-    Operation,
-    RevenueOperation,
-    StockSplitOperation,
-    TaxOperation,
-    TradeOperation,
-    TransferInOperation,
-    TransferOutOperation,
-)
 from src.models.operation_enums import (
     ExpenseCategory,
     InterestType,
@@ -38,39 +24,30 @@ from src.models.operation_enums import (
 )
 from src.models.portfolio import Portfolio
 from src.models.position import AssetType, Position
+from src.models.raw_transaction import RawTransaction
 from src.models.user import User
 
 __all__ = [
-    "OPERATION_TYPE_MAP",
+    "Allocation",
+    "AllocationMethod",
     "AssetType",
-    "DividendOperation",
     "ExpenseCategory",
-    "ExpenseOperation",
     "Fee",
-    "FeeOperation",
     "FeeType",
     "FinancialAccount",
-    "FxRateChangeOperation",
     "ImportFileSchema",
     "Institution",
-    "InterestOperation",
     "InterestType",
-    "Operation",
     "OrderStatus",
     "OrderType",
     "PaymentMethod",
     "Portfolio",
     "Position",
+    "RawTransaction",
     "RevenueCategory",
-    "RevenueOperation",
     "SABase",
     "SoftDeleteMixin",
-    "StockSplitOperation",
-    "TaxOperation",
     "TimestampMixin",
-    "TradeOperation",
     "TradeSide",
-    "TransferInOperation",
-    "TransferOutOperation",
     "User",
 ]
