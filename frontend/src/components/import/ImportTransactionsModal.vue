@@ -46,6 +46,7 @@ const {
   saveMappingTemplate,
   importDelimiter,
   importDecimalSep,
+  institutionKey,
   importFields,
   currentStep,
   operationTypeColumnIdx,
@@ -276,6 +277,7 @@ onUnmounted(() => {
                   v-model:decimalSeparator="importDecimalSep"
                   v-model:operationTypeColumnIdx="operationTypeColumnIdx"
                   v-model:operationTypeMappings="operationTypeMappings"
+                  v-model:institutionKey="institutionKey"
                   :importFileHeaders="importFileHeaders"
                   :uniqueOperationTypes="uniqueOperationTypes"
                   :importFields="importFields"

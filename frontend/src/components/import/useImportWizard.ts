@@ -8,7 +8,8 @@ import { useImportWizardComputeds } from './useImportWizardComputeds';
 import {
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
   parseSchemaMappings,
-  parseCsvText
+  parseCsvText,
+  DEFAULT_INSTITUTION_KEY
 } from '../../services/import';
 
 interface Portfolio {
@@ -22,12 +23,13 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const fileText = ref('');
   const importFileHeaders = ref<string[]>([]);
   const allRawRows = ref<string[][]>([]);
-  
+
   const isCustomMapping = ref(false);
   const mappingTemplateName = ref('');
   const saveMappingTemplate = ref(false);
   const importDelimiter = ref(',');
   const importDecimalSep = ref('.');
+  const institutionKey = ref(DEFAULT_INSTITUTION_KEY);
 
   const importFields = ref<any[]>([]);
   const currentStep = ref(1);
@@ -69,10 +71,11 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         }
         importDelimiter.value = schema.delimiter;
         importDecimalSep.value = schema.decimal_separator;
-        
+        institutionKey.value = schema.institution_key || 'custom';
+
         const parsed = parseSchemaMappings(schema.mappings, importFileHeaders.value);
         operationTypeColumnIdx.value = parsed.operationTypeColumnIdx;
-        
+
         const normalizedMappings: Record<string, string> = {};
         if (parsed.operationTypeColumnIdx !== null) {
           const uniqueSet = new Set<string>();
@@ -143,7 +146,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
       uiColumns: uiColumns.value,
       operationTypeMappings: operationTypeMappings.value,
       importFields: importFields.value,
-      uiRowsOrder: uiRowsOrder.value
+      uiRowsOrder: uiRowsOrder.value,
+      institutionKey: institutionKey.value
     });
   };
 
@@ -186,6 +190,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     isValidCustomMapping,
     importDelimiter,
     importDecimalSep,
+    institutionKey,
     buildCustomMappingPayload,
     initializeConfigs: handleColumnChange,
     schemaDeleteTemplate: schemaMgmt.handleDeleteTemplate,
@@ -201,7 +206,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     reader.onload = async (e) => {
       const text = e.target?.result as string;
       fileText.value = text;
-      
+
       const parsed = parseCsvText(text);
       if (parsed.headers.length > 0) {
         importDelimiter.value = parsed.delimiter;
@@ -347,6 +352,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     saveMappingTemplate,
     importDelimiter,
     importDecimalSep,
+    institutionKey,
     importFields,
     allRawRows,
     currentStep,

@@ -13,6 +13,7 @@ export interface UseImportExecutorOptions {
   isValidCustomMapping: Ref<boolean>;
   importDelimiter: Ref<string>;
   importDecimalSep: Ref<string>;
+  institutionKey: Ref<string>;
   buildCustomMappingPayload: () => any;
   initializeConfigs: () => void;
   schemaDeleteTemplate: () => Promise<{ success: boolean; error?: string } | undefined>;
@@ -65,6 +66,7 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
               delimiter: options.importDelimiter.value,
               decimal_separator: options.importDecimalSep.value,
               mappings: JSON.stringify(mappingConfig),
+              institution_key: options.institutionKey.value,
               is_incomplete: true,
             };
 
@@ -78,11 +80,13 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
             } else {
               await api.createImportFileSchema(templateData);
             }
-            
+
             importSuccessSummary.value = {
               positions_created: 0,
-              operations_imported: 0,
-              operations_skipped: 0,
+              raw_transactions_imported: 0,
+              allocations_created: 0,
+              skipped_duplicates: 0,
+              skipped_invalid: 0,
               is_template_only: true,
             };
             await options.loadSchemas();
@@ -101,6 +105,7 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
             delimiter: options.importDelimiter.value,
             decimal_separator: options.importDecimalSep.value,
             mappings: JSON.stringify(mappingConfig),
+            institution_key: options.institutionKey.value,
             is_incomplete: false,
           };
 
@@ -128,6 +133,7 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
               mappings: mappingConfig,
               delimiter: options.importDelimiter.value,
               decimal_separator: options.importDecimalSep.value,
+              institution_key: options.institutionKey.value,
             }
           );
           importSuccessSummary.value = res;

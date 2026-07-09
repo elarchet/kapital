@@ -50,7 +50,7 @@ const emit = defineEmits<{
 const tableWrapperRef = ref<HTMLElement | null>(null);
 const stickyTranslateY = ref(0);
 
-const handleScroll = (e?: Event) => {
+const handleScroll = () => {
   if (!tableWrapperRef.value) return;
   // Fallback to searching DOM if event target isn't useful, but prioritize closest
   const scrollContainer = tableWrapperRef.value.closest('.overflow-y-auto') || document.documentElement;

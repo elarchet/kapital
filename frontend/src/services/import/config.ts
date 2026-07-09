@@ -21,6 +21,7 @@ export function buildCustomMappingPayload(params: {
   operationTypeMappings: Record<string, string>;
   importFields: any[];
   uiRowsOrder?: string[];
+  institutionKey?: string;
 }) {
   const transformations: Record<string, any> = {};
   const enum_mappings: Record<string, Record<string, string[]>> = {};
@@ -111,6 +112,7 @@ export function buildCustomMappingPayload(params: {
     operation_type_column: params.operationTypeColumnIdx !== null
       ? params.importFileHeaders[params.operationTypeColumnIdx]
       : null,
+    institution_key: params.institutionKey || 'custom',
     columns: finalColumns,
     type_mappings,
     enum_mappings,
@@ -143,7 +145,7 @@ export function parseSchemaMappings(
   let mappings: any = {};
   try {
     mappings = JSON.parse(mappingsJson);
-  } catch (e) {}
+  } catch (e) { }
 
   if (mappings.ui_columns && Array.isArray(mappings.ui_columns) && mappings.ui_columns.length > 0) {
     uiColumns.push(...mappings.ui_columns);

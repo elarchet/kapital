@@ -5,3 +5,4 @@ export * from './validation';
 export * from './preview';
 export * from './config';
 export * from './wizardConfig';
+export * from './institutions';

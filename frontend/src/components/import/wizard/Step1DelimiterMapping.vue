@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import DynamicComponent from '../../DynamicComponent.vue';
+import { INSTITUTION_OPTIONS } from '../../../services/import';
 
 const props = defineProps<{
   importFileHeaders: string[];
@@ -12,6 +13,7 @@ const props = defineProps<{
 const delimiter = defineModel<string>('delimiter', { required: true });
 const decimalSeparator = defineModel<string>('decimalSeparator', { required: true });
 const operationTypeColumnIdx = defineModel<number | null>('operationTypeColumnIdx', { required: true });
+const institutionKey = defineModel<string>('institutionKey', { required: true });
 
 const emit = defineEmits<{
   (e: 'column-change'): void;
@@ -57,6 +59,8 @@ const decimalSeparatorOptions = [
   { value: '.', label: 'Dot (.)' },
   { value: ',', label: 'Comma (,)' }
 ];
+
+const institutionOptions = INSTITUTION_OPTIONS;
 </script>
 
 <template>
@@ -64,6 +68,19 @@ const decimalSeparatorOptions = [
     <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: start; width: 100%; min-height: auto;">
       <!-- Main Content: Delimiter details and Transaction Type column select -->
       <div style="flex: 1 1 100%; min-width: 0; max-width: 500px; margin: 0 auto;">
+        <div style="margin-bottom: 0.75rem;">
+          <DynamicComponent
+            componentKey="custom-dropdown"
+            v-model="institutionKey"
+            :options="institutionOptions"
+            :searchable="false"
+            placeholder="Choose institution..."
+            label="Institution"
+          />
+          <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+            The broker or bank this file comes from. All rows in the file are assumed to originate from this institution.
+          </p>
+        </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
           <div style="margin-bottom: 0;">
             <DynamicComponent
