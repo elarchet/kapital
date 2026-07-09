@@ -45,11 +45,11 @@ const openVerificationModal = (dbOpType: string) => {
 
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-      <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0; flex: 1;">
+    <div class="flex justify-between items-center gap-4 mb-2">
+      <p class="text-xs text-text-secondary m-0 flex-1">
         Click on any cell or column header to configure database field mappings for transaction types.
       </p>
-      <button @click="emit('back')" class="btn btn-sm" style="flex-shrink: 0;">&larr; Back to Step 1</button>
+      <button @click="emit('back')" class="btn btn-sm shrink-0">&larr; Back to Step 1</button>
     </div>
 
     <!-- Step 2 Mapping Table -->
@@ -76,8 +76,8 @@ const openVerificationModal = (dbOpType: string) => {
     />
 
     <!-- Save template options -->
-    <div style="border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem;">
-      <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500; text-transform: none; font-size: 0.875rem;">
+    <div class="border-t border-border-color pt-2 mt-2 flex flex-col gap-1.5">
+      <label class="flex items-center gap-2 font-medium normal-case text-sm">
         <input 
           type="checkbox" 
           :checked="saveMappingTemplate" 
