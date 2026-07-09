@@ -70,7 +70,7 @@ async def test_import_resolves_missing_asset_name_using_ticker(session):
             },
         )
 
-    assert summary["operations_imported"] == 1
+    assert summary["raw_transactions_imported"] == 1
     pos = session.exec(select(Position).where(Position.portfolio_id == portfolio.id, Position.ticker == "AAPL")).first()
     assert pos is not None
     assert pos.name == "Apple Inc."
@@ -128,7 +128,7 @@ async def test_import_with_enrich_asset_names_never(session):
             },
         )
 
-    assert summary["operations_imported"] == 1
+    assert summary["raw_transactions_imported"] == 1
     pos = session.exec(select(Position).where(Position.portfolio_id == portfolio.id, Position.ticker == "AAPL")).first()
     assert pos is not None
     assert pos.name == "AAPL"
@@ -187,7 +187,7 @@ async def test_import_with_enrich_asset_names_always(session):
             },
         )
 
-    assert summary["operations_imported"] == 1
+    assert summary["raw_transactions_imported"] == 1
     pos = session.exec(select(Position).where(Position.portfolio_id == portfolio.id, Position.ticker == "AAPL")).first()
     assert pos is not None
     assert pos.name == "Apple Inc."
@@ -247,7 +247,7 @@ async def test_import_with_enrich_asset_names_when_empty(session):
             },
         )
 
-    assert summary["operations_imported"] == 1
+    assert summary["raw_transactions_imported"] == 1
     pos = session.exec(select(Position).where(Position.portfolio_id == portfolio.id, Position.ticker == "AAPL")).first()
     assert pos is not None
     assert pos.name == "Apple Custom"

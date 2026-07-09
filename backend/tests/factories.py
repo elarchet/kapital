@@ -7,30 +7,17 @@ import factory
 from factory.alchemy import SQLAlchemyModelFactory
 
 from src.models import (
+    Allocation,
+    AllocationMethod,
     AssetType,
-    DividendOperation,
-    ExpenseCategory,
-    ExpenseOperation,
-    FeeOperation,
     FinancialAccount,
-    FxRateChangeOperation,
     Institution,
-    InterestOperation,
-    InterestType,
-    Operation,
     OrderStatus,
     OrderType,
-    PaymentMethod,
     Portfolio,
     Position,
-    RevenueCategory,
-    RevenueOperation,
-    StockSplitOperation,
-    TaxOperation,
-    TradeOperation,
+    RawTransaction,
     TradeSide,
-    TransferInOperation,
-    TransferOutOperation,
     User,
 )
 
@@ -106,21 +93,22 @@ class PositionFactory(BaseFactory):
     portfolio = factory.SubFactory(PortfolioFactory)
 
 
-class BaseOperationFactory(BaseFactory):
+class BaseRawTransactionFactory(BaseFactory):
     class Meta:
-        model = Operation
+        model = RawTransaction
         abstract = True
 
+    operation_type = "trade"
+    dedup_key = factory.Sequence(lambda n: f"auto-txn-{n}")
+    is_auto_id = True
     total_amount = factory.Faker("pydecimal", left_digits=6, right_digits=2, positive=True)
     currency = factory.Faker("currency_code")
     executed_at = factory.Faker("date_time_this_year", tzinfo=UTC)
-    position = factory.SubFactory(PositionFactory)
     financial_account = factory.SubFactory(FinancialAccountFactory)
 
 
-class TradeOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = TradeOperation
+class RawTransactionFactory(BaseRawTransactionFactory):
+    """A trade raw transaction with sensible defaults."""
 
     quantity = factory.LazyFunction(lambda: Decimal("10.00"))
     unit_price = factory.LazyFunction(lambda: Decimal("100.00"))
@@ -129,79 +117,15 @@ class TradeOperationFactory(BaseOperationFactory):
     order_status = OrderStatus.FILLED
 
 
-class DividendOperationFactory(BaseOperationFactory):
+class AllocationFactory(BaseFactory):
     class Meta:
-        model = DividendOperation
+        model = Allocation
 
-    dividend_per_share = factory.LazyFunction(lambda: Decimal("0.82"))
-
-
-class FeeOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = FeeOperation
-
-    fee_category = "custody"
-
-
-class TaxOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = TaxOperation
-
-    tax_category = "withholding"
-
-
-class InterestOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = InterestOperation
-
-    interest_type = InterestType.CASH_INTEREST
-
-
-class TransferInOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = TransferInOperation
-
-    source_reference = "BANK-REF-001"
-
-
-class TransferOutOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = TransferOutOperation
-
-    destination_reference = "EXT-REF-002"
-
-
-class StockSplitOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = StockSplitOperation
-
-    split_ratio = factory.LazyFunction(lambda: Decimal("4.0"))
-
-
-class FxRateChangeOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = FxRateChangeOperation
-
-    source_currency = "USD"
-    target_currency = "EUR"
-    exchange_rate = factory.LazyFunction(lambda: Decimal("0.9200000000"))
-
-
-class ExpenseOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = ExpenseOperation
-
-    merchant_name = factory.Faker("company")
-    merchant_category = "shopping"
-    expense_category = ExpenseCategory.SHOPPING
-    payment_method = PaymentMethod.CARD
-
-
-class RevenueOperationFactory(BaseOperationFactory):
-    class Meta:
-        model = RevenueOperation
-
-    merchant_name = factory.Faker("company")
-    merchant_category = "salary"
-    revenue_category = RevenueCategory.SALARY
-    payment_method = PaymentMethod.BANK_TRANSFER
+    method = AllocationMethod.PERCENTAGE
+    value = factory.LazyFunction(lambda: Decimal(100))
+    quantity = factory.LazyFunction(lambda: Decimal("10.00"))
+    amount = factory.LazyFunction(lambda: Decimal("1000.00"))
+    currency = factory.Faker("currency_code")
+    is_default = True
+    raw_transaction = factory.SubFactory(RawTransactionFactory)
+    position = factory.SubFactory(PositionFactory)

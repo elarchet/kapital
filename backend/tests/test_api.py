@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -9,10 +8,7 @@ from fastapi import status
 
 from src.models.import_file_schema import ImportFileSchema
 from tests.factories import (
-    FinancialAccountFactory,
-    InstitutionFactory,
     PortfolioFactory,
-    PositionFactory,
     UserFactory,
 )
 
@@ -281,87 +277,8 @@ def test_reference_data_crud(client: TestClient, session: Session):
 
 
 # ---------------------------------------------------------------------------
-# 5. Polymorphic STI Operations CRUD & Validation
+# 5. Import Flow
 # ---------------------------------------------------------------------------
-
-
-def test_polymorphic_operation_validation_and_crud(client: TestClient, session: Session):
-    user = UserFactory()
-    portfolio = PortfolioFactory(user=user)
-    position = PositionFactory(portfolio=portfolio)
-    institution = InstitutionFactory()
-    account = FinancialAccountFactory(institution=institution)
-    session.commit()
-
-    h = get_auth_headers(client, user.email)
-
-    # 1. Successful Buy Operation creation (as trade with trade_side=buy)
-    buy_payload = {
-        "operation_type": "trade",
-        "trade_side": "buy",
-        "quantity": "50.0",
-        "unit_price": "145.50",
-        "total_amount": "7275.00",
-        "currency": "USD",
-        "executed_at": datetime.now(UTC).isoformat(),
-        "notes": "Long-term tech stack investment",
-        "position_id": position.id,
-        "financial_account_id": account.id,
-    }
-    response = client.post("/api/v1/operations/", json=buy_payload, headers=h)
-    assert response.status_code == status.HTTP_201_CREATED
-    op_data = response.json()
-    assert op_data["operation_type"] == "trade"
-    assert op_data["trade_side"] == "buy"
-    assert Decimal(op_data["quantity"]) == Decimal(50)
-
-    # 2. Limit Buy Operation fails if limit_price is missing
-    limit_buy_bad_payload = {
-        "operation_type": "trade",
-        "trade_side": "buy",
-        "order_type": "limit",
-        "quantity": "10",
-        "unit_price": "90",
-        "total_amount": "900",
-        "executed_at": datetime.now(UTC).isoformat(),
-        "position_id": position.id,
-        "financial_account_id": account.id,
-    }
-    response = client.post("/api/v1/operations/", json=limit_buy_bad_payload, headers=h)
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
-
-    # 3. Successful Limit Buy Operation with limit_price
-    limit_buy_good_payload = limit_buy_bad_payload.copy()
-    limit_buy_good_payload["limit_price"] = "89.50"
-    response = client.post("/api/v1/operations/", json=limit_buy_good_payload, headers=h)
-    assert response.status_code == status.HTTP_201_CREATED
-    assert response.json()["operation_type"] == "trade"
-    assert response.json()["order_type"] == "limit"
-    assert Decimal(response.json()["limit_price"]) == Decimal("89.50")
-
-    # 4. Successful Dividend Operation with dividend_per_share
-    div_payload = {
-        "operation_type": "dividend",
-        "dividend_per_share": "1.25",
-        "total_amount": "12.50",
-        "executed_at": datetime.now(UTC).isoformat(),
-        "position_id": position.id,
-        "financial_account_id": account.id,
-    }
-    response = client.post("/api/v1/operations/", json=div_payload, headers=h)
-    assert response.status_code == status.HTTP_201_CREATED
-    assert response.json()["operation_type"] == "dividend"
-    assert Decimal(response.json()["dividend_per_share"]) == Decimal("1.25")
-
-    # 5. Double-check ownership boundary: User 2 tries to create operation on User 1's position
-    user2 = UserFactory(email="intruder@example.com")
-    session.commit()
-    h2 = get_auth_headers(client, user2.email)
-
-    intruder_payload = buy_payload.copy()
-    intruder_payload["position_id"] = position.id
-    response = client.post("/api/v1/operations/", json=intruder_payload, headers=h2)
-    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 def test_import_portfolio_csv_endpoint(client: TestClient, session: Session):
@@ -423,8 +340,8 @@ def test_import_portfolio_csv_endpoint(client: TestClient, session: Session):
     assert response.status_code == status.HTTP_200_OK, response.text
     data = response.json()
     assert "positions_created" in data
-    assert "operations_imported" in data
-    assert "operations_skipped" in data
+    assert "raw_transactions_imported" in data
+    assert "skipped_duplicates" in data
     assert data["positions_created"] == 2
-    assert data["operations_imported"] == 1
-    assert data["operations_skipped"] == 0
+    assert data["raw_transactions_imported"] == 1
+    assert data["skipped_duplicates"] == 0

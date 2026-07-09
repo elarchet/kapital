@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 from sqlmodel import select
 
-from src.models import Operation, Portfolio, Position, User
+from src.models import Allocation, Portfolio, Position, RawTransaction, User
 from src.models.import_file_schema import ImportFileSchema
 from src.services.import_service import import_portfolio_transactions
 from tests.factories import (
@@ -121,8 +121,8 @@ async def test_import_with_custom_date_format(session):
         },
     )
 
-    assert summary["operations_imported"] == 1
-    op = session.exec(select(Operation)).first()
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
     assert op is not None
     assert op.executed_at.year == 2026
     assert op.executed_at.month == 6
@@ -245,8 +245,8 @@ async def test_import_dividend_without_price_per_share(session):
         },
     )
 
-    assert summary["operations_imported"] == 1
-    op = session.exec(select(Operation).where(Operation.operation_type == "dividend")).first()
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction).where(RawTransaction.operation_type == "dividend")).first()
     assert op is not None
     assert op.dividend_per_share == Decimal("0.0")
 
@@ -303,20 +303,27 @@ async def test_import_without_transaction_id(session):
 
     # Verification:
     # - 2 Positions created (NewAsset stock position + USD cash position)
-    # - 2 Operations imported (the first and third row)
-    # - 1 Operation skipped (the second duplicate row)
+    # - 2 RawTransactions imported (the first and third row)
+    # - 1 duplicate skipped (the second duplicate row)
     assert summary["positions_created"] == 2
-    assert summary["operations_imported"] == 2
-    assert summary["operations_skipped"] == 1
+    assert summary["raw_transactions_imported"] == 2
+    assert summary["skipped_duplicates"] == 1
 
-    # Verify positions and operations in database
-    pos = session.exec(select(Position).where(Position.portfolio_id == portfolio.id)).first()
+    # Verify the asset position balance in the database
+    pos = session.exec(
+        select(Position).where(Position.portfolio_id == portfolio.id, Position.name == "NewAsset"),
+    ).first()
     assert pos is not None
-    assert pos.name == "NewAsset"
     assert pos.quantity == Decimal("20.0")  # 10 + 10
 
-    ops = session.exec(select(Operation).where(Operation.position_id == pos.id)).all()
-    assert len(ops) == 2
+    # RawTransactions carry no position_id; they are queried by their asset fields
+    # and traced to the position through their default allocations.
+    txns = session.exec(select(RawTransaction).where(RawTransaction.name == "NewAsset")).all()
+    assert len(txns) == 2
+
+    allocations = session.exec(select(Allocation).where(Allocation.position_id == pos.id)).all()
+    assert len(allocations) == 2
+    assert all(a.raw_transaction.name == "NewAsset" for a in allocations)
 
 
 @pytest.mark.asyncio
@@ -370,7 +377,7 @@ async def test_import_stock_split_schema_driven(session):
         },
     )
 
-    assert summary["operations_imported"] == 2  # 1 buy trade, 1 combined stock split
+    assert summary["raw_transactions_imported"] == 2  # 1 buy trade, 1 combined stock split
     pos = session.exec(
         select(Position).where(Position.portfolio_id == portfolio.id, Position.ticker == "NVDA"),
     ).first()
@@ -378,9 +385,12 @@ async def test_import_stock_split_schema_driven(session):
     # 10 shares bought, then split 1 to 10 (+90 shares). Net = 100.0 shares.
     assert pos.quantity == Decimal("100.0")
 
-    # Verify StockSplitOperation details
+    # Verify the combined stock split RawTransaction details
     split_op = session.exec(
-        select(Operation).where(Operation.position_id == pos.id, Operation.operation_type == "stock_split"),
+        select(RawTransaction).where(
+            RawTransaction.operation_type == "stock_split",
+            RawTransaction.ticker == "NVDA",
+        ),
     ).first()
     assert split_op is not None
     assert split_op.split_ratio == Decimal("10.0")
