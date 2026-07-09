@@ -37,6 +37,7 @@ const props = defineProps<{
   columnConfigMap?: Record<string, { typeSpecific: Record<string, any> }>;
   exampleRow?: string[];
   operationTypeMappings?: Record<string, string>;
+  currentColId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -127,6 +128,10 @@ onBeforeUnmount(() => {
           :importFields="importFields"
           :activeOpType="activeOpType"
           :activeOpTypes="activeOpTypes"
+          :columnConfigMap="columnConfigMap"
+          :currentColId="currentColId"
+          :uiColumns="uiColumns"
+          :operationTypeMappings="operationTypeMappings"
         />
 
         <!-- Dynamic options based on target type -->

@@ -13,6 +13,10 @@ const props = defineProps<{
   }>;
   activeOpType: string;
   activeOpTypes?: string[];
+  columnConfigMap?: Record<string, { typeSpecific: Record<string, any> }>;
+  currentColId?: string;
+  uiColumns?: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
+  operationTypeMappings?: Record<string, string>;
 }>();
 
 const selectedDbKey = defineModel<string>('selectedDbKey', { required: true });
@@ -70,11 +74,61 @@ const isFieldRelevant = (fieldKey: string, opType: string) => {
   return true;
 };
 
+const mappedKeysInOtherColumns = computed(() => {
+  if (!props.columnConfigMap || !props.currentColId || !props.uiColumns) {
+    return new Set<string>();
+  }
+
+  const mapped = new Set<string>();
+  const currentOpTypes = props.activeOpTypes && props.activeOpTypes.length > 0
+    ? props.activeOpTypes
+    : (props.activeOpType ? [props.activeOpType] : []);
+
+  props.uiColumns.forEach(col => {
+    if (col.id === props.currentColId) return;
+
+    const conf = props.columnConfigMap?.[col.id];
+    if (!conf || !conf.typeSpecific) return;
+
+    if (currentOpTypes.length > 0) {
+      currentOpTypes.forEach(opType => {
+        // Direct match
+        if (conf.typeSpecific[opType]?.dbKey) {
+          mapped.add(conf.typeSpecific[opType].dbKey);
+        }
+        // Match raw actions that map to this DB transaction type
+        if (props.operationTypeMappings) {
+          Object.entries(props.operationTypeMappings).forEach(([rawAction, dbOpType]) => {
+            if (dbOpType === opType) {
+              if (conf.typeSpecific[rawAction]?.dbKey) {
+                mapped.add(conf.typeSpecific[rawAction].dbKey);
+              }
+            }
+          });
+        }
+      });
+    } else {
+      // Global/no active op types
+      Object.values(conf.typeSpecific).forEach((mapping: any) => {
+        if (mapping?.dbKey) {
+          mapped.add(mapping.dbKey);
+        }
+      });
+    }
+  });
+
+  return mapped;
+});
+
 const filteredFields = computed(() => {
   let fields = props.importFields.filter(f => f.key !== 'operation_type');
   if (props.activeOpType) {
     fields = fields.filter(f => isFieldRelevant(f.key, props.activeOpType));
   }
+  
+  const mappedOthers = mappedKeysInOtherColumns.value;
+  fields = fields.filter(f => !mappedOthers.has(f.key));
+
   // Sort required fields first
   return [...fields].sort((a, b) => {
     const aReq = isFieldRequired(a.key);
@@ -106,7 +160,7 @@ const dropdownOptions = computed(() => {
 </script>
 
 <template>
-  <div style="margin-top: 0.5rem; margin-bottom: 0.5rem;">
+  <div class="my-2">
     <DynamicComponent
       componentKey="custom-dropdown"
       v-model="selectedDbKey"

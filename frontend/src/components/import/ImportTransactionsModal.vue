@@ -57,6 +57,7 @@ const {
   wizardExampleValue,
   wizardExampleRow,
   wizardActiveOpType,
+  wizardColId,
   wizardUniqueValues,
   wizardInitialMapping,
   showExitConfirm,
@@ -151,6 +152,7 @@ const onConfirmOverwrite = () => {
     :show="true"
     :initialWidth="panelWidth"
     :minWidth="500"
+    :bodyClass="currentStep === 2 ? '!p-2' : ''"
     @close="requestClose"
   >
     <template #header>
@@ -158,7 +160,7 @@ const onConfirmOverwrite = () => {
     </template>
 
     <template #body>
-        <div v-if="importError" class="login-error mb-2">
+        <div v-if="importError" class="login-error mb-2 shrink-0">
           {{ importError }}
         </div>
 
@@ -170,109 +172,107 @@ const onConfirmOverwrite = () => {
         />
 
         <template v-else-if="importFile">
-          <div>
-            <div v-if="!isCustomMapping || currentStep === 1" class="flex justify-between items-center bg-bg-tertiary py-2 px-3 rounded-sm border border-border-color mb-3">
-              <div class="flex items-center gap-2">
-                <Layers class="w-4 h-4 text-accent" />
-                <span class="text-[0.9rem] font-semibold">{{ importFile.name }}</span>
-                <span class="text-xs text-text-secondary">({{ (importFile.size / 1024).toFixed(1) }} KB)</span>
-              </div>
-              <button @click="requestClose" class="bg-transparent border-none text-danger-color cursor-pointer text-[0.8rem] font-semibold">Remove</button>
+          <div v-if="!isCustomMapping || currentStep === 1" class="flex justify-between items-center bg-bg-tertiary py-2 px-3 rounded-sm border border-border-color mb-3">
+            <div class="flex items-center gap-2">
+              <Layers class="w-4 h-4 text-accent" />
+              <span class="text-[0.9rem] font-semibold">{{ importFile.name }}</span>
+              <span class="text-xs text-text-secondary">({{ (importFile.size / 1024).toFixed(1) }} KB)</span>
             </div>
+            <button @click="requestClose" class="bg-transparent border-none text-danger-color cursor-pointer text-[0.8rem] font-semibold">Remove</button>
+          </div>
 
-            <div class="flex flex-col gap-3 w-full">
-              <div>
-                <!-- Template select -->
-                <div v-if="!isCustomMapping || currentStep === 1" class="form-group !mb-3 max-w-[450px]">
-                  <label>Template Schema</label>
-                  <div class="flex gap-2 items-stretch mb-1">
-                    <div class="flex-1 min-w-0">
-                      <DynamicComponent
-                        componentKey="custom-dropdown"
-                        v-model="selectedSchemaIdString"
-                        :options="schemaOptions"
-                        placeholder="Select schema template..."
-                        label=""
-                        class="mb-0"
-                      />
-                    </div>
-                    <button
-                      v-if="selectedSchema && !selectedSchema.is_public"
-                      @click="startEditingSchema"
-                      type="button"
-                      class="btn !py-0 !px-3 shrink-0 mr-1"
-                      title="Edit this template"
-                    >
-                      <Pencil class="w-4 h-4 text-accent" />
-                    </button>
-                    <button
-                      v-if="selectedSchema && !selectedSchema.is_public"
-                      @click="promptDeleteTemplate"
-                      type="button"
-                      class="btn !py-0 !px-3 shrink-0"
-                      title="Delete this template"
-                    >
-                      <Trash2 class="w-4 h-4 text-danger-color" />
-                    </button>
+          <div class="flex flex-col gap-3 w-full">
+            <div>
+              <!-- Template select -->
+              <div v-if="!isCustomMapping || currentStep === 1" class="form-group !mb-3 max-w-[450px]">
+                <label>Template Schema</label>
+                <div class="flex gap-2 items-stretch mb-1">
+                  <div class="flex-1 min-w-0">
+                    <DynamicComponent
+                      componentKey="custom-dropdown"
+                      v-model="selectedSchemaIdString"
+                      :options="schemaOptions"
+                      placeholder="Select schema template..."
+                      label=""
+                      class="mb-0"
+                    />
                   </div>
-                  <p v-if="autodetectedSchemaId && selectedSchemaId === autodetectedSchemaId" class="text-xs text-success-color mt-1 font-medium">
-                    ✓ Autodetected format matching this file
-                  </p>
+                  <button
+                    v-if="selectedSchema && !selectedSchema.is_public"
+                    @click="startEditingSchema"
+                    type="button"
+                    class="btn !py-0 !px-3 shrink-0 mr-1"
+                    title="Edit this template"
+                  >
+                    <Pencil class="w-4 h-4 text-accent" />
+                  </button>
+                  <button
+                    v-if="selectedSchema && !selectedSchema.is_public"
+                    @click="promptDeleteTemplate"
+                    type="button"
+                    class="btn !py-0 !px-3 shrink-0"
+                    title="Delete this template"
+                  >
+                    <Trash2 class="w-4 h-4 text-danger-color" />
+                  </button>
                 </div>
-
-                <!-- Custom mapping builder form -->
-                <div v-if="isCustomMapping" class="border border-border-color rounded-sm p-3 mt-2 bg-bg-primary">
-                  
-                  <!-- STEP 1: Delimiter & OpType mapping -->
-                  <Step1DelimiterMapping
-                    v-if="currentStep === 1"
-                    v-model:delimiter="importDelimiter"
-                    v-model:decimalSeparator="importDecimalSep"
-                    v-model:operationTypeColumnIdx="operationTypeColumnIdx"
-                    v-model:operationTypeMappings="operationTypeMappings"
-                    :importFileHeaders="importFileHeaders"
-                    :uniqueOperationTypes="uniqueOperationTypes"
-                    :importFields="importFields"
-                    :activeDbOpTypes="activeDbOpTypes"
-                    @column-change="handleColumnChange"
-                    @next="currentStep = 2"
-                  />
-
-                  <!-- STEP 2: Columns mapping & live stats verification -->
-                  <Step2ColumnMapping
-                    v-else-if="currentStep === 2"
-                    v-model:saveMappingTemplate="saveMappingTemplate"
-                    v-model:mappingTemplateName="mappingTemplateName"
-                    :importFileHeaders="importFileHeaders"
-                    :uiColumns="uiColumns"
-                    :operationTypeColumnIdx="operationTypeColumnIdx"
-                    :columnConfigMap="columnConfigMap"
-                    :activeDbOpTypes="activeDbOpTypes"
-                    :uniqueOperationTypes="uniqueOperationTypes"
-                    :operationTypeMappings="operationTypeMappings"
-                    :importFields="importFields"
-                    :exampleTransactions="exampleTransactions"
-                    :liveValidationStats="liveValidationStats"
-                    :validationErrors="validationErrors"
-                    :enrichedNames="enrichedNames"
-                    @back="currentStep = 1"
-                    @open-wizard="(payload: any) => openWizard(payload.colId, payload.opType, payload.targets, payload.rawAction)"
-                    @prev-example="prevExampleForType"
-                    @next-example="nextExampleForType"
-                    @update-mapping="handleUpdateMapping"
-                    @update-optype-mapping="handleUpdateOpTypeMapping"
-                    @duplicate-column="handleDuplicateColumn"
-                    @delete-column="handleDeleteColumn"
-                  />
-                </div>
+                <p v-if="autodetectedSchemaId && selectedSchemaId === autodetectedSchemaId" class="text-xs text-success-color mt-1 font-medium">
+                  ✓ Autodetected format matching this file
+                </p>
               </div>
 
-              <!-- REAL-TIME PARSED DATA PREVIEW (Only shown when not actively designing custom mappings) -->
-              <ParsedPreviewTable
-                v-if="!isCustomMapping"
-                :parsedPreviewRows="parsedPreviewRows"
-              />
+              <!-- Custom mapping builder form -->
+              <div v-if="isCustomMapping" class="border border-border-color rounded-sm p-3 mt-2 bg-bg-primary">
+                
+                <!-- STEP 1: Delimiter & OpType mapping -->
+                <Step1DelimiterMapping
+                  v-if="currentStep === 1"
+                  v-model:delimiter="importDelimiter"
+                  v-model:decimalSeparator="importDecimalSep"
+                  v-model:operationTypeColumnIdx="operationTypeColumnIdx"
+                  v-model:operationTypeMappings="operationTypeMappings"
+                  :importFileHeaders="importFileHeaders"
+                  :uniqueOperationTypes="uniqueOperationTypes"
+                  :importFields="importFields"
+                  :activeDbOpTypes="activeDbOpTypes"
+                  @column-change="handleColumnChange"
+                  @next="currentStep = 2"
+                />
+
+                <!-- STEP 2: Columns mapping & live stats verification -->
+                <Step2ColumnMapping
+                  v-else-if="currentStep === 2"
+                  v-model:saveMappingTemplate="saveMappingTemplate"
+                  v-model:mappingTemplateName="mappingTemplateName"
+                  :importFileHeaders="importFileHeaders"
+                  :uiColumns="uiColumns"
+                  :operationTypeColumnIdx="operationTypeColumnIdx"
+                  :columnConfigMap="columnConfigMap"
+                  :activeDbOpTypes="activeDbOpTypes"
+                  :uniqueOperationTypes="uniqueOperationTypes"
+                  :operationTypeMappings="operationTypeMappings"
+                  :importFields="importFields"
+                  :exampleTransactions="exampleTransactions"
+                  :liveValidationStats="liveValidationStats"
+                  :validationErrors="validationErrors"
+                  :enrichedNames="enrichedNames"
+                  @back="currentStep = 1"
+                  @open-wizard="(payload: any) => openWizard(payload.colId, payload.opType, payload.targets, payload.rawAction)"
+                  @prev-example="prevExampleForType"
+                  @next-example="nextExampleForType"
+                  @update-mapping="handleUpdateMapping"
+                  @update-optype-mapping="handleUpdateOpTypeMapping"
+                  @duplicate-column="handleDuplicateColumn"
+                  @delete-column="handleDeleteColumn"
+                />
+              </div>
             </div>
+
+            <!-- REAL-TIME PARSED DATA PREVIEW (Only shown when not actively designing custom mappings) -->
+            <ParsedPreviewTable
+              v-if="!isCustomMapping"
+              :parsedPreviewRows="parsedPreviewRows"
+            />
           </div>
         </template>
     </template>
@@ -321,6 +321,7 @@ const onConfirmOverwrite = () => {
 
   <ColumnMappingWizard
     :show="isWizardOpen"
+    :currentColId="wizardColId || undefined"
     :csvHeaderName="wizardCsvHeaderName"
     :exampleValue="wizardExampleValue"
     :importFields="importFields"
