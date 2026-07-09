@@ -6,10 +6,12 @@ const props = withDefaults(defineProps<{
   show?: boolean;
   minWidth?: number;
   initialWidth?: number;
+  bodyClass?: string;
 }>(), {
   show: true,
   minWidth: 500,
   initialWidth: 800,
+  bodyClass: '',
 });
 
 const emit = defineEmits<{
@@ -168,7 +170,10 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Body wrapper -->
-      <div class="flex-1 overflow-y-auto p-5 bg-bg-primary min-h-0">
+      <div 
+        class="flex-1 overflow-y-auto p-5 bg-bg-primary min-h-0 flex flex-col"
+        :class="bodyClass"
+      >
         <slot name="body"></slot>
       </div>
 
