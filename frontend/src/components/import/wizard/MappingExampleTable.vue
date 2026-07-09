@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
 import { Plus, Trash2 } from '@lucide/vue';
 import type { ColMapping } from '../../../services/import/types';
 import DynamicComponent from '../../DynamicComponent.vue';
@@ -116,6 +116,30 @@ const rowTxIdMap = computed(() => {
   return map;
 });
 
+// Dual-Table Scroll Sync Logic
+const tableWrapperRef = ref<HTMLElement | null>(null)
+const headerWrapperRef = ref<HTMLElement | null>(null)
+let isSyncingLeft = false
+
+const handleBodyScroll = (e: Event) => {
+  if (!headerWrapperRef.value || isSyncingLeft) return
+  isSyncingLeft = true
+  headerWrapperRef.value.scrollLeft = (e.target as HTMLElement).scrollLeft
+  isSyncingLeft = false
+}
+
+onMounted(() => {
+  if (tableWrapperRef.value) {
+    tableWrapperRef.value.addEventListener('scroll', handleBodyScroll, { passive: true })
+  }
+})
+
+onBeforeUnmount(() => {
+  if (tableWrapperRef.value) {
+    tableWrapperRef.value.removeEventListener('scroll', handleBodyScroll)
+  }
+})
+
 // Cache cell rendering states to optimize rendering speed and apply styling
 const cellInfoMap = computed(() => {
   const map: Record<string, {
@@ -202,21 +226,21 @@ const cellInfoMap = computed(() => {
 
 <template>
   <div>
-    <!-- Table Wrapper Container with maximized height -->
-    <div style="overflow: auto; max-height: calc(100vh - 300px); min-height: 250px; max-width: 100%; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.5rem; position: relative; container-type: inline-size;">
-      <table class="preview-table preview-table-double-sticky" style="margin-top: 0; min-width: 100%;">
+    <!-- Sticky Header Table Wrapper -->
+    <div ref="headerWrapperRef" style="position: sticky; top: -0.5rem; z-index: 20; overflow: hidden; background: var(--bg-primary); max-width: 100%; border-top: 1px solid var(--bg-primary);">
+      <table class="preview-table preview-table-double-sticky" style="margin-top: 0; min-width: 100%; border: none;">
         <thead>
           <tr>
-            <th style="min-width: var(--raw-action-width); max-width: var(--raw-action-width); width: var(--raw-action-width); padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center;">
+            <th style="min-width: var(--raw-action-width); max-width: var(--raw-action-width); width: var(--raw-action-width); padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center; box-sizing: border-box;">
               Raw Action
             </th>
-            <th style="min-width: 170px; max-width: 170px; width: 170px; padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center;">
+            <th style="min-width: 170px; max-width: 170px; width: 170px; padding: 0.2rem 0.35rem; font-weight: 700; color: var(--text-secondary); text-align: center; box-sizing: border-box;">
               DB Transaction Type
             </th>
             <th 
               v-for="col in uiColumns" 
               :key="col.id"
-              style="min-width: 140px; padding: 0.2rem 0.35rem; vertical-align: top; transition: background-color 0.15s ease;"
+              style="min-width: 180px; max-width: 180px; width: 180px; padding: 0.2rem 0.35rem; vertical-align: top; transition: background-color 0.15s ease; box-sizing: border-box;"
               class="group select-none"
             >
               <div style="display: flex; flex-direction: column; gap: 0.15rem;">
@@ -246,11 +270,17 @@ const cellInfoMap = computed(() => {
             </th>
           </tr>
         </thead>
+      </table>
+    </div>
+
+    <!-- Scrollable Body Table Wrapper -->
+    <div ref="tableWrapperRef" style="overflow-x: auto; max-width: 100%; margin-bottom: 0.5rem; position: relative;">
+      <table class="preview-table preview-table-double-sticky" style="margin-top: 0; min-width: 100%; border: none;">
         <tbody>
           <!-- Example rows per type -->
           <tr v-for="example in exampleTransactions" :key="example.opType">
             <!-- Column 1: Raw Action -->
-            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: var(--raw-action-width); max-width: var(--raw-action-width); width: var(--raw-action-width);">
+            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: var(--raw-action-width); max-width: var(--raw-action-width); width: var(--raw-action-width); box-sizing: border-box;">
               <div style="display: flex; flex-direction: column; gap: 0.25rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.35rem; padding: 0.05rem; overflow: hidden; width: 100%;">
                   <!-- Left: Transaction type value badge -->
@@ -293,7 +323,7 @@ const cellInfoMap = computed(() => {
             </td>
 
             <!-- Column 2: DB Transaction Type Dropdown Select -->
-            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: 170px; max-width: 170px; width: 170px;">
+            <td style="vertical-align: middle; text-align: left; padding: 0.25rem 0.35rem; min-width: 170px; max-width: 170px; width: 170px; box-sizing: border-box;">
               <DynamicComponent
                 componentKey="custom-dropdown"
                 :model-value="operationTypeMappings[example.opType] || ''"
@@ -319,7 +349,7 @@ const cellInfoMap = computed(() => {
               }" 
               class="group focus:outline-none focus:bg-slate-100/50 dark:focus:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all duration-150 cursor-pointer"
               :class="recentlyFlashed[`${col.id}:::${example.opType}`] || ''"
-              style="vertical-align: middle; position: relative; padding: 0.15rem 0.3rem; max-width: 160px;"
+              style="vertical-align: middle; position: relative; padding: 0.15rem 0.3rem; min-width: 180px; max-width: 180px; width: 180px; box-sizing: border-box;"
             >
               <div style="display: flex; flex-direction: column; gap: 0.05rem; overflow: hidden;">
                 <!-- The value: displays the enriched/live resolved value if enriched, or the raw CSV value -->

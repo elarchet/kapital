@@ -561,12 +561,26 @@ h6 {
 
 /* Common Import Preview Tables */
 .preview-table {
-  @apply w-full border-collapse text-[0.7rem] mt-2 border border-border-color;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  @apply text-[0.7rem] mt-2;
 }
 
 .preview-table th,
 .preview-table td {
-  @apply border border-border-color py-1 px-1.5 text-left;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  @apply py-1 px-1.5 text-left;
+}
+
+.preview-table thead th {
+  border-top: 1px solid var(--border-color);
+}
+
+.preview-table th:first-child,
+.preview-table td:first-child {
+  border-left: 1px solid var(--border-color);
 }
 
 .preview-table th {

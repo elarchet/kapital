@@ -222,7 +222,7 @@ const onConfirmOverwrite = () => {
               </div>
 
               <!-- Custom mapping builder form -->
-              <div v-if="isCustomMapping" class="border border-border-color rounded-sm p-3 mt-2 bg-bg-primary">
+              <div v-if="isCustomMapping" class="border border-border-color rounded-sm mt-2 bg-bg-primary" :class="currentStep === 2 ? 'p-2' : 'p-3'">
                 
                 <!-- STEP 1: Delimiter & OpType mapping -->
                 <Step1DelimiterMapping
