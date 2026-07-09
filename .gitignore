@@ -28,6 +28,7 @@ Thumbs.db
 
 # Example/test data files — never commit these
 examples/
+data/
 *.csv
 
 # Database files
