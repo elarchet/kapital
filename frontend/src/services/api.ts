@@ -14,6 +14,16 @@ export interface APIError {
   detail: string | Array<{ msg: string; loc: string[] }>;
 }
 
+export interface Institution {
+  id: number;
+  name: string;
+  country?: string | null;
+  website?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -46,8 +56,8 @@ async function request<T>(
     const message = typeof errorData.detail === 'string'
       ? errorData.detail
       : Array.isArray(errorData.detail)
-      ? errorData.detail.map(d => d.msg).join(', ')
-      : 'API Error';
+        ? errorData.detail.map(d => d.msg).join(', ')
+        : 'API Error';
     throw new Error(message);
   }
 
@@ -79,7 +89,7 @@ export const api = {
       try {
         const errorData = await response.json();
         if (errorData?.detail) errorMsg = errorData.detail;
-      } catch {}
+      } catch { }
       throw new Error(errorMsg);
     }
 
@@ -198,6 +208,8 @@ export const api = {
     decimal_separator: string;
     mappings: string;
     is_incomplete?: boolean;
+    institution_key?: string;
+    institution_id?: number | null;
   }): Promise<any> {
     return request<any>('/api/v1/import-file-schemas/', {
       method: 'POST',
@@ -212,6 +224,8 @@ export const api = {
     decimal_separator: string;
     mappings: string;
     is_incomplete?: boolean;
+    institution_key?: string;
+    institution_id?: number | null;
   }>): Promise<any> {
     return request<any>(`/api/v1/import-file-schemas/${id}`, {
       method: 'PUT',
@@ -234,6 +248,46 @@ export const api = {
 
   async getImportMetadata(): Promise<any> {
     return request<any>('/api/v1/portfolios/import-metadata');
+  },
+
+  // Institutions CRUD
+  async getInstitutions(): Promise<Institution[]> {
+    return request<Institution[]>('/api/v1/institutions/');
+  },
+
+  async getInstitution(id: number): Promise<Institution> {
+    return request<Institution>(`/api/v1/institutions/${id}`);
+  },
+
+  async createInstitution(data: {
+    name: string;
+    country?: string | null;
+    website?: string | null;
+  }): Promise<Institution> {
+    return request<Institution>('/api/v1/institutions/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateInstitution(
+    id: number,
+    data: Partial<{
+      name: string;
+      country: string | null;
+      website: string | null;
+    }>
+  ): Promise<Institution> {
+    return request<Institution>(`/api/v1/institutions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteInstitution(id: number): Promise<Institution> {
+    return request<Institution>(`/api/v1/institutions/${id}`, {
+      method: 'DELETE',
+    });
   },
 
   async getTickerProfile(ticker: string): Promise<{ symbol: string; name: string }> {
@@ -272,7 +326,7 @@ export const api = {
       try {
         const errorData = await response.json();
         if (errorData?.detail) errorMsg = errorData.detail;
-      } catch {}
+      } catch { }
       throw new Error(errorMsg);
     }
 
