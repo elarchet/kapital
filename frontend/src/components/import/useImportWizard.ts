@@ -36,7 +36,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const operationTypeMappings = ref<Record<string, string>>({});
 
   const columnConfigMap = ref<Record<string, any>>({});
-  const uiColumns = ref<Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>>([]);
+  const uiColumns = ref<Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>>([]);
+  const uiRowsOrder = ref<string[]>([]);
 
   const showExitConfirm = ref(false);
   const isDirty = computed(() => importFile.value !== null);
@@ -45,7 +46,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
 
   const handleColumnChange = () => {
     operationTypeMappings.value = {};
-    uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h }));
+    uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h, width: 180 }));
+    uiRowsOrder.value = [];
     columnConfigMap.value = {};
     uiColumns.value.forEach(col => {
       columnConfigMap.value[col.id] = { typeSpecific: {} };
@@ -99,6 +101,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         operationTypeMappings.value = normalizedMappings;
         columnConfigMap.value = parsed.columnConfigMap;
         uiColumns.value = parsed.uiColumns;
+        uiRowsOrder.value = parsed.uiRowsOrder || [];
       } else {
         isCustomMapping.value = true;
         handleColumnChange();
@@ -128,6 +131,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     importDecimalSep,
     columnConfigMap,
     uiColumns,
+    uiRowsOrder,
     enrichedNames
   });
 
@@ -138,7 +142,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
       columnConfigMap: columnConfigMap.value,
       uiColumns: uiColumns.value,
       operationTypeMappings: operationTypeMappings.value,
-      importFields: importFields.value
+      importFields: importFields.value,
+      uiRowsOrder: uiRowsOrder.value
     });
   };
 
@@ -152,7 +157,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     matchingRowsByType,
     matchingRowsByRawAction,
     allRawRows,
-    operationTypeMappings
+    operationTypeMappings,
+    uniqueOperationTypes
   );
 
   const { parsedPreviewRows } = useImportPreview({
@@ -306,6 +312,28 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     handleDuplicateColumn: wizardMapping.handleDuplicateColumn,
     handleDeleteColumn: wizardMapping.handleDeleteColumn,
     handleUpdateOpTypeMapping: wizardMapping.handleUpdateOpTypeMapping,
+
+    handleResizeColumn: (payload: { colId: string; width: number }) => {
+      const col = uiColumns.value.find(c => c.id === payload.colId);
+      if (col) {
+        col.width = payload.width;
+      }
+    },
+
+    handleSortColumn: (payload: { colKey: 'raw' | 'db'; direction: 'asc' | 'desc' }) => {
+      const currentOrder = [...uniqueOperationTypes.value];
+      currentOrder.sort((a, b) => {
+        let valA = a;
+        let valB = b;
+        if (payload.colKey === 'db') {
+          valA = operationTypeMappings.value[a] || '';
+          valB = operationTypeMappings.value[b] || '';
+        }
+        const cmp = valA.localeCompare(valB);
+        return payload.direction === 'asc' ? cmp : -cmp;
+      });
+      uiRowsOrder.value = currentOrder;
+    },
 
     // Local states & computed
     importFile,

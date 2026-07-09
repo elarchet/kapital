@@ -15,6 +15,7 @@ export function useImportWizardComputeds(params: {
   importDecimalSep: Ref<string>;
   columnConfigMap: Ref<Record<string, any>>;
   uiColumns: Ref<any[]>;
+  uiRowsOrder?: Ref<string[]>;
   enrichedNames: Ref<Record<string, string>>;
 }) {
   const uniqueOperationTypes = computed(() => {
@@ -24,7 +25,18 @@ export function useImportWizardComputeds(params: {
       const val = row[params.operationTypeColumnIdx.value!];
       if (val && val.trim()) uniqueSet.add(val.trim());
     });
-    return Array.from(uniqueSet);
+    
+    let baseOrder = Array.from(uniqueSet);
+    if (params.uiRowsOrder && params.uiRowsOrder.value && params.uiRowsOrder.value.length > 0) {
+      const customOrderMap = new Map();
+      params.uiRowsOrder.value.forEach((v, i) => customOrderMap.set(v, i));
+      baseOrder.sort((a, b) => {
+        const aIndex = customOrderMap.has(a) ? customOrderMap.get(a) : Infinity;
+        const bIndex = customOrderMap.has(b) ? customOrderMap.get(b) : Infinity;
+        return aIndex - bIndex;
+      });
+    }
+    return baseOrder;
   });
 
   const activeDbOpTypes = computed(() => {
