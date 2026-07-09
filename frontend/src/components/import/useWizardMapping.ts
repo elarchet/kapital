@@ -13,7 +13,8 @@ export function useWizardMapping(
   matchingRowsByType: any,
   matchingRowsByRawAction: any,
   allRawRows: any,
-  operationTypeMappings: any
+  operationTypeMappings: any,
+  uniqueOperationTypes: any
 ) {
   const isWizardOpen = ref(false);
   const wizardCsvHeaderName = ref('');
@@ -42,7 +43,7 @@ export function useWizardMapping(
 
   const exampleTransactions = computed(() => {
     return getExampleTransactions(
-      Object.keys(matchingRowsByRawAction.value),
+      uniqueOperationTypes.value,
       matchingRowsByRawAction.value,
       selectedExampleOffset.value
     );
@@ -135,19 +136,20 @@ export function useWizardMapping(
   };
 
   const handleDuplicateColumn = (colId: string) => {
-    const baseCol = uiColumns.value.find((c: any) => c.id === colId);
-    if (!baseCol) return;
+    const index = uiColumns.value.findIndex((c: any) => c.id === colId);
+    if (index === -1) return;
+    const baseCol = uiColumns.value[index];
     const dupCount = uiColumns.value.filter((c: any) => c.colIdx === baseCol.colIdx).length;
-    const newId = `${colId}_dup_${dupCount}`;
+    const newId = `${colId}_dup_${dupCount}_${Date.now()}`;
     const newCol = {
       id: newId,
       colIdx: baseCol.colIdx,
       name: baseCol.name,
       label: `${baseCol.name} (Copy)`,
-      isDuplicate: true
+      isDuplicate: true,
+      width: baseCol.width
     };
-    const lastIndex = uiColumns.value.map((c: any) => c.colIdx).lastIndexOf(baseCol.colIdx);
-    uiColumns.value.splice(lastIndex + 1, 0, newCol);
+    uiColumns.value.splice(index + 1, 0, newCol);
     columnConfigMap.value[newId] = { typeSpecific: {} };
     columnConfigMap.value = { ...columnConfigMap.value };
   };

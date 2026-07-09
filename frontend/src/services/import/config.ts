@@ -17,9 +17,10 @@ export function buildCustomMappingPayload(params: {
   operationTypeColumnIdx: number | null;
   importFileHeaders: string[];
   columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }>;
-  uiColumns: Array<{ id: string; colIdx: number }>;
+  uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>;
   operationTypeMappings: Record<string, string>;
   importFields: any[];
+  uiRowsOrder?: string[];
 }) {
   const transformations: Record<string, any> = {};
   const enum_mappings: Record<string, Record<string, string[]>> = {};
@@ -117,6 +118,8 @@ export function buildCustomMappingPayload(params: {
     date_formats,
     enrich_asset_names,
     enrich_transaction_ids,
+    ui_columns: params.uiColumns,
+    ui_rows_order: params.uiRowsOrder || [],
     ...(Object.keys(cleared_type_specifics).length > 0 ? { cleared_type_specifics } : {})
   };
 }
@@ -128,18 +131,36 @@ export function parseSchemaMappings(
   operationTypeColumnIdx: number | null;
   operationTypeMappings: Record<string, string>;
   columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }>;
-  uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }>;
+  uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>;
+  uiRowsOrder?: string[];
 } {
   let operationTypeColumnIdx: number | null = null;
   const operationTypeMappings: Record<string, string> = {};
   const columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }> = {};
-  const uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean }> = [];
+  const uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }> = [];
+  let uiRowsOrder: string[] = [];
 
-  importFileHeaders.forEach((h, idx) => {
-    const colId = `col-${idx}`;
-    uiColumns.push({ id: colId, colIdx: idx, name: h, label: h });
-    columnConfigMap[colId] = { typeSpecific: {} };
-  });
+  let mappings: any = {};
+  try {
+    mappings = JSON.parse(mappingsJson);
+  } catch (e) {}
+
+  if (mappings.ui_columns && Array.isArray(mappings.ui_columns) && mappings.ui_columns.length > 0) {
+    uiColumns.push(...mappings.ui_columns);
+    uiColumns.forEach(c => {
+      columnConfigMap[c.id] = { typeSpecific: {} };
+    });
+  } else {
+    importFileHeaders.forEach((h, idx) => {
+      const colId = `col-${idx}`;
+      uiColumns.push({ id: colId, colIdx: idx, name: h, label: h, width: 180 });
+      columnConfigMap[colId] = { typeSpecific: {} };
+    });
+  }
+
+  if (mappings.ui_rows_order && Array.isArray(mappings.ui_rows_order)) {
+    uiRowsOrder = mappings.ui_rows_order;
+  }
 
   // Find or create a UI column for the given CSV index that has a free typeSpecific
   // slot for `opType`, creating a duplicate column only when there's a real conflict.
@@ -162,7 +183,6 @@ export function parseSchemaMappings(
   };
 
   try {
-    const mappings = JSON.parse(mappingsJson);
     const cols = mappings.columns || {};
     const dateFormats = mappings.date_formats || {};
 
@@ -238,5 +258,5 @@ export function parseSchemaMappings(
     console.error('Failed to parse schema mappings:', err);
   }
 
-  return { operationTypeColumnIdx, operationTypeMappings, columnConfigMap, uiColumns };
+  return { operationTypeColumnIdx, operationTypeMappings, columnConfigMap, uiColumns, uiRowsOrder };
 }

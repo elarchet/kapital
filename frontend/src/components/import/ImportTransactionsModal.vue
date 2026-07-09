@@ -88,6 +88,8 @@ const {
   nextExampleForType,
   hasConfirmedOverwrite,
   handleColumnChange,
+  handleResizeColumn,
+  handleSortColumn,
 } = useImportWizard(props, emit);
 
 const isSchemaIncomplete = (schema: any) => {
@@ -264,6 +266,8 @@ const onConfirmOverwrite = () => {
                   @update-optype-mapping="handleUpdateOpTypeMapping"
                   @duplicate-column="handleDuplicateColumn"
                   @delete-column="handleDeleteColumn"
+                  @resize-column="handleResizeColumn"
+                  @sort-column="handleSortColumn"
                 />
               </div>
             </div>

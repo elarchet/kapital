@@ -31,6 +31,8 @@ const emit = defineEmits<{
   (e: 'update-optype-mapping', payload: { rawAction: string; dbOpType: string }): void;
   (e: 'duplicate-column', colId: string): void;
   (e: 'delete-column', colId: string): void;
+  (e: 'resize-column', payload: { colId: string; width: number }): void;
+  (e: 'sort-column', payload: { colKey: 'raw' | 'db'; direction: 'asc' | 'desc' }): void;
 }>();
 
 // Verification modal state
@@ -72,6 +74,8 @@ const openVerificationModal = (dbOpType: string) => {
       @update-optype-mapping="(payload: any) => emit('update-optype-mapping', payload)"
       @duplicate-column="(colId: string) => emit('duplicate-column', colId)"
       @delete-column="(colId: string) => emit('delete-column', colId)"
+      @resize-column="(payload: any) => emit('resize-column', payload)"
+      @sort-column="(payload: any) => emit('sort-column', payload)"
       @show-verification="openVerificationModal"
     />
 
