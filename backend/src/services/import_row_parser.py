@@ -237,6 +237,8 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         "executed_at": executed_at,
         "notes": notes,
         "transaction_id": transaction_id,
+        "native_transaction_id": raw_transaction_id.strip() if has_raw else None,
+        "_raw_row": dict(row),
         "exchange_rate": exchange_rate,
         "fees": fees,
         "merchant_name": merchant_name,
