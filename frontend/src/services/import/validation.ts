@@ -74,16 +74,16 @@ export function isFieldRequiredForOpType(fieldKey: string, opType: string): bool
 
   const reqMap: Record<string, string[]> = {
     trade: ['ticker', 'quantity', 'unit_price', 'trade_side'],
-    dividend: ['ticker', 'unit_price'],
+    dividend: [],
     stock_split: ['ticker', 'quantity'],
     fx_rate_change: ['source_currency', 'target_currency', 'exchange_rate'],
     fee: ['fee_amount'],
     tax: ['tax_amount'],
     interest: ['interest_type'],
-    transfer_in: ['source_reference'],
-    transfer_out: ['destination_reference'],
-    expense: ['merchant_name'],
-    revenue: ['merchant_name'],
+    transfer_in: [],
+    transfer_out: [],
+    expense: [],
+    revenue: [],
   };
   return (reqMap[opType] || []).includes(fieldKey);
 }
@@ -210,7 +210,9 @@ export function validateLiveStats(params: {
       if (field.key === 'name') {
         const val = rawValue ? rawValue.trim() : '';
         const enrichOption = mappingConf?.enrichAssetNames || 'when_empty';
-        const isEnrichingAssetNames = enrichOption === 'always' || (enrichOption === 'when_empty' && !val);
+        const dbOpType = params.operationTypeMappings[trimmedRaw] || 'unknown';
+        const isCashOp = ['interest', 'transfer_in', 'transfer_out', 'expense', 'revenue'].includes(dbOpType);
+        const isEnrichingAssetNames = !isCashOp && (enrichOption === 'always' || (enrichOption === 'when_empty' && !val));
         if (isEnrichingAssetNames) {
           const tickerCol = fieldMap['ticker']?.colIdx ?? -1;
           const ticker = tickerCol !== -1 && tickerCol < row.length ? row[tickerCol]?.trim() : '';

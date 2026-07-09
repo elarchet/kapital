@@ -59,13 +59,19 @@ IMPORT_METADATA = {
         },
         {
             "key": "quantity",
-            "label": "Quantity",
+            "label": "Quantity / Number of Shares",
             "is_required": False,
             "type": "numeric",
         },
         {
             "key": "unit_price",
             "label": "Price Per Share",
+            "is_required": False,
+            "type": "numeric",
+        },
+        {
+            "key": "dividend_per_share",
+            "label": "Dividend Per Share",
             "is_required": False,
             "type": "numeric",
         },
@@ -86,6 +92,18 @@ IMPORT_METADATA = {
             "label": "Exchange Rate",
             "is_required": False,
             "type": "numeric",
+        },
+        {
+            "key": "source_currency",
+            "label": "Source Currency",
+            "is_required": False,
+            "type": "string",
+        },
+        {
+            "key": "target_currency",
+            "label": "Target Currency",
+            "is_required": False,
+            "type": "string",
         },
         # -- Trade-specific fields --
         {
@@ -153,6 +171,12 @@ IMPORT_METADATA = {
             "type": "string",
         },
         {
+            "key": "fee_category",
+            "label": "Fee Category",
+            "is_required": False,
+            "type": "string",
+        },
+        {
             "key": "fee_type",
             "label": "Fee Type",
             "is_required": False,
@@ -168,6 +192,12 @@ IMPORT_METADATA = {
         {
             "key": "tax_currency",
             "label": "Tax Currency",
+            "is_required": False,
+            "type": "string",
+        },
+        {
+            "key": "tax_category",
+            "label": "Tax Category",
             "is_required": False,
             "type": "string",
         },
@@ -270,6 +300,18 @@ IMPORT_METADATA = {
             "is_required": False,
             "type": "enum",
             "enum_values": ["close", "open", "combined"],
+        },
+        {
+            "key": "split_ratio",
+            "label": "Split Ratio",
+            "is_required": False,
+            "type": "numeric",
+        },
+        {
+            "key": "pre_split_quantity",
+            "label": "Pre-split Quantity",
+            "is_required": False,
+            "type": "numeric",
         },
     ],
 }

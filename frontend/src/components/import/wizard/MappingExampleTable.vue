@@ -269,7 +269,7 @@ const cellInfoMap = computed(() => {
     <!-- Single unified scrollable table — header and body never desync -->
     <div
       ref="tableWrapperRef"
-      style="width: 100%; overflow-x: auto; margin-bottom: 0.5rem; position: relative; scroll-snap-type: x mandatory; overscroll-behavior-x: none;"
+      style="width: 100%; overflow-x: auto; margin-bottom: 0.5rem; position: relative; overscroll-behavior-x: none;"
     >
       <table
         class="preview-table preview-table-double-sticky"
@@ -286,8 +286,7 @@ const cellInfoMap = computed(() => {
                 transform: `translateY(${stickyTranslateY}px)`, backgroundColor: 'var(--bg-tertiary)', boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
                 minWidth: rawActionWidth + 'px', maxWidth: rawActionWidth + 'px', width: rawActionWidth + 'px',
                 padding: '0.2rem 0.35rem', fontWeight: 700, color: 'var(--text-secondary)',
-                textAlign: 'center', boxSizing: 'border-box', position: 'relative',
-                scrollSnapAlign: 'start'
+                textAlign: 'center', boxSizing: 'border-box', position: 'relative'
               }"
             >
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; position: relative;">
@@ -329,8 +328,7 @@ const cellInfoMap = computed(() => {
                 minWidth: dbTypeWidth + 'px', maxWidth: dbTypeWidth + 'px', width: dbTypeWidth + 'px',
                 padding: '0.2rem 0.35rem', fontWeight: 700, color: 'var(--text-secondary)',
                 textAlign: 'center', boxSizing: 'border-box', position: 'relative',
-                left: rawActionWidth + 'px',
-                scrollSnapAlign: 'start'
+                left: rawActionWidth + 'px'
               }"
             >
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.25rem; position: relative;">
@@ -372,8 +370,7 @@ const cellInfoMap = computed(() => {
                 transform: `translateY(${stickyTranslateY}px)`, backgroundColor: 'var(--bg-tertiary)', boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
                 minWidth: (col.width || 180) + 'px', maxWidth: (col.width || 180) + 'px',
                 width: (col.width || 180) + 'px', padding: '0.2rem 0.35rem',
-                verticalAlign: 'top', boxSizing: 'border-box', position: 'relative',
-                scrollSnapAlign: 'start'
+                verticalAlign: 'top', boxSizing: 'border-box', position: 'relative'
               }"
               class="group select-none"
             >
