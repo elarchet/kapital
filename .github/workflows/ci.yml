@@ -68,6 +68,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: 'latest'
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
 
       - name: Install dependencies
         run: uv sync --frozen --directory backend
@@ -141,6 +143,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: 'latest'
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
 
       - name: Install Backend dependencies
         run: uv sync --frozen --directory backend
@@ -175,6 +179,19 @@ jobs:
           JWT_SECRET_KEY: test_secret_key_for_playwright_e2e_runs
         run: |
           npx playwright test
+
+      # Traces, error-context snapshots and the HTML report are the only way to
+      # debug an e2e failure that doesn't reproduce locally.
+      - name: Upload Playwright artifacts
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-artifacts
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   build-release-images:
     name: Build & Push Release Images
