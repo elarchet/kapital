@@ -26,10 +26,28 @@ export function useFieldConfigModal(show: Ref<boolean>, ctx: Ref<FieldConfigCont
   const transformationValue = ref<number | null>(null);
   const enumMappings = ref<Record<string, string>>({});
   const dateFormat = ref('auto');
-  const enrichAssetNames = ref<EnrichMode>('never');
+  // 'when_empty' matches the backend's enrichment default and the template
+  // parser (config.ts), so the modal previews what an import would really do.
+  const enrichAssetNames = ref<EnrichMode>('when_empty');
   const autoTransactionId = ref<EnrichMode>('when_empty');
   const hashColumns = ref<string[]>([]);
   const tickerColumnPick = ref('');
+
+  // Serialized form state, captured when the modal opens, to detect unsaved edits.
+  const initialSnapshot = ref('');
+  const stateSnapshot = () => JSON.stringify({
+    mode: sourceMode.value,
+    formula: formula.value,
+    transformationType: transformationType.value,
+    transformationValue: transformationValue.value,
+    enums: enumMappings.value,
+    dateFormat: dateFormat.value,
+    enrich: enrichAssetNames.value,
+    autoId: autoTransactionId.value,
+    hash: hashColumns.value,
+    ticker: tickerColumnPick.value,
+  });
+  const isDirty = computed(() => initialSnapshot.value !== stateSnapshot());
 
   const field = computed(() => ctx.value?.field);
   const isName = computed(() => field.value?.key === 'name');
@@ -54,11 +72,12 @@ export function useFieldConfigModal(show: Ref<boolean>, ctx: Ref<FieldConfigCont
     ctx.value.uniqueCsvValues.forEach(v => { initialEnums[v] = initial?.enumMappings?.[v] || ''; });
     enumMappings.value = initialEnums;
     dateFormat.value = initial?.dateFormat || 'auto';
-    enrichAssetNames.value = initial?.enrichAssetNames || 'never';
+    enrichAssetNames.value = initial?.enrichAssetNames || 'when_empty';
     autoTransactionId.value = ctx.value.opTypeSettings?.autoTransactionId
       || initial?.enrichTransactionIds || 'when_empty';
     hashColumns.value = [...(ctx.value.opTypeSettings?.hashColumns || [])];
     tickerColumnPick.value = '';
+    initialSnapshot.value = stateSnapshot();
   }, { immediate: true });
 
   // --- Asset-name enrichment (live lookup, mirrors the import-time behavior) ---
@@ -158,5 +177,6 @@ export function useFieldConfigModal(show: Ref<boolean>, ctx: Ref<FieldConfigCont
     liveConversion,
     needsTickerPrompt,
     isSaveDisabled,
+    isDirty,
   };
 }

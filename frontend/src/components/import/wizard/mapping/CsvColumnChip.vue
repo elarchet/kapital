@@ -20,6 +20,7 @@ const emit = defineEmits<{
   <button
     type="button"
     draggable="true"
+    :data-testid="`csv-chip-${name}`"
     class="group flex items-center gap-1.5 py-1 px-2 rounded-md border text-left cursor-grab active:cursor-grabbing select-none transition-colors max-w-[180px]"
     :class="[
       armed

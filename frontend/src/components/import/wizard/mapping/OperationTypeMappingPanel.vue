@@ -63,6 +63,7 @@ const modelFor = (rawAction: string) => ({
       <div
         v-for="rawAction in uniqueOperationTypes"
         :key="rawAction"
+        :data-testid="`optype-row-${rawAction}`"
         class="grid grid-cols-[1fr_auto_1fr] gap-2 items-center"
       >
         <span

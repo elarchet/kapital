@@ -19,6 +19,7 @@ const emit = defineEmits<{
       v-for="opType in opTypes"
       :key="opType"
       type="button"
+      :data-testid="`optype-pill-${opType}`"
       class="flex items-center gap-1.5 py-1 px-2.5 rounded-full border text-[0.75rem] font-semibold transition-colors"
       :class="selected === opType
         ? 'border-accent bg-accent-light text-accent'

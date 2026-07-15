@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, toRef, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue';
 import { X, Sparkles, Hash } from '@lucide/vue';
 import DynamicComponent from '../../../DynamicComponent.vue';
+import DiscardChangesConfirmModal from '../../modals/DiscardChangesConfirmModal.vue';
 import NumericTransformations from '../NumericTransformations.vue';
 import EnumValueMapper from '../EnumValueMapper.vue';
 import DateFormatSelector from '../DateFormatSelector.vue';
@@ -55,17 +56,32 @@ const handleSave = () => {
   });
 };
 
+// Cancel/Escape/backdrop go through a dirty check before discarding edits.
+const showDiscardConfirm = ref(false);
+const requestClose = () => {
+  if (form.isDirty.value) showDiscardConfirm.value = true;
+  else emit('close');
+};
+const confirmDiscard = () => {
+  showDiscardConfirm.value = false;
+  emit('close');
+};
+
 // Capture-phase window listener: Escape closes this modal without bubbling to
 // the drawer's own Escape handler.
 const onKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
     e.stopPropagation();
-    emit('close');
+    if (showDiscardConfirm.value) showDiscardConfirm.value = false;
+    else requestClose();
   }
 };
 watch(() => props.show, (open) => {
   if (open) window.addEventListener('keydown', onKeydown, true);
-  else window.removeEventListener('keydown', onKeydown, true);
+  else {
+    window.removeEventListener('keydown', onKeydown, true);
+    showDiscardConfirm.value = false;
+  }
 });
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true));
 </script>
@@ -74,9 +90,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true));
   <div
     v-if="show && context"
     class="fixed inset-0 bg-slate-900/20 backdrop-blur-[2px] flex items-center justify-center z-[200]"
-    @click.self="emit('close')"
+    @click.self="requestClose"
   >
-    <div class="bg-bg-primary border border-border-color rounded-md shadow-xl w-[560px] max-w-[94vw] max-h-[88vh] flex flex-col">
+    <div data-testid="field-config-modal" class="bg-bg-primary border border-border-color rounded-md shadow-xl w-[560px] max-w-[94vw] max-h-[88vh] flex flex-col">
       <!-- Header -->
       <div class="flex items-center gap-2 py-2.5 px-4 border-b border-border-color">
         <span class="text-[0.9rem] font-bold">{{ context.field?.label }}</span>
@@ -84,7 +100,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true));
         <span v-if="context.mappedHeader" class="text-[0.72rem] font-mono bg-bg-tertiary border border-border-color rounded-sm py-0.5 px-1.5 truncate">
           {{ context.mappedHeader }}
         </span>
-        <button type="button" class="ml-auto p-1 rounded-sm text-text-secondary hover:text-text-primary" @click="emit('close')">
+        <button type="button" class="ml-auto p-1 rounded-sm text-text-secondary hover:text-text-primary" @click="requestClose">
           <X class="w-4 h-4" />
         </button>
       </div>
@@ -202,9 +218,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown, true));
       <div class="flex items-center gap-2 py-2.5 px-4 border-t border-border-color">
         <button type="button" class="btn btn-sm text-danger-color" @click="emit('clear')">Clear mapping</button>
         <div class="flex-1"></div>
-        <button type="button" class="btn btn-sm" @click="emit('close')">Cancel</button>
+        <button type="button" class="btn btn-sm" @click="requestClose">Cancel</button>
         <button type="button" class="btn btn-sm btn-primary" :disabled="form.isSaveDisabled.value" @click="handleSave">Save</button>
       </div>
     </div>
+
+    <DiscardChangesConfirmModal
+      :show="showDiscardConfirm"
+      message="You have unsaved changes to this field's configuration. Leaving now will discard them."
+      @cancel="showDiscardConfirm = false"
+      @confirm="confirmDiscard"
+    />
   </div>
 </template>

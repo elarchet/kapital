@@ -44,7 +44,8 @@ const onDrop = (e: DragEvent) => {
 
 <template>
   <div
-    class="rounded-md border transition-colors"
+    class="group/slot rounded-md border transition-colors"
+    :data-testid="`field-slot-${slotView?.field?.key}`"
     :class="[
       dragOver ? 'border-accent ring-2 ring-accent/30 bg-accent-light/60'
         : isMapped ? 'border-border-color bg-bg-primary'
@@ -100,9 +101,13 @@ const onDrop = (e: DragEvent) => {
           </div>
         </template>
         <template v-else>
-          <div class="flex items-center gap-1.5" @click.stop>
+          <div class="flex items-center gap-1.5">
             <span v-if="dropEnabled" class="text-[0.7rem] text-accent font-semibold">place here</span>
-            <div v-else class="flex items-center gap-1.5 min-w-0">
+            <!-- click.stop only around the dropdown: an armed "place here" click must reach the slot. -->
+            <div v-else class="flex items-center gap-1.5 min-w-0" @click.stop>
+              <!-- Hover/focus-only (opacity keeps it keyboard-focusable) to cut
+                   the visual noise of a dropdown on every empty slot. The
+                   auto-generated placeholder stays visible: it carries state. -->
               <DynamicComponent
                 componentKey="custom-dropdown"
                 modelValue=""
@@ -110,7 +115,8 @@ const onDrop = (e: DragEvent) => {
                 :searchable="true"
                 :placeholder="isTransactionId && autoIdEnabled ? 'auto-generated' : 'drop a column…'"
                 :compact="true"
-                class="min-w-[140px]"
+                class="min-w-[140px] transition-opacity"
+                :class="isTransactionId && autoIdEnabled ? '' : 'opacity-0 group-hover/slot:opacity-100 focus-within:opacity-100'"
                 @update:modelValue="(val: string) => val && emit('assign', val)"
               />
               <Hash v-if="isTransactionId && autoIdEnabled" class="w-3.5 h-3.5 text-accent shrink-0" title="Auto-generated ID enabled" />
