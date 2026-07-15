@@ -75,6 +75,6 @@ Before writing code or asking for commit approval, you MUST explicitly answer an
 4. **Decoupled API**: Is all logic decoupled (frontend is representation/interaction only, business/financial logic is in the backend)?
 5. **Database Efficiency**: Did you avoid loop-based database commits and N+1 queries for batch operations?
 6. **Subagent Delegation**: Did you delegate task segments to the appropriate subagents (e.g. `tester` for tests, `frontend_designer` for layout/styles, `architect_critic` for final code reviews)?
-7. **Commit & Push Compliance**: Did you explain your changes fully before asking for explicit user approval? Did you verify that you only commit after this approval, using the `git agent-commit` alias and Conventional Commits format, and that pushes target only feature branches (never `main`)?
+7. **Commit & Push Compliance**: Did you explain your changes fully before asking for explicit user approval? Did you verify that you only commit after this approval, using Conventional Commits format, and that pushes target only feature branches (never `main`)?
 8. **Stacked Branch Hygiene**: If the user is ready for the next feature, follow the `stacked-branches` skill — push current feature, scaffold next branch on top (not on main), and rebase onto main when the parent merges. The agent auto-detects whether to stack or branch from main by checking for pending feature branches after housekeeping.
 
