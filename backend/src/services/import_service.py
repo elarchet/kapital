@@ -66,7 +66,14 @@ def autodetect_schema(db: Session, headers: list[str], user_id: int) -> int | No
             columns = mapping_dict.get("columns", {})
             if not columns:
                 continue
-            mapped_headers = {str(val).strip().lower() for val in columns.values() if val}
+            # Column values are either a plain header (legacy) or a
+            # per-op-type dict of headers ({"trade": "Time", ...}).
+            mapped_headers: set[str] = set()
+            for val in columns.values():
+                if isinstance(val, dict):
+                    mapped_headers.update(str(h).strip().lower() for h in val.values() if h)
+                elif val:
+                    mapped_headers.add(str(val).strip().lower())
             matches = len(headers_set.intersection(mapped_headers))
             if matches >= 5 and matches > max_matches:  # noqa: PLR2004
                 max_matches = matches
