@@ -4,12 +4,11 @@ import hashlib
 from decimal import Decimal
 from typing import Any
 
+from src.services.import_formula import resolve_numeric_value
 from src.services.import_parsers import (
-    apply_transformation,
     get_date_format,
     get_mapped_col,
     parse_datetime_safe,
-    parse_decimal_safe,
     resolve_config_value,
 )
 from src.services.import_row_parser_helpers import (
@@ -73,6 +72,10 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
     transaction_id_col = get_mapped_col(columns, "transaction_id", op_type, csv_action)
     raw_transaction_id = row.get(transaction_id_col) if transaction_id_col else None
 
+    # User-selected subset of columns feeding both the auto ID and the dedup key.
+    hash_cols = resolve_config_value(schema_mappings.get("hash_columns"), None, op_type, csv_action)
+    hash_row = {k: v for k, v in row.items() if k in hash_cols} if hash_cols else dict(row)
+
     # Read the enrichment option
     enrich_opt = schema_mappings.get("enrich_transaction_ids")
     if enrich_opt is None:
@@ -85,10 +88,11 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
 
     has_raw = bool(raw_transaction_id and raw_transaction_id.strip())
 
-    should_generate = transaction_id_col and (opt == "always" or (opt == "when_empty" and not has_raw))
+    # No transaction_id column required: some brokers (e.g. Fortuneo) have none at all.
+    should_generate = opt == "always" or (opt == "when_empty" and not has_raw)
 
     if should_generate:
-        serialized = ",".join(f"{k}:{v}" for k, v in sorted(row.items()) if v is not None)
+        serialized = ",".join(f"{k}:{v}" for k, v in sorted(hash_row.items()) if v is not None)
         row_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
         transaction_id = f"auto-{row_hash}"
     elif has_raw:
@@ -104,23 +108,21 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
     date_fmt = get_date_format(date_formats, "executed_at", op_type, csv_action)
     executed_at = parse_datetime_safe(executed_at_str, date_fmt)
 
-    quantity = parse_decimal_safe(
-        row.get(get_mapped_col(columns, "quantity", op_type, csv_action)),
-        decimal_separator,
-    )
-    quantity = apply_transformation(transformations, "quantity", quantity, op_type, csv_action)
+    def _numeric(db_key: str) -> Decimal | None:
+        return resolve_numeric_value(
+            db_key,
+            row,
+            columns=columns,
+            schema_mappings=schema_mappings,
+            transformations=transformations,
+            decimal_separator=decimal_separator,
+            op_type=op_type,
+            csv_action=csv_action,
+        )
 
-    unit_price = parse_decimal_safe(
-        row.get(get_mapped_col(columns, "unit_price", op_type, csv_action)),
-        decimal_separator,
-    )
-    unit_price = apply_transformation(transformations, "unit_price", unit_price, op_type, csv_action)
-
-    total_amount = parse_decimal_safe(
-        row.get(get_mapped_col(columns, "total_amount", op_type, csv_action)),
-        decimal_separator,
-    )
-    total_amount = apply_transformation(transformations, "total_amount", total_amount, op_type, csv_action)
+    quantity = _numeric("quantity")
+    unit_price = _numeric("unit_price")
+    total_amount = _numeric("total_amount")
     if total_amount is None:
         total_amount = Decimal(0)
 
@@ -138,10 +140,7 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         if currency == "GBX":
             currency = "GBP"
 
-    exchange_rate = parse_decimal_safe(
-        row.get(get_mapped_col(columns, "exchange_rate", op_type, csv_action)),
-        decimal_separator,
-    )
+    exchange_rate = _numeric("exchange_rate")
 
     # Call external helper for fees and taxes
     fees = resolve_fees_and_taxes(
@@ -239,6 +238,7 @@ def parse_csv_row(  # noqa: C901, PLR0912, PLR0915
         "transaction_id": transaction_id,
         "native_transaction_id": raw_transaction_id.strip() if has_raw else None,
         "_raw_row": dict(row),
+        "_hash_row": hash_row,
         "exchange_rate": exchange_rate,
         "fees": fees,
         "merchant_name": merchant_name,

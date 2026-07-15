@@ -199,7 +199,11 @@ async def import_portfolio_transactions(
             mappings = {**profile.mappings, **mappings}
     account = _resolve_account(db, mappings, institution_key)
 
-    decoded = file_content.decode("utf-8-sig")
+    try:
+        decoded = file_content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        # Some broker exports (e.g. Fortuneo) ship Latin-1 instead of UTF-8.
+        decoded = file_content.decode("latin-1")
     parsed_operations = _parse_rows(decoded, delimiter, mappings, decimal_separator)
     parsed_operations.sort(key=lambda o: o["executed_at"])
     processed_ops = combine_stock_splits(parsed_operations)
@@ -223,8 +227,9 @@ async def import_portfolio_transactions(
         for op_info in processed_ops:
             raw_row = op_info.get("_raw_row") or {}
             try:
+                # _hash_row is the user-selected column subset (falls back to the full row).
                 dedup_key, is_native = compute_dedup_key(
-                    raw_row,
+                    op_info.get("_hash_row") or raw_row,
                     scope=scope,
                     native_id=op_info.get("native_transaction_id"),
                 )
