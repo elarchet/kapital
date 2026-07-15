@@ -7,7 +7,7 @@ from typing import cast
 import pytest
 from sqlmodel import select
 
-from src.models import Operation, Portfolio, Position, User
+from src.models import Allocation, Portfolio, Position, RawTransaction, User
 from src.models.import_file_schema import ImportFileSchema
 from src.services.import_service import import_portfolio_transactions
 from tests.factories import (
@@ -121,8 +121,8 @@ async def test_import_with_custom_date_format(session):
         },
     )
 
-    assert summary["operations_imported"] == 1
-    op = session.exec(select(Operation)).first()
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
     assert op is not None
     assert op.executed_at.year == 2026
     assert op.executed_at.month == 6
@@ -245,8 +245,8 @@ async def test_import_dividend_without_price_per_share(session):
         },
     )
 
-    assert summary["operations_imported"] == 1
-    op = session.exec(select(Operation).where(Operation.operation_type == "dividend")).first()
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction).where(RawTransaction.operation_type == "dividend")).first()
     assert op is not None
     assert op.dividend_per_share == Decimal("0.0")
 
@@ -303,20 +303,27 @@ async def test_import_without_transaction_id(session):
 
     # Verification:
     # - 2 Positions created (NewAsset stock position + USD cash position)
-    # - 2 Operations imported (the first and third row)
-    # - 1 Operation skipped (the second duplicate row)
+    # - 2 RawTransactions imported (the first and third row)
+    # - 1 duplicate skipped (the second duplicate row)
     assert summary["positions_created"] == 2
-    assert summary["operations_imported"] == 2
-    assert summary["operations_skipped"] == 1
+    assert summary["raw_transactions_imported"] == 2
+    assert summary["skipped_duplicates"] == 1
 
-    # Verify positions and operations in database
-    pos = session.exec(select(Position).where(Position.portfolio_id == portfolio.id)).first()
+    # Verify the asset position balance in the database
+    pos = session.exec(
+        select(Position).where(Position.portfolio_id == portfolio.id, Position.name == "NewAsset"),
+    ).first()
     assert pos is not None
-    assert pos.name == "NewAsset"
     assert pos.quantity == Decimal("20.0")  # 10 + 10
 
-    ops = session.exec(select(Operation).where(Operation.position_id == pos.id)).all()
-    assert len(ops) == 2
+    # RawTransactions carry no position_id; they are queried by their asset fields
+    # and traced to the position through their default allocations.
+    txns = session.exec(select(RawTransaction).where(RawTransaction.name == "NewAsset")).all()
+    assert len(txns) == 2
+
+    allocations = session.exec(select(Allocation).where(Allocation.position_id == pos.id)).all()
+    assert len(allocations) == 2
+    assert all(a.raw_transaction.name == "NewAsset" for a in allocations)
 
 
 @pytest.mark.asyncio
@@ -370,7 +377,7 @@ async def test_import_stock_split_schema_driven(session):
         },
     )
 
-    assert summary["operations_imported"] == 2  # 1 buy trade, 1 combined stock split
+    assert summary["raw_transactions_imported"] == 2  # 1 buy trade, 1 combined stock split
     pos = session.exec(
         select(Position).where(Position.portfolio_id == portfolio.id, Position.ticker == "NVDA"),
     ).first()
@@ -378,11 +385,265 @@ async def test_import_stock_split_schema_driven(session):
     # 10 shares bought, then split 1 to 10 (+90 shares). Net = 100.0 shares.
     assert pos.quantity == Decimal("100.0")
 
-    # Verify StockSplitOperation details
+    # Verify the combined stock split RawTransaction details
     split_op = session.exec(
-        select(Operation).where(Operation.position_id == pos.id, Operation.operation_type == "stock_split"),
+        select(RawTransaction).where(
+            RawTransaction.operation_type == "stock_split",
+            RawTransaction.ticker == "NVDA",
+        ),
     ).first()
     assert split_op is not None
     assert split_op.split_ratio == Decimal("10.0")
     assert split_op.pre_split_quantity == Decimal("10.0")
     assert split_op.quantity == Decimal("90.0")  # net delta shares added
+
+
+@pytest.mark.asyncio
+async def test_import_with_formula_total_amount(session):
+    """total_amount computed as Qty * Price with no direct column mapping (Fortuneo case)."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "ticker": "Ticker",
+            "currency": "Currency",
+            "quantity": "Qty",
+            "unit_price": "Price",
+        },
+        "type_mappings": {"buy": ["BUY"]},
+        "formulas": {
+            "total_amount": {"trade": [{"col": "Qty"}, {"op": "*"}, {"col": "Price"}]},
+        },
+    }
+    csv_content = b"Type,Date,Asset,Ticker,Qty,Price,Currency\nBUY,2026-06-01 15:30:00,Apple,AAPL,10,150.5,USD\n"
+
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
+    assert op is not None
+    assert op.total_amount == Decimal("1505.0")
+
+
+@pytest.mark.asyncio
+async def test_import_with_fee_sum_formula(session):
+    """fee_amount summed across several fee columns, blanks counting as zero (T212 case)."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "ticker": "Ticker",
+            "currency": "Currency",
+            "quantity": "Qty",
+            "unit_price": "Price",
+            "total_amount": "Total",
+        },
+        "type_mappings": {"buy": ["BUY"]},
+        "formulas": {
+            "fee_amount": [{"col": "FeeA"}, {"op": "+"}, {"col": "FeeB"}, {"op": "+"}, {"col": "FeeC"}],
+        },
+    }
+    csv_content = (
+        b"Type,Date,Asset,Ticker,Qty,Price,Total,Currency,FeeA,FeeB,FeeC\n"
+        b"BUY,2026-06-01 15:30:00,Apple,AAPL,10,150.5,1505.0,USD,0.11,,0.25\n"
+    )
+
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
+    assert op is not None
+    assert len(op.fees) == 1
+    assert op.fees[0].amount == Decimal("0.36")
+
+
+@pytest.mark.asyncio
+async def test_auto_id_without_transaction_id_column(session):
+    """Brokers without any transaction-id column (Fortuneo) still get auto-generated IDs."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "total_amount": "Total",
+            "currency": "Currency",
+            "quantity": "Qty",
+        },
+        "type_mappings": {"buy": ["BUY"]},
+        "enrich_transaction_ids": "when_empty",
+    }
+    csv_content = b"Type,Date,Asset,Total,Currency,Qty\nBUY,2026-06-01 15:30:00,Apple,150.0,USD,10\n"
+
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
+    assert op is not None
+    assert op.is_auto_id is True
+    assert op.dedup_key.startswith("auto-")
+
+
+@pytest.mark.asyncio
+async def test_hash_columns_subset_stabilizes_dedup(session):
+    """Changing a column excluded from hash_columns must not create a new transaction."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "total_amount": "Total",
+            "currency": "Currency",
+            "quantity": "Qty",
+        },
+        "type_mappings": {"buy": ["BUY"]},
+        "hash_columns": ["Type", "Date", "Asset", "Qty"],
+    }
+    config = {
+        "mappings": custom_mappings,
+        "delimiter": ",",
+        "decimal_separator": ".",
+    }
+    csv_v1 = b"Type,Date,Asset,Total,Currency,Qty\nBUY,2026-06-01 15:30:00,Apple,150.0,USD,10\n"
+    # Same row, but the excluded 'Total' column changed.
+    csv_v2 = b"Type,Date,Asset,Total,Currency,Qty\nBUY,2026-06-01 15:30:00,Apple,999.0,USD,10\n"
+
+    summary1 = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_v1,
+        custom_schema_config=config,
+    )
+    summary2 = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_v2,
+        custom_schema_config=config,
+    )
+
+    assert summary1["raw_transactions_imported"] == 1
+    assert summary2["raw_transactions_imported"] == 0
+    assert summary2["skipped_duplicates"] == 1
+
+
+@pytest.mark.asyncio
+async def test_hash_columns_too_sparse_row_skipped(session):
+    """A hash subset yielding <2 meaningful fields is rejected as invalid, not imported."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "total_amount": "Total",
+            "currency": "Currency",
+        },
+        "type_mappings": {"buy": ["BUY"]},
+        "hash_columns": ["Empty1", "Empty2"],
+    }
+    csv_content = b"Type,Date,Asset,Total,Currency,Empty1,Empty2\nBUY,2026-06-01 15:30:00,Apple,150.0,USD,,\n"
+
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["raw_transactions_imported"] == 0
+    assert summary["skipped_invalid"] == 1
+
+
+@pytest.mark.asyncio
+async def test_latin1_file_decodes(session):
+    """Latin-1 exports (Fortuneo) must not crash the utf-8 decode path."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "libellé",
+            "total_amount": "Total",
+            "currency": "Currency",
+        },
+        "type_mappings": {"buy": ["Achat Comptant"]},
+    }
+    csv_text = "Type,Date,libellé,Total,Currency\nAchat Comptant,2026-06-01 15:30:00,Société Générale,150.0,EUR\n"
+    csv_content = csv_text.encode("latin-1")
+
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
+    assert op is not None
+    assert op.name == "Société Générale"

@@ -46,6 +46,8 @@ def create_import_file_schema(
         decimal_separator=schema_in.decimal_separator,
         mappings=schema_in.mappings,
         is_incomplete=schema_in.is_incomplete,
+        institution_key=schema_in.institution_key,
+        institution_id=schema_in.institution_id,
         user_id=current_user.id,
     )
     db.add(db_obj)

@@ -22,4 +22,4 @@ class FeeRead(FeeBase):
     model_config = ConfigDict(strict=True, from_attributes=True)
 
     id: int
-    operation_id: int
+    raw_transaction_id: int

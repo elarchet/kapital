@@ -10,7 +10,8 @@ import polars as pl
 from sqlmodel import select
 
 from src.logic.split_adjustment import compute_cost_basis
-from src.models.operation import Operation, StockSplitOperation
+from src.models.allocation import Allocation
+from src.models.raw_transaction import RawTransaction
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -42,20 +43,18 @@ class CostBasisResult:
 def get_position_cost_basis(db: Session, position_id: int) -> CostBasisResult:
     """Compute split-adjusted cost basis for a position.
 
-    Fetches all operations for the position, builds a Polars DataFrame,
-    and delegates math to the pure ``compute_cost_basis()`` logic function.
-
-    Design note (tax-forward):
-        The underlying ``compute_split_adjusted_operations()`` returns one row
-        per trade with its ``split_factor``. A future FIFO tax-lot service can
-        consume that adjusted DataFrame directly to match disposals against
-        acquisition lots in chronological order.
+    Fetches every allocation routed to the position joined to its parent raw
+    transaction (allocated ``quantity``/``amount`` come from the allocation;
+    financial attributes come from the raw transaction), builds a Polars
+    DataFrame, and delegates the math to ``compute_cost_basis()``.
     """
-    ops = db.exec(
-        select(Operation).where(Operation.position_id == position_id),
+    rows_db = db.exec(
+        select(Allocation, RawTransaction)
+        .join(RawTransaction, Allocation.raw_transaction_id == RawTransaction.id)  # type: ignore[arg-type]
+        .where(Allocation.position_id == position_id, Allocation.is_active),
     ).all()
 
-    if not ops:
+    if not rows_db:
         return CostBasisResult(
             position_id=position_id,
             avg_cost_basis=Decimal(0),
@@ -64,20 +63,18 @@ def get_position_cost_basis(db: Session, position_id: int) -> CostBasisResult:
             split_events=[],
         )
 
-    # Build Polars DataFrame from ORM objects (no N+1 — single query above)
+    # Build Polars DataFrame from (Allocation, RawTransaction) pairs — single query.
     rows = [
         {
-            "operation_type": op.operation_type,
-            "trade_side": str(op.trade_side) if op.trade_side else None,
-            "executed_at": op.executed_at,
-            "quantity": float(op.quantity) if op.quantity is not None else None,
-            "unit_price": float(op.unit_price) if op.unit_price is not None else None,
-            "total_amount": float(op.total_amount),
-            "split_ratio": float(getattr(op, "split_ratio", None) or 1.0)
-            if op.operation_type == "stock_split"
-            else None,
+            "operation_type": raw.operation_type,
+            "trade_side": str(raw.trade_side) if raw.trade_side else None,
+            "executed_at": raw.executed_at,
+            "quantity": float(alloc.quantity) if alloc.quantity is not None else None,
+            "unit_price": float(raw.unit_price) if raw.unit_price is not None else None,
+            "total_amount": float(alloc.amount),
+            "split_ratio": float(raw.split_ratio or 1.0) if raw.operation_type == "stock_split" else None,
         }
-        for op in ops
+        for alloc, raw in rows_db
     ]
 
     ops_df = pl.DataFrame(rows).with_columns(
@@ -94,14 +91,14 @@ def get_position_cost_basis(db: Session, position_id: int) -> CostBasisResult:
 
     # Collect split events for audit display
     split_events: list[SplitEvent] = []
-    for op in ops:
-        if isinstance(op, StockSplitOperation) and op.split_ratio:
-            pre_qty = getattr(op, "pre_split_quantity", None)
-            post_qty = pre_qty * op.split_ratio if pre_qty and op.split_ratio else None
+    for _alloc, raw in rows_db:
+        if raw.operation_type == "stock_split" and raw.split_ratio:
+            pre_qty = raw.pre_split_quantity
+            post_qty = pre_qty * raw.split_ratio if pre_qty and raw.split_ratio else None
             split_events.append(
                 SplitEvent(
-                    executed_at=op.executed_at,
-                    split_ratio=op.split_ratio,
+                    executed_at=raw.executed_at,
+                    split_ratio=raw.split_ratio,
                     pre_split_quantity=pre_qty,
                     post_split_quantity=post_qty,
                 ),

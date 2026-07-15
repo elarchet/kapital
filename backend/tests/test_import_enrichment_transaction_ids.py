@@ -6,11 +6,11 @@ import pytest
 from sqlmodel import select
 
 from src.models import (
-    Operation,
     Portfolio,
+    RawTransaction,
     User,
 )
-from src.schemas.operation import OperationRead
+from src.schemas.raw_transaction import RawTransactionRead
 from src.services.import_service import import_portfolio_transactions
 from tests.factories import (
     PortfolioFactory,
@@ -62,14 +62,16 @@ async def test_import_generates_auto_transaction_id(session):
         },
     )
 
-    assert summary["operations_imported"] == 1
-    op = session.exec(select(Operation)).first()
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
     assert op is not None
 
-    assert op.transaction_id is not None
-    assert op.transaction_id.startswith("auto-")
+    # Native id column was empty, so an auto dedup key is generated.
+    assert op.native_transaction_id is None
+    assert op.is_auto_id is True
+    assert op.dedup_key.startswith("auto-")
 
-    op_read = OperationRead.model_validate(op)
+    op_read = RawTransactionRead.model_validate(op)
     assert op_read.is_transaction_id_auto_generated is True
 
 
@@ -119,8 +121,8 @@ async def test_import_distinct_tx_with_same_values_and_different_ids(session):
         },
     )
 
-    assert summary["operations_imported"] == 2
-    assert summary["operations_skipped"] == 0
+    assert summary["raw_transactions_imported"] == 2
+    assert summary["skipped_duplicates"] == 0
 
 
 @pytest.mark.asyncio
@@ -167,10 +169,11 @@ async def test_import_with_generate_auto_ids_disabled(session):
         },
     )
 
-    assert summary["operations_imported"] == 1
-    op = session.exec(select(Operation)).first()
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
     assert op is not None
-    assert op.transaction_id is None
+    # Auto-id generation is disabled, so no source id is captured for the row.
+    assert op.native_transaction_id is None
 
 
 @pytest.mark.asyncio
@@ -218,11 +221,12 @@ async def test_import_with_enrich_transaction_ids_always(session):
         },
     )
 
-    assert summary["operations_imported"] == 1
-    op = session.exec(select(Operation)).first()
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
     assert op is not None
-    assert op.transaction_id is not None
-    assert op.transaction_id.startswith("auto-")
+    # A native id is present, so it is preserved verbatim as the dedup key.
+    assert op.native_transaction_id == "TX-123"
+    assert op.is_auto_id is False
 
 
 @pytest.mark.asyncio
@@ -272,9 +276,11 @@ async def test_import_with_enrich_transaction_ids_when_empty(session):
         },
     )
 
-    assert summary["operations_imported"] == 2
-    ops = session.exec(select(Operation).order_by(Operation.executed_at)).all()
+    assert summary["raw_transactions_imported"] == 2
+    ops = session.exec(select(RawTransaction).order_by(RawTransaction.executed_at)).all()
     assert len(ops) == 2
-    assert ops[0].transaction_id == "TX-123"
-    assert ops[1].transaction_id is not None
-    assert ops[1].transaction_id.startswith("auto-")
+    assert ops[0].native_transaction_id == "TX-123"
+    assert ops[0].is_auto_id is False
+    assert ops[1].native_transaction_id is None
+    assert ops[1].is_auto_id is True
+    assert ops[1].dedup_key.startswith("auto-")

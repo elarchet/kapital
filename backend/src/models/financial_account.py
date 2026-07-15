@@ -8,7 +8,7 @@ from src.models.base import SoftDeleteMixin, TimestampMixin
 
 if TYPE_CHECKING:
     from src.models.institution import Institution
-    from src.models.operation import Operation
+    from src.models.raw_transaction import RawTransaction
 
 
 class FinancialAccount(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
@@ -30,7 +30,4 @@ class FinancialAccount(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
 
     # -- relationships ---------------------------------------------------------
     institution: "Institution" = Relationship(back_populates="financial_accounts")
-    operations: list["Operation"] = Relationship(
-        back_populates="financial_account",
-        sa_relationship_kwargs={"foreign_keys": "[Operation.financial_account_id]"},
-    )
+    raw_transactions: list["RawTransaction"] = Relationship(back_populates="financial_account")

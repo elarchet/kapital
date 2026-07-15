@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from src.schemas.allocation import (
+    AllocationLine,
+    AllocationRead,
+    AllocationSplitRequest,
+)
 from src.schemas.fee import (
     FeeCreate,
     FeeRead,
@@ -19,11 +24,6 @@ from src.schemas.institution import (
     InstitutionRead,
     InstitutionUpdate,
 )
-from src.schemas.operation import (
-    OperationCreate,
-    OperationRead,
-    OperationUpdate,
-)
 from src.schemas.portfolio import (
     PortfolioCreate,
     PortfolioRead,
@@ -34,6 +34,11 @@ from src.schemas.position import (
     PositionRead,
     PositionUpdate,
 )
+from src.schemas.raw_transaction import (
+    RawTransactionBase,
+    RawTransactionCreate,
+    RawTransactionRead,
+)
 from src.schemas.user import (
     ThemeUpdate,
     UserCreate,
@@ -43,6 +48,9 @@ from src.schemas.user import (
 )
 
 __all__ = [
+    "AllocationLine",
+    "AllocationRead",
+    "AllocationSplitRequest",
     "FeeCreate",
     "FeeRead",
     "FinancialAccountCreate",
@@ -54,15 +62,15 @@ __all__ = [
     "InstitutionCreate",
     "InstitutionRead",
     "InstitutionUpdate",
-    "OperationCreate",
-    "OperationRead",
-    "OperationUpdate",
     "PortfolioCreate",
     "PortfolioRead",
     "PortfolioUpdate",
     "PositionCreate",
     "PositionRead",
     "PositionUpdate",
+    "RawTransactionBase",
+    "RawTransactionCreate",
+    "RawTransactionRead",
     "ThemeUpdate",
     "UserCreate",
     "UserPreferencesRead",

@@ -1,11 +1,37 @@
+export type FormulaToken =
+  | { col: string }
+  | { num: string }
+  | { op: '+' | '-' | '*' | '/' }
+  | { paren: '(' | ')' };
+
+export type EnrichMode = 'never' | 'when_empty' | 'always';
+
 export interface ColMapping {
   dbKey: string;
   divisor?: number;
   multiplier?: number;
   enumMappings?: Record<string, string>;
   dateFormat?: string;
-  enrichAssetNames?: 'never' | 'when_empty' | 'always';
-  enrichTransactionIds?: 'never' | 'when_empty' | 'always';
+  formula?: FormulaToken[];
+  enrichAssetNames?: EnrichMode;
+  enrichTransactionIds?: EnrichMode;
+}
+
+// Per-op-type settings that don't hang off a column mapping: some brokers have
+// no transaction-id column at all, yet still need auto-generated IDs.
+export interface OpTypeSettings {
+  autoTransactionId?: EnrichMode;
+  hashColumns?: string[];
+}
+
+export interface ImportField {
+  key: string;
+  label: string;
+  is_required: boolean;
+  type: 'string' | 'numeric' | 'datetime' | 'enum';
+  enum_values?: string[];
+  op_types?: string[];
+  required_for?: string[];
 }
 
 export interface RowError {

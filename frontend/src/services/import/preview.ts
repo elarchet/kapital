@@ -1,26 +1,26 @@
 import type { ColMapping } from './types';
 import { getMappedColIdxForField, getColumnConfigForField } from './validation';
+import { evaluateFormulaTokens, parseNumericCell } from './formula';
 
 export function parsePreviewRows(params: {
-  fileText: string;
-  importDelimiter: string;
+  allRawRows: string[][];
   importDecimalSep: string;
   operationTypeColumnIdx: number | null;
   operationTypeMappings: Record<string, string>;
   columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
-  uiColumns: Array<{ id: string; colIdx: number }>;
+  uiColumns: Array<{ id: string; colIdx: number; name?: string }>;
   importFields: any[];
 }) {
-  if (!params.fileText || !params.importDelimiter || params.operationTypeColumnIdx === null) return [];
+  if (!params.allRawRows?.length || params.operationTypeColumnIdx === null) return [];
 
-  const lines = params.fileText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  if (lines.length <= 1) return [];
-
-
-  const previewLines = lines.slice(1, 6);
-  return previewLines.map(line => {
-    const cells = line.split(params.importDelimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
+  const previewRows = params.allRawRows.slice(0, 5);
+  return previewRows.map(cells => {
     const getVal = (idx: number) => (idx >= 0 && idx < cells.length ? cells[idx] : '');
+
+    const rowByHeader: Record<string, string> = {};
+    params.uiColumns.forEach(col => {
+      if (col?.name !== undefined) rowByHeader[col.name] = getVal(col.colIdx);
+    });
 
     const rawAction = getVal(params.operationTypeColumnIdx!).trim();
     const opType = params.operationTypeMappings[rawAction] || 'unknown';
@@ -31,16 +31,25 @@ export function parsePreviewRows(params: {
     };
 
     const applyTrans = (dbKey: string, rawVal: string) => {
-      let num = parseFloat(rawVal.replace(params.importDecimalSep === '.' ? ',' : '.', '').replace(params.importDecimalSep, '.'));
-      if (isNaN(num)) return rawVal;
-
-      const idx = getMappedColIdxForField(dbKey, rawAction, opType, params.columnConfigMap, params.uiColumns);
-      if (idx !== -1) {
-        const conf = getColumnConfigForField(params.columnConfigMap, dbKey, rawAction, opType);
-        if (conf?.divisor) num /= conf.divisor;
-        if (conf?.multiplier) num *= conf.multiplier;
+      const conf = getColumnConfigForField(params.columnConfigMap, dbKey, rawAction, opType);
+      let num: number | null;
+      if (conf?.formula?.length) {
+        num = evaluateFormulaTokens(conf.formula, rowByHeader, params.importDecimalSep);
+      } else {
+        num = parseNumericCell(rawVal, params.importDecimalSep);
       }
+      if (num === null) return rawVal;
+      if (conf?.divisor) num /= conf.divisor;
+      if (conf?.multiplier) num *= conf.multiplier;
       return num.toString();
+    };
+
+    // Formula-mapped fields have a value even when no direct column is mapped.
+    const getNumericVal = (dbKey: string): string => {
+      const conf = getColumnConfigForField(params.columnConfigMap, dbKey, rawAction, opType);
+      const rawVal = getMappedVal(dbKey);
+      if (!conf?.formula?.length && !rawVal) return '';
+      return applyTrans(dbKey, rawVal);
     };
 
     const ticker = getMappedVal('ticker');
@@ -55,18 +64,15 @@ export function parsePreviewRows(params: {
     const rawTotal = getMappedVal('total_amount');
     const rawCurrency = getMappedVal('currency');
 
-    let parsedPrice = rawPrice;
-    if (rawPrice) parsedPrice = applyTrans('unit_price', rawPrice);
-    let parsedTotal = rawTotal;
-    if (rawTotal) parsedTotal = applyTrans('total_amount', rawTotal);
+    const parsedPrice = getNumericVal('unit_price') || rawPrice;
+    const parsedTotal = getNumericVal('total_amount') || rawTotal;
 
     const displayCurrency = rawCurrency || 'EUR';
     const displayPriceCurrency = rawPriceCurrency || displayCurrency;
 
     const feesList: string[] = [];
-    const feeAmtVal = getMappedVal('fee_amount');
-    if (feeAmtVal && parseFloat(feeAmtVal) > 0) {
-      const parsedFee = applyTrans('fee_amount', feeAmtVal);
+    const parsedFee = getNumericVal('fee_amount');
+    if (parsedFee && parseFloat(parsedFee) > 0) {
       const rawFeeType = getMappedVal('fee_type');
       let resolvedFeeType = 'conversion';
       if (rawFeeType) {
@@ -79,9 +85,8 @@ export function parsePreviewRows(params: {
       feesList.push(`${parsedFee} ${getMappedVal('fee_currency') || displayCurrency} (${resolvedFeeType})`);
     }
 
-    const taxAmtVal = getMappedVal('tax_amount');
-    if (taxAmtVal && parseFloat(taxAmtVal) > 0) {
-      const parsedTax = applyTrans('tax_amount', taxAmtVal);
+    const parsedTax = getNumericVal('tax_amount');
+    if (parsedTax && parseFloat(parsedTax) > 0) {
       feesList.push(`${parsedTax} ${getMappedVal('tax_currency') || displayCurrency} (tax)`);
     }
 
@@ -93,11 +98,10 @@ export function parsePreviewRows(params: {
     const txConf = getColumnConfigForField(params.columnConfigMap, 'transaction_id', rawAction, opType);
     const enrichTxOpt = txConf?.enrichTransactionIds || 'when_empty';
 
+    // Matches the backend: no transaction_id column is required for auto-generation.
     const shouldGenerate =
-      txIdIdx !== -1 && (
-        (enrichTxOpt === 'always') ||
-        (enrichTxOpt === 'when_empty' && !transactionId)
-      );
+      (enrichTxOpt === 'always') ||
+      (enrichTxOpt === 'when_empty' && !transactionId);
 
     if (shouldGenerate) {
       // Create a deterministic mock hash based on cells content
@@ -125,7 +129,7 @@ export function parsePreviewRows(params: {
       rawName: rawName?.trim() || '',
       nameWasSet,
       isin,
-      quantity: rawQty ? applyTrans('quantity', rawQty) : '',
+      quantity: getNumericVal('quantity') || rawQty,
       price: parsedPrice,
       priceCurrency: displayPriceCurrency,
       total: parsedTotal,

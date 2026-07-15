@@ -12,10 +12,9 @@ This skill defines the strict protocol for creating git commits in the Kapital r
 - **Zero Unsolicited Commits/Pushes**: You must **never** run any commit or push command without first presenting the proposed changes (e.g., in a git diff format or detailed list) and receiving explicit, written confirmation from the user.
 - **Pushing to Feature Branches is Allowed**: You are allowed to push changes to remote feature branches (e.g., `git push origin <feature-branch>`) after receiving explicit user approval for the commits. Pushing directly to `main` remains strictly forbidden.
 
-## 2. Execution Protocol & Alias
-- **Custom Git Alias**: Always use the custom alias `git agent-commit` for all commits. This alias configures the commit with the `Antigravity Agent` identity.
-  - Example: `git agent-commit -m "feat(api): add export endpoint"`
-- **Never** use raw `git commit` as it may bypass the agent-commit identity config.
+## 2. Execution Protocol
+- Use standard `git commit` for all commits.
+  - Example: `git commit -m "feat(api): add export endpoint"`
 
 ## 3. Conventional Commit Format
 All commit messages must strictly comply with Conventional Commits rules to pass `commitizen check`:

@@ -28,6 +28,20 @@ class ImportFileSchema(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
 
     is_incomplete: bool = Field(default=False, nullable=False)
 
+    # -- institution abstraction ----------------------------------------------
+    # A template targets a single institution; every row in an uploaded file is
+    # assumed to originate from this institution. ``institution_key`` is a
+    # stable slug (e.g. "trading212") that selects the built-in parser profile,
+    # while ``institution_id`` optionally binds the template to a stored
+    # Institution record.
+    institution_key: str = Field(default="custom", nullable=False, max_length=50, index=True)
+    institution_id: int | None = Field(
+        default=None,
+        foreign_key="institution.id",
+        nullable=True,
+        index=True,
+    )
+
     # -- foreign keys ----------------------------------------------------------
     user_id: int | None = Field(
         default=None,

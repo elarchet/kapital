@@ -3,8 +3,7 @@ import { api } from '../../services/api';
 import { parsePreviewRows } from '../../services/import';
 
 export function useImportPreview(params: {
-  fileText: Ref<string>;
-  importDelimiter: Ref<string>;
+  allRawRows: Ref<string[][]>;
   importDecimalSep: Ref<string>;
   operationTypeColumnIdx: Ref<number | null>;
   operationTypeMappings: Ref<Record<string, string>>;
@@ -18,8 +17,7 @@ export function useImportPreview(params: {
 
   const parsedPreviewRows = computed(() => {
     const rawPreview = parsePreviewRows({
-      fileText: params.fileText.value,
-      importDelimiter: params.importDelimiter.value,
+      allRawRows: params.allRawRows.value,
       importDecimalSep: params.importDecimalSep.value,
       operationTypeColumnIdx: params.operationTypeColumnIdx.value,
       operationTypeMappings: params.operationTypeMappings.value,

@@ -5,8 +5,8 @@ from typing import Any
 
 from src.models import FeeType
 from src.schemas.fee import FeeCreate
+from src.services.import_formula import resolve_numeric_value
 from src.services.import_parsers import (
-    apply_transformation,
     get_date_format,
     get_mapped_col,
     parse_datetime_safe,
@@ -43,56 +43,69 @@ def resolve_fees_and_taxes(
 ) -> list[FeeCreate]:
     """Parse and resolve FeeCreate child objects for the transaction row."""
     fees = []
-    fee_amt_col = get_mapped_col(columns, "fee_amount", op_type, csv_action)
-    if fee_amt_col:
-        fee_val = parse_decimal_safe(row.get(fee_amt_col), decimal_separator)
-        fee_val = apply_transformation(transformations, "fee_amount", fee_val, op_type, csv_action)
-        if fee_val and fee_val > 0:
-            fee_curr = row.get(get_mapped_col(columns, "fee_currency", op_type, csv_action)) or currency
-            fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
-            raw_fee_type = row.get(fee_type_col) if fee_type_col else None
-            resolved_fee_type = resolve_enum_mapping(schema_mappings, "fee_type", raw_fee_type, default="conversion")
-            try:
-                fee_type_enum = FeeType(resolved_fee_type)
-            except ValueError:
-                fee_type_enum = FeeType.OTHER
+    # resolve_numeric_value supports formula-mapped fee/tax fields with no column entry.
+    fee_val = resolve_numeric_value(
+        "fee_amount",
+        row,
+        columns=columns,
+        schema_mappings=schema_mappings,
+        transformations=transformations,
+        decimal_separator=decimal_separator,
+        op_type=op_type,
+        csv_action=csv_action,
+    )
+    if fee_val and fee_val > 0:
+        fee_curr = row.get(get_mapped_col(columns, "fee_currency", op_type, csv_action)) or currency
+        fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
+        raw_fee_type = row.get(fee_type_col) if fee_type_col else None
+        resolved_fee_type = resolve_enum_mapping(schema_mappings, "fee_type", raw_fee_type, default="conversion")
+        try:
+            fee_type_enum = FeeType(resolved_fee_type)
+        except ValueError:
+            fee_type_enum = FeeType.OTHER
 
-            fees.append(
-                FeeCreate(
-                    amount=fee_val,
-                    currency=fee_curr,
-                    fee_type=fee_type_enum,
-                    notes="Currency conversion fee" if resolved_fee_type == "conversion" else "Fee",
-                ),
-            )
+        fees.append(
+            FeeCreate(
+                amount=fee_val,
+                currency=fee_curr,
+                fee_type=fee_type_enum,
+                notes="Currency conversion fee" if resolved_fee_type == "conversion" else "Fee",
+            ),
+        )
 
-    tax_amt_col = get_mapped_col(columns, "tax_amount", op_type, csv_action)
-    if tax_amt_col:
-        tax_val = parse_decimal_safe(row.get(tax_amt_col), decimal_separator)
-        tax_val = apply_transformation(transformations, "tax_amount", tax_val, op_type, csv_action)
-        if tax_val and tax_val > 0:
-            tax_curr = row.get(get_mapped_col(columns, "tax_currency", op_type, csv_action)) or currency
-            fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
-            raw_fee_type = row.get(fee_type_col) if fee_type_col else None
-            resolved_tax_type = resolve_enum_mapping(
-                schema_mappings,
-                "fee_type",
-                raw_fee_type,
-                default="withholding_tax",
-            )
-            try:
-                tax_type_enum = FeeType(resolved_tax_type)
-            except ValueError:
-                tax_type_enum = FeeType.WITHHOLDING_TAX
+    tax_val = resolve_numeric_value(
+        "tax_amount",
+        row,
+        columns=columns,
+        schema_mappings=schema_mappings,
+        transformations=transformations,
+        decimal_separator=decimal_separator,
+        op_type=op_type,
+        csv_action=csv_action,
+    )
+    if tax_val and tax_val > 0:
+        tax_curr = row.get(get_mapped_col(columns, "tax_currency", op_type, csv_action)) or currency
+        fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
+        raw_fee_type = row.get(fee_type_col) if fee_type_col else None
+        resolved_tax_type = resolve_enum_mapping(
+            schema_mappings,
+            "fee_type",
+            raw_fee_type,
+            default="withholding_tax",
+        )
+        try:
+            tax_type_enum = FeeType(resolved_tax_type)
+        except ValueError:
+            tax_type_enum = FeeType.WITHHOLDING_TAX
 
-            fees.append(
-                FeeCreate(
-                    amount=tax_val,
-                    currency=tax_curr,
-                    fee_type=tax_type_enum,
-                    notes="Withholding tax",
-                ),
-            )
+        fees.append(
+            FeeCreate(
+                amount=tax_val,
+                currency=tax_curr,
+                fee_type=tax_type_enum,
+                notes="Withholding tax",
+            ),
+        )
 
     return fees
 
@@ -145,22 +158,31 @@ def resolve_trade_fields(  # noqa: C901, PLR0912
             raw_order_type = row.get(order_type_col) if order_type_col else None
             order_type_val = resolve_enum_mapping(schema_mappings, "order_type", raw_order_type, default="market")
 
+    def _numeric(db_key: str) -> Decimal | None:
+        return resolve_numeric_value(
+            db_key,
+            row,
+            columns=columns,
+            schema_mappings=schema_mappings,
+            transformations=schema_mappings.get("transformations", {}),
+            decimal_separator=decimal_separator,
+            op_type=op_type,
+            csv_action=csv_action,
+        )
+
     limit_price = None
     if op_type == "trade" and order_type_val in ("limit", "stop_limit"):
-        lp_col = get_mapped_col(columns, "limit_price", op_type, csv_action)
-        limit_price = parse_decimal_safe(row.get(lp_col), decimal_separator) if lp_col else None
+        limit_price = _numeric("limit_price")
         if limit_price is None:
             limit_price = unit_price
 
     stop_price = None
     if op_type == "trade" and order_type_val in ("stop", "stop_limit"):
-        sp_col = get_mapped_col(columns, "stop_price", op_type, csv_action)
-        stop_price = parse_decimal_safe(row.get(sp_col), decimal_separator) if sp_col else None
+        stop_price = _numeric("stop_price")
 
     execution_price = None
     if op_type == "trade":
-        ep_col = get_mapped_col(columns, "execution_price", op_type, csv_action)
-        execution_price = parse_decimal_safe(row.get(ep_col), decimal_separator) if ep_col else None
+        execution_price = _numeric("execution_price")
 
     order_status = None
     if op_type == "trade":

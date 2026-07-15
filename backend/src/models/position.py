@@ -9,7 +9,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from src.models.base import SoftDeleteMixin, TimestampMixin
 
 if TYPE_CHECKING:
-    from src.models.operation import Operation
+    from src.models.allocation import Allocation
     from src.models.portfolio import Portfolio
 
 
@@ -57,7 +57,4 @@ class Position(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
 
     # -- relationships ---------------------------------------------------------
     portfolio: "Portfolio" = Relationship(back_populates="positions")
-    operations: list["Operation"] = Relationship(
-        back_populates="position",
-        sa_relationship_kwargs={"foreign_keys": "[Operation.position_id]"},
-    )
+    allocations: list["Allocation"] = Relationship(back_populates="position")

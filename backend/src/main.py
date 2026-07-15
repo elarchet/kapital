@@ -17,9 +17,9 @@ from src.routers import (
     financial_info,
     import_file_schema,
     institution,
-    operation,
     portfolio,
     position,
+    transaction,
 )
 
 
@@ -56,7 +56,7 @@ app.include_router(portfolio.router, prefix="/api/v1")
 app.include_router(position.router, prefix="/api/v1")
 app.include_router(institution.router, prefix="/api/v1")
 app.include_router(financial_account.router, prefix="/api/v1")
-app.include_router(operation.router, prefix="/api/v1")
+app.include_router(transaction.router, prefix="/api/v1")
 app.include_router(import_file_schema.router, prefix="/api/v1")
 app.include_router(financial_info.router, prefix="/api/v1")
 

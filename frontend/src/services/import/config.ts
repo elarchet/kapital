@@ -1,4 +1,4 @@
-import type { ColMapping } from './types';
+import type { ColMapping, FormulaToken, OpTypeSettings } from './types';
 
 export function getEnumMappingsForField(dbKey: string, mappings: any): Record<string, string> {
   const result: Record<string, string> = {};
@@ -21,10 +21,13 @@ export function buildCustomMappingPayload(params: {
   operationTypeMappings: Record<string, string>;
   importFields: any[];
   uiRowsOrder?: string[];
+  institutionKey?: string;
+  opTypeSettings?: Record<string, OpTypeSettings>;
 }) {
   const transformations: Record<string, any> = {};
   const enum_mappings: Record<string, Record<string, string[]>> = {};
   const date_formats: Record<string, any> = {};
+  const formulas: Record<string, Record<string, FormulaToken[]>> = {};
 
   const dbKeyToCol = new Map<string, { typeSpecific?: Record<string, string> }>();
   params.importFields.forEach(f => { dbKeyToCol.set(f.key, {}); });
@@ -61,6 +64,11 @@ export function buildCustomMappingPayload(params: {
             divisor: specificConf.divisor,
             multiplier: specificConf.multiplier
           };
+        }
+
+        if (specificConf.formula?.length) {
+          if (!formulas[specificConf.dbKey]) formulas[specificConf.dbKey] = {};
+          formulas[specificConf.dbKey][opType] = specificConf.formula;
         }
 
         if (specificConf.dateFormat && specificConf.dateFormat !== 'auto') {
@@ -107,17 +115,32 @@ export function buildCustomMappingPayload(params: {
     }
   });
 
+  // Per-op-type settings win over the legacy per-mapping enrich option: auto IDs
+  // must be configurable even when no transaction_id column exists (Fortuneo).
+  const hash_columns: Record<string, string[]> = {};
+  Object.entries(params.opTypeSettings || {}).forEach(([opType, settings]) => {
+    if (settings?.autoTransactionId) {
+      enrich_transaction_ids[opType] = settings.autoTransactionId;
+    }
+    if (settings?.hashColumns?.length) {
+      hash_columns[opType] = settings.hashColumns;
+    }
+  });
+
   return {
     operation_type_column: params.operationTypeColumnIdx !== null
       ? params.importFileHeaders[params.operationTypeColumnIdx]
       : null,
+    institution_key: params.institutionKey || 'custom',
     columns: finalColumns,
     type_mappings,
     enum_mappings,
     transformations,
     date_formats,
+    formulas,
     enrich_asset_names,
     enrich_transaction_ids,
+    ...(Object.keys(hash_columns).length > 0 ? { hash_columns } : {}),
     ui_columns: params.uiColumns,
     ui_rows_order: params.uiRowsOrder || [],
     ...(Object.keys(cleared_type_specifics).length > 0 ? { cleared_type_specifics } : {})
@@ -133,17 +156,19 @@ export function parseSchemaMappings(
   columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }>;
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>;
   uiRowsOrder?: string[];
+  opTypeSettings: Record<string, OpTypeSettings>;
 } {
   let operationTypeColumnIdx: number | null = null;
   const operationTypeMappings: Record<string, string> = {};
   const columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }> = {};
   const uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }> = [];
   let uiRowsOrder: string[] = [];
+  const opTypeSettings: Record<string, OpTypeSettings> = {};
 
   let mappings: any = {};
   try {
     mappings = JSON.parse(mappingsJson);
-  } catch (e) {}
+  } catch (e) { }
 
   if (mappings.ui_columns && Array.isArray(mappings.ui_columns) && mappings.ui_columns.length > 0) {
     uiColumns.push(...mappings.ui_columns);
@@ -217,12 +242,16 @@ export function parseSchemaMappings(
           ? 'auto'
           : typeof dfVal === 'string' ? dfVal : (dfVal[opType] || 'auto');
 
+        const formulaVal = mappings.formulas?.[dbKey];
+        const formulaTokens = Array.isArray(formulaVal) ? formulaVal : formulaVal?.[opType];
+
         const specConf: ColMapping = {
           dbKey,
           divisor: mappings.transformations?.[dbKey]?.[opType]?.divisor || mappings.transformations?.[dbKey]?.divisor,
           multiplier: mappings.transformations?.[dbKey]?.[opType]?.multiplier || mappings.transformations?.[dbKey]?.multiplier,
           enumMappings: getEnumMappingsForField(dbKey, mappings),
-          dateFormat: specDateFormat
+          dateFormat: specDateFormat,
+          ...(Array.isArray(formulaTokens) && formulaTokens.length > 0 ? { formula: formulaTokens } : {})
         };
 
         if (dbKey === 'name') {
@@ -254,9 +283,25 @@ export function parseSchemaMappings(
         }
       });
     });
+    // 5. Per-op-type settings: auto transaction IDs + hash column subsets.
+    const enrichTxIds = mappings.enrich_transaction_ids;
+    if (enrichTxIds && typeof enrichTxIds === 'object') {
+      Object.entries(enrichTxIds).forEach(([opType, mode]) => {
+        if (!opTypeSettings[opType]) opTypeSettings[opType] = {};
+        opTypeSettings[opType].autoTransactionId = mode as OpTypeSettings['autoTransactionId'];
+      });
+    }
+    const hashColumns = mappings.hash_columns;
+    if (hashColumns && typeof hashColumns === 'object' && !Array.isArray(hashColumns)) {
+      Object.entries(hashColumns).forEach(([opType, cols]) => {
+        if (!Array.isArray(cols)) return;
+        if (!opTypeSettings[opType]) opTypeSettings[opType] = {};
+        opTypeSettings[opType].hashColumns = cols as string[];
+      });
+    }
   } catch (err) {
     console.error('Failed to parse schema mappings:', err);
   }
 
-  return { operationTypeColumnIdx, operationTypeMappings, columnConfigMap, uiColumns, uiRowsOrder };
+  return { operationTypeColumnIdx, operationTypeMappings, columnConfigMap, uiColumns, uiRowsOrder, opTypeSettings };
 }

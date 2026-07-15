@@ -10,6 +10,8 @@ class ImportFileSchemaBase(BaseModel):
     decimal_separator: str = "."
     mappings: str = "{}"
     is_incomplete: bool = False
+    institution_key: str = "custom"
+    institution_id: int | None = None
 
 
 class ImportFileSchemaCreate(ImportFileSchemaBase):
@@ -23,6 +25,8 @@ class ImportFileSchemaUpdate(BaseModel):
     decimal_separator: str | None = None
     mappings: str | None = None
     is_incomplete: bool | None = None
+    institution_key: str | None = None
+    institution_id: int | None = None
 
 
 class ImportFileSchemaRead(ImportFileSchemaBase):

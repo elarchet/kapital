@@ -338,13 +338,14 @@ const saveRenameTitle = async () => {
           @change="onFileSelected" 
         />
 
-        <!-- Import Positions Modal -->
-        <ImportTransactionsModal 
-          v-if="showImportModal" 
-          :portfolio="portfolio" 
+        <!-- Import Positions Modal. Stays open on success so the summary screen
+             shows; its Done button emits close. -->
+        <ImportTransactionsModal
+          v-if="showImportModal"
+          :portfolio="portfolio"
           :initialFile="initialImportFile"
-          @close="() => { showImportModal = false; initialImportFile = null; }" 
-          @success="() => { store.fetchAllData(); showImportModal = false; initialImportFile = null; }" 
+          @close="() => { showImportModal = false; initialImportFile = null; }"
+          @success="store.fetchAllData()"
         />
 
         <!-- Unified Premium Modal / Alert Popup -->

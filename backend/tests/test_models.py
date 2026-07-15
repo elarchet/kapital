@@ -3,10 +3,10 @@
 Covers:
  1. Shared metadata — all tables created together (SQLModel + SABase).
  2. User: CRUD, argon2id password hashing & verification.
- 3. Full relationship chain: User → Portfolio → Position → Operation.
- 4. STI polymorphism: querying Operation returns correct subclass.
+ 3. Full relationship chain: User → Portfolio → Position → Allocation → RawTransaction.
+ 4. RawTransaction field persistence + Allocation splitting.
  5. Timestamp & SoftDelete mixins behave correctly.
- 6. Each Operation subclass can be instantiated.
+ 6. AssetType / AllocationMethod enums.
 """
 
 from __future__ import annotations
@@ -15,47 +15,26 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect
 
 from src.models import (
+    Allocation,
+    AllocationMethod,
     AssetType,
-    DividendOperation,
     ExpenseCategory,
-    ExpenseOperation,
-    FeeOperation,
-    FxRateChangeOperation,
     Institution,
-    InterestOperation,
     InterestType,
-    Operation,
-    OrderType,
     PaymentMethod,
-    RevenueCategory,
-    RevenueOperation,
-    StockSplitOperation,
-    TaxOperation,
-    TradeOperation,
-    TradeSide,
-    TransferInOperation,
-    TransferOutOperation,
+    RawTransaction,
     User,
 )
 from tests.factories import (
-    DividendOperationFactory,
-    ExpenseOperationFactory,
-    FeeOperationFactory,
+    AllocationFactory,
     FinancialAccountFactory,
-    FxRateChangeOperationFactory,
     InstitutionFactory,
-    InterestOperationFactory,
     PortfolioFactory,
     PositionFactory,
-    RevenueOperationFactory,
-    StockSplitOperationFactory,
-    TaxOperationFactory,
-    TradeOperationFactory,
-    TransferInOperationFactory,
-    TransferOutOperationFactory,
+    RawTransactionFactory,
     UserFactory,
 )
 
@@ -106,7 +85,8 @@ class TestTableCreation:
         "position",
         "institution",
         "financial_account",
-        "operation",
+        "raw_transaction",
+        "allocation",
     }
 
     def test_all_tables_exist(self, engine):
@@ -172,38 +152,48 @@ class TestRelationships:
     def test_position_portfolio_fk(self, session, seed):
         assert seed["position"].portfolio_id == seed["portfolio"].id
 
-    def test_operation_position_fk(self, session, seed):
-        buy: TradeOperation = TradeOperationFactory(  # type: ignore[assignment]
-            position=seed["position"],
+    def test_raw_transaction_account_fk(self, session, seed):
+        txn: RawTransaction = RawTransactionFactory(  # type: ignore[assignment]
             financial_account=seed["account"],
-            quantity=Decimal(10),
-            unit_price=Decimal("95.50"),
-            trade_side=TradeSide.BUY,
         )
         session.commit()
-        session.refresh(buy)
+        session.refresh(txn)
+        assert txn.financial_account_id == seed["account"].id
 
-        assert buy.position_id == seed["position"].id
-        assert buy.financial_account_id == seed["account"].id
+    def test_allocation_links_transaction_to_position(self, session, seed):
+        txn = RawTransactionFactory(financial_account=seed["account"])
+        alloc: Allocation = AllocationFactory(  # type: ignore[assignment]
+            raw_transaction=txn,
+            position=seed["position"],
+        )
+        session.commit()
+        session.refresh(alloc)
+
+        assert alloc.position_id == seed["position"].id
+        assert alloc.raw_transaction_id == txn.id
 
     def test_navigate_portfolio_positions(self, session, seed):
         session.refresh(seed["portfolio"])
         assert len(seed["portfolio"].positions) == 1
         assert seed["portfolio"].positions[0].ticker == seed["position"].ticker
 
-    def test_navigate_position_operations(self, session, seed):
-        TradeOperationFactory(
-            position=seed["position"],
-            financial_account=seed["account"],
-            quantity=Decimal(5),
-            unit_price=Decimal(100),
-            trade_side=TradeSide.BUY,
-        )
+    def test_navigate_position_allocations(self, session, seed):
+        txn = RawTransactionFactory(financial_account=seed["account"])
+        AllocationFactory(raw_transaction=txn, position=seed["position"])
         session.commit()
 
         session.refresh(seed["position"])
-        assert len(seed["position"].operations) == 1
-        assert seed["position"].operations[0].operation_type == "trade"
+        assert len(seed["position"].allocations) == 1
+        assert seed["position"].allocations[0].raw_transaction.operation_type == "trade"
+
+    def test_navigate_transaction_allocations(self, session, seed):
+        txn = RawTransactionFactory(financial_account=seed["account"])
+        AllocationFactory(raw_transaction=txn, position=seed["position"])
+        session.commit()
+
+        session.refresh(txn)
+        assert len(txn.allocations) == 1
+        assert txn.allocations[0].position_id == seed["position"].id
 
     def test_navigate_institution_accounts(self, session, seed):
         session.refresh(seed["institution"])
@@ -215,112 +205,92 @@ class TestRelationships:
 
 
 # ---------------------------------------------------------------------------
-# 4. STI polymorphism
+# 4. RawTransaction field persistence + Allocation splitting
 # ---------------------------------------------------------------------------
 
 
-class TestPolymorphicDispatch:
-    """Querying ``Operation`` must return the correct subclass instances."""
+class TestRawTransaction:
+    """RawTransaction persists its category-specific and enum fields."""
 
-    ALL_SUBCLASSES: list[tuple[str, type[Operation]]] = [
-        ("TradeOperation", TradeOperation),
-        ("DividendOperation", DividendOperation),
-        ("FeeOperation", FeeOperation),
-        ("TaxOperation", TaxOperation),
-        ("InterestOperation", InterestOperation),
-        ("TransferInOperation", TransferInOperation),
-        ("TransferOutOperation", TransferOutOperation),
-        ("StockSplitOperation", StockSplitOperation),
-        ("FxRateChangeOperation", FxRateChangeOperation),
-        ("ExpenseOperation", ExpenseOperation),
-        ("RevenueOperation", RevenueOperation),
-    ]
-
-    @pytest.fixture(name="ops_map")
-    def fixture_ops_map(self, session, seed):
-        """Insert all operation types and return a {class_name: instance} map."""
-        common = dict(
-            position=seed["position"],
+    def test_split_and_dividend_fields_roundtrip(self, session, seed):
+        txn: RawTransaction = RawTransactionFactory(  # type: ignore[assignment]
             financial_account=seed["account"],
-            total_amount=Decimal(100),
+            operation_type="stock_split",
+            trade_side=None,
+            split_ratio=Decimal("4.0"),
+            pre_split_quantity=Decimal("10.0"),
+            dividend_per_share=Decimal("0.82"),
         )
-
-        TradeOperationFactory(
-            trade_side=TradeSide.BUY,
-            order_type=OrderType.LIMIT,
-            limit_price=Decimal("89.50"),
-            **common,
-        )
-        DividendOperationFactory(**common)
-        FeeOperationFactory(**common)
-        TaxOperationFactory(**common)
-        InterestOperationFactory(**common)
-        TransferInOperationFactory(**common)
-        TransferOutOperationFactory(**common)
-        StockSplitOperationFactory(**common)
-        FxRateChangeOperationFactory(**common)
-        ExpenseOperationFactory(**common)
-        RevenueOperationFactory(**common)
-
         session.commit()
+        session.refresh(txn)
 
-        results = (
-            session.execute(
-                select(Operation).where(
-                    Operation.position_id == seed["position"].id,
-                ),
-            )
-            .scalars()
-            .all()
+        assert txn.split_ratio == Decimal("4.0")
+        assert txn.pre_split_quantity == Decimal("10.0")
+        assert txn.dividend_per_share == Decimal("0.82")
+
+    def test_enum_fields_roundtrip(self, session, seed):
+        txn: RawTransaction = RawTransactionFactory(  # type: ignore[assignment]
+            financial_account=seed["account"],
+            operation_type="expense",
+            trade_side=None,
+            expense_category=ExpenseCategory.SHOPPING,
+            payment_method=PaymentMethod.CARD,
+            interest_type=InterestType.CASH_INTEREST,
         )
+        session.commit()
+        session.refresh(txn)
 
-        return {type(op).__name__: op for op in results}
+        assert txn.expense_category == ExpenseCategory.SHOPPING
+        assert txn.payment_method == PaymentMethod.CARD
+        assert txn.interest_type == InterestType.CASH_INTEREST
 
-    def test_total_count(self, ops_map):
-        assert len(ops_map) == 11
+    def test_dedup_and_provenance_fields(self, session, seed):
+        txn: RawTransaction = RawTransactionFactory(  # type: ignore[assignment]
+            financial_account=seed["account"],
+            dedup_key="TX-NATIVE-1",
+            native_transaction_id="TX-NATIVE-1",
+            is_auto_id=False,
+        )
+        session.commit()
+        session.refresh(txn)
+
+        assert txn.dedup_key == "TX-NATIVE-1"
+        assert txn.native_transaction_id == "TX-NATIVE-1"
+        assert txn.is_auto_id is False
+
+
+class TestAllocation:
+    """Allocation stores the resolved split figures routed to a position."""
+
+    def test_default_allocation_fields(self, session, seed):
+        txn = RawTransactionFactory(financial_account=seed["account"])
+        alloc: Allocation = AllocationFactory(  # type: ignore[assignment]
+            raw_transaction=txn,
+            position=seed["position"],
+            method=AllocationMethod.PERCENTAGE,
+            value=Decimal(100),
+            quantity=Decimal(10),
+            amount=Decimal(1000),
+        )
+        session.commit()
+        session.refresh(alloc)
+
+        assert alloc.method == AllocationMethod.PERCENTAGE
+        assert alloc.value == Decimal(100)
+        assert alloc.quantity == Decimal(10)
+        assert alloc.amount == Decimal(1000)
+        assert alloc.is_default is True
 
     @pytest.mark.parametrize(
-        "class_name,cls",
-        ALL_SUBCLASSES,
-        ids=[name for name, _ in ALL_SUBCLASSES],
+        "member,value",
+        [
+            ("QUANTITY", "quantity"),
+            ("PERCENTAGE", "percentage"),
+            ("AMOUNT", "amount"),
+        ],
     )
-    def test_isinstance(self, ops_map, class_name, cls):
-        assert isinstance(ops_map[class_name], cls)
-
-    def test_dividend_per_share_roundtrip(self, ops_map):
-        assert ops_map["DividendOperation"].dividend_per_share == Decimal("0.82")
-
-    def test_fx_exchange_rate_roundtrip(self, ops_map):
-        assert ops_map["FxRateChangeOperation"].exchange_rate == Decimal("0.9200000000")
-
-    def test_split_ratio_roundtrip(self, ops_map):
-        assert ops_map["StockSplitOperation"].split_ratio == Decimal("4.0")
-
-    def test_limit_price_roundtrip(self, ops_map):
-        assert ops_map["TradeOperation"].limit_price == Decimal("89.50")
-
-    def test_fee_category_roundtrip(self, ops_map):
-        assert ops_map["FeeOperation"].fee_category == "custody"
-
-    def test_tax_category_roundtrip(self, ops_map):
-        assert ops_map["TaxOperation"].tax_category == "withholding"
-
-    def test_transfer_references_roundtrip(self, ops_map):
-        assert ops_map["TransferInOperation"].source_reference == "BANK-REF-001"
-        assert ops_map["TransferOutOperation"].destination_reference == "EXT-REF-002"
-
-    def test_interest_type_roundtrip(self, ops_map):
-        assert ops_map["InterestOperation"].interest_type == InterestType.CASH_INTEREST
-
-    def test_expense_fields_roundtrip(self, ops_map):
-        exp = ops_map["ExpenseOperation"]
-        assert exp.expense_category == ExpenseCategory.SHOPPING
-        assert exp.payment_method == PaymentMethod.CARD
-
-    def test_revenue_fields_roundtrip(self, ops_map):
-        rev = ops_map["RevenueOperation"]
-        assert rev.revenue_category == RevenueCategory.SALARY
-        assert rev.payment_method == PaymentMethod.BANK_TRANSFER
+    def test_method_enum_values(self, member, value):
+        assert getattr(AllocationMethod, member) == value
 
 
 # ---------------------------------------------------------------------------

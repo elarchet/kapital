@@ -12,13 +12,13 @@ if TYPE_CHECKING:
     from sqlmodel import Session
 
 from src.logic.split_adjustment import compute_cost_basis, compute_split_adjusted_operations
+from src.models import TradeSide
 from tests.factories import (
+    AllocationFactory,
     FinancialAccountFactory,
-    InstitutionFactory,
     PortfolioFactory,
     PositionFactory,
-    StockSplitOperationFactory,
-    TradeOperationFactory,
+    RawTransactionFactory,
     UserFactory,
 )
 
@@ -185,29 +185,42 @@ def test_cost_basis_endpoint(client: TestClient, session: Session):
 
     portfolio = PortfolioFactory(user=user)
     position = PositionFactory(portfolio=portfolio)
-    institution = InstitutionFactory()
-    account = FinancialAccountFactory(institution=institution)
+    account = FinancialAccountFactory()
     session.commit()
 
-    # 1. Create a trade
-    TradeOperationFactory(
-        position=position,
+    # 1. A BUY trade routed to the position via its default allocation.
+    buy = RawTransactionFactory(
         financial_account=account,
+        operation_type="trade",
+        trade_side=TradeSide.BUY,
         executed_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
         quantity=Decimal("10.00"),
         unit_price=Decimal("100.00"),
         total_amount=Decimal("1000.00"),
-        trade_side="buy",
     )
-    # 2. Create a stock split
-    StockSplitOperationFactory(
+    AllocationFactory(
+        raw_transaction=buy,
         position=position,
+        quantity=Decimal("10.00"),
+        amount=Decimal("1000.00"),
+    )
+
+    # 2. A stock split (4:1) routed to the same position.
+    split = RawTransactionFactory(
         financial_account=account,
+        operation_type="stock_split",
+        trade_side=None,
         executed_at=datetime(2026, 1, 5, 12, 0, 0, tzinfo=UTC),
         split_ratio=Decimal("4.0"),
         pre_split_quantity=Decimal("10.00"),
         quantity=Decimal("30.00"),
         total_amount=Decimal("0.00"),
+    )
+    AllocationFactory(
+        raw_transaction=split,
+        position=position,
+        quantity=Decimal("30.00"),
+        amount=Decimal("0.00"),
     )
     session.commit()
 

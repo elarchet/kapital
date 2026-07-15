@@ -1,4 +1,5 @@
 import type { ColMapping, RowError } from './types';
+import { evaluateFormulaTokens, formulaToDisplayString } from './formula';
 
 export function getColumnConfigForField(
   columnConfigMap: Record<string | number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
@@ -67,25 +68,22 @@ export function parseDateTimeWithFormat(val: string, format?: string): Date | nu
   return isNaN(fallback.getTime()) ? null : fallback;
 }
 
-export function isFieldRequiredForOpType(fieldKey: string, opType: string): boolean {
-  const globalRequired = ['executed_at', 'total_amount', 'currency'];
-  if (globalRequired.includes(fieldKey)) return true;
-  if (!opType) return false;
+// Required/relevant knowledge is metadata-driven: the backend IMPORT_METADATA
+// (GET /portfolios/import-metadata) carries `required_for` and `op_types` per field.
+export function isFieldRequiredForOpType(
+  field: { is_required?: boolean; required_for?: string[] } | undefined,
+  opType: string
+): boolean {
+  if (field?.is_required) return true;
+  return !!opType && !!field?.required_for?.includes(opType);
+}
 
-  const reqMap: Record<string, string[]> = {
-    trade: ['ticker', 'quantity', 'unit_price', 'trade_side'],
-    dividend: ['ticker', 'unit_price'],
-    stock_split: ['ticker', 'quantity'],
-    fx_rate_change: ['source_currency', 'target_currency', 'exchange_rate'],
-    fee: ['fee_amount'],
-    tax: ['tax_amount'],
-    interest: ['interest_type'],
-    transfer_in: ['source_reference'],
-    transfer_out: ['destination_reference'],
-    expense: ['merchant_name'],
-    revenue: ['merchant_name'],
-  };
-  return (reqMap[opType] || []).includes(fieldKey);
+export function isFieldRelevantForOpType(
+  field: { op_types?: string[] } | undefined,
+  opType: string
+): boolean {
+  if (!field?.op_types) return true;
+  return field.op_types.includes(opType);
 }
 
 export function getMappedColIdxForField(
@@ -140,10 +138,7 @@ export function validateLiveStats(params: {
     errors: RowError[];
   }> = {};
 
-  if (params.operationTypeColumnIdx === null) {
-    console.log('validateLiveStats: operationTypeColumnIdx is null, returning empty stats');
-    return stats;
-  }
+  if (params.operationTypeColumnIdx === null) return stats;
 
   params.allRawRows.forEach(row => {
     const rawAction = row[params.operationTypeColumnIdx!];
@@ -170,7 +165,7 @@ export function validateLiveStats(params: {
       const colIdx = field.key === 'operation_type'
         ? (params.operationTypeColumnIdx ?? -1)
         : getMappedColIdxForField(field.key, rawAction, dbOpType, params.columnConfigMap, params.uiColumns);
-      const isRequired = field.is_required || isFieldRequiredForOpType(field.key, dbOpType);
+      const isRequired = isFieldRequiredForOpType(field, dbOpType) && isFieldRelevantForOpType(field, dbOpType);
       const mappingConf = getColumnConfigForField(params.columnConfigMap, field.key, rawAction, dbOpType);
       fieldMap[field.key] = { colIdx, isRequired, mappingConf };
     });
@@ -193,8 +188,26 @@ export function validateLiveStats(params: {
 
     params.importFields.forEach(field => {
       const { colIdx, isRequired, mappingConf } = fieldMap[field.key];
-      const isMapped = colIdx !== -1;
-      const rawValue = isMapped ? row[colIdx] : '';
+      const hasFormula = !!mappingConf?.formula?.length;
+      const isMapped = colIdx !== -1 || hasFormula;
+      const rawValue = colIdx !== -1 ? row[colIdx] : '';
+
+      if (hasFormula && field.type === 'numeric') {
+        const rowByHeader: Record<string, string> = {};
+        params.uiColumns.forEach((col: any) => {
+          if (col?.name !== undefined && col.colIdx < row.length) rowByHeader[col.name] = row[col.colIdx];
+        });
+        const result = evaluateFormulaTokens(mappingConf!.formula!, rowByHeader, params.importDecimalSep);
+        if (result === null && isRequired) {
+          rowErrors.push({
+            fieldKey: field.key,
+            fieldLabel: field.label,
+            rawValue: formulaToDisplayString(mappingConf!.formula!),
+            errorMessage: 'Formula could not be evaluated on this row.'
+          });
+        }
+        return;
+      }
 
       if (isRequired && !isMapped) {
         rowErrors.push({
@@ -210,7 +223,9 @@ export function validateLiveStats(params: {
       if (field.key === 'name') {
         const val = rawValue ? rawValue.trim() : '';
         const enrichOption = mappingConf?.enrichAssetNames || 'when_empty';
-        const isEnrichingAssetNames = enrichOption === 'always' || (enrichOption === 'when_empty' && !val);
+        const dbOpType = params.operationTypeMappings[trimmedRaw] || 'unknown';
+        const isCashOp = ['interest', 'transfer_in', 'transfer_out', 'expense', 'revenue'].includes(dbOpType);
+        const isEnrichingAssetNames = !isCashOp && (enrichOption === 'always' || (enrichOption === 'when_empty' && !val));
         if (isEnrichingAssetNames) {
           const tickerCol = fieldMap['ticker']?.colIdx ?? -1;
           const ticker = tickerCol !== -1 && tickerCol < row.length ? row[tickerCol]?.trim() : '';
@@ -314,7 +329,6 @@ export function validateLiveStats(params: {
     }
   });
 
-  console.log('validateLiveStats output keys/totals:', Object.keys(stats).map(k => `${k}: total=${stats[k].total}, success=${stats[k].success}, failed=${stats[k].failed}`));
   return stats;
 }
 
@@ -350,7 +364,7 @@ export function getValidationErrors(params: {
 
   params.activeDbOpTypes.forEach(opType => {
     params.importFields.forEach(f => {
-      const isRequired = f.is_required || isFieldRequiredForOpType(f.key, opType);
+      const isRequired = isFieldRequiredForOpType(f, opType) && isFieldRelevantForOpType(f, opType);
       if (isRequired) {
         let colIdx = f.key === 'operation_type'
           ? (params.operationTypeColumnIdx ?? -1)
@@ -364,7 +378,16 @@ export function getValidationErrors(params: {
           }
         }
 
-        if (colIdx === -1) {
+        // A structured formula also satisfies the mapping requirement.
+        let hasFormula = false;
+        if (colIdx === -1 && f.type === 'numeric') {
+          const rawActions = ['', ...params.uniqueOperationTypes.filter(r => params.operationTypeMappings[r] === opType)];
+          hasFormula = rawActions.some(rawAction =>
+            !!getColumnConfigForField(params.columnConfigMap, f.key, rawAction || opType, opType)?.formula?.length
+          );
+        }
+
+        if (colIdx === -1 && !hasFormula) {
           errors.push(`Required database field "${f.label}" is not mapped for "${opType}" transactions.`);
         }
       }

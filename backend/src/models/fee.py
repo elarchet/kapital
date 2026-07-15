@@ -9,7 +9,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from src.models.base import SoftDeleteMixin, TimestampMixin
 
 if TYPE_CHECKING:
-    from src.models.operation import Operation
+    from src.models.raw_transaction import RawTransaction
 
 
 class FeeType(StrEnum):
@@ -23,7 +23,7 @@ class FeeType(StrEnum):
 
 
 class Fee(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
-    """An itemized fee or tax associated with a financial Operation."""
+    """An itemized fee or tax associated with a raw transaction."""
 
     __tablename__ = "fee"
 
@@ -38,11 +38,11 @@ class Fee(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
     notes: str | None = Field(default=None, max_length=300)
 
     # -- foreign keys ----------------------------------------------------------
-    operation_id: int = Field(
-        foreign_key="operation.id",
+    raw_transaction_id: int = Field(
+        foreign_key="raw_transaction.id",
         nullable=False,
         index=True,
     )
 
     # -- relationships ---------------------------------------------------------
-    operation: "Operation" = Relationship(back_populates="fees")
+    raw_transaction: "RawTransaction" = Relationship(back_populates="fees")

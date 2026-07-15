@@ -1,3 +1,12 @@
+"""Authoritative import-mapping contract consumed by the frontend wizard.
+
+Per-field keys:
+- ``op_types``: operation types where the field is offered as a mapping slot.
+  Omitted = the field applies to every operation type.
+- ``required_for``: operation types where mapping the field is mandatory.
+- ``is_required``: mandatory for every operation type.
+"""
+
 from __future__ import annotations
 
 IMPORT_METADATA = {
@@ -50,30 +59,45 @@ IMPORT_METADATA = {
             "label": "Ticker Symbol",
             "is_required": False,
             "type": "string",
+            "op_types": ["trade", "dividend", "stock_split"],
+            "required_for": ["trade", "stock_split"],
         },
         {
             "key": "isin",
             "label": "ISIN Number",
             "is_required": False,
             "type": "string",
+            "op_types": ["trade", "dividend", "stock_split"],
         },
         {
             "key": "quantity",
-            "label": "Quantity",
+            "label": "Quantity / Number of Shares",
             "is_required": False,
             "type": "numeric",
+            "op_types": ["trade", "dividend", "stock_split"],
+            "required_for": ["trade", "stock_split"],
         },
         {
             "key": "unit_price",
             "label": "Price Per Share",
             "is_required": False,
             "type": "numeric",
+            "op_types": ["trade", "dividend"],
+            "required_for": ["trade"],
+        },
+        {
+            "key": "dividend_per_share",
+            "label": "Dividend Per Share",
+            "is_required": False,
+            "type": "numeric",
+            "op_types": ["dividend"],
         },
         {
             "key": "price_currency",
             "label": "Price Currency",
             "is_required": False,
             "type": "string",
+            "op_types": ["trade", "dividend"],
         },
         {
             "key": "transaction_id",
@@ -86,6 +110,23 @@ IMPORT_METADATA = {
             "label": "Exchange Rate",
             "is_required": False,
             "type": "numeric",
+            "required_for": ["fx_rate_change"],
+        },
+        {
+            "key": "source_currency",
+            "label": "Source Currency",
+            "is_required": False,
+            "type": "string",
+            "op_types": ["fx_rate_change"],
+            "required_for": ["fx_rate_change"],
+        },
+        {
+            "key": "target_currency",
+            "label": "Target Currency",
+            "is_required": False,
+            "type": "string",
+            "op_types": ["fx_rate_change"],
+            "required_for": ["fx_rate_change"],
         },
         # -- Trade-specific fields --
         {
@@ -94,6 +135,8 @@ IMPORT_METADATA = {
             "is_required": False,
             "type": "enum",
             "enum_values": ["buy", "sell"],
+            "op_types": ["trade"],
+            "required_for": ["trade"],
         },
         {
             "key": "order_type",
@@ -101,6 +144,7 @@ IMPORT_METADATA = {
             "is_required": False,
             "type": "enum",
             "enum_values": ["market", "limit", "stop", "stop_limit"],
+            "op_types": ["trade"],
         },
         {
             "key": "order_status",
@@ -108,36 +152,42 @@ IMPORT_METADATA = {
             "is_required": False,
             "type": "enum",
             "enum_values": ["pending", "partially_filled", "filled", "cancelled", "expired"],
+            "op_types": ["trade"],
         },
         {
             "key": "limit_price",
             "label": "Limit Price",
             "is_required": False,
             "type": "numeric",
+            "op_types": ["trade"],
         },
         {
             "key": "stop_price",
             "label": "Stop Price",
             "is_required": False,
             "type": "numeric",
+            "op_types": ["trade"],
         },
         {
             "key": "execution_price",
             "label": "Execution Price",
             "is_required": False,
             "type": "numeric",
+            "op_types": ["trade"],
         },
         {
             "key": "order_placed_at",
             "label": "Order Placed Date",
             "is_required": False,
             "type": "datetime",
+            "op_types": ["trade"],
         },
         {
             "key": "filled_at",
             "label": "Order Filled Date",
             "is_required": False,
             "type": "datetime",
+            "op_types": ["trade"],
         },
         # -- Fee / Tax fields --
         {
@@ -145,12 +195,22 @@ IMPORT_METADATA = {
             "label": "Fee Amount",
             "is_required": False,
             "type": "numeric",
+            "op_types": ["trade", "transfer_out", "fee"],
+            "required_for": ["fee"],
         },
         {
             "key": "fee_currency",
             "label": "Fee Currency",
             "is_required": False,
             "type": "string",
+            "op_types": ["trade", "transfer_out", "fee"],
+        },
+        {
+            "key": "fee_category",
+            "label": "Fee Category",
+            "is_required": False,
+            "type": "string",
+            "op_types": ["trade", "transfer_out", "fee"],
         },
         {
             "key": "fee_type",
@@ -158,18 +218,29 @@ IMPORT_METADATA = {
             "is_required": False,
             "type": "enum",
             "enum_values": ["conversion", "withholding_tax", "commission", "transaction", "other"],
+            "op_types": ["trade", "transfer_out", "fee"],
         },
         {
             "key": "tax_amount",
             "label": "Tax Amount",
             "is_required": False,
             "type": "numeric",
+            "op_types": ["trade", "dividend", "expense", "revenue", "tax"],
+            "required_for": ["tax"],
         },
         {
             "key": "tax_currency",
             "label": "Tax Currency",
             "is_required": False,
             "type": "string",
+            "op_types": ["trade", "dividend", "expense", "revenue", "tax"],
+        },
+        {
+            "key": "tax_category",
+            "label": "Tax Category",
+            "is_required": False,
+            "type": "string",
+            "op_types": ["trade", "dividend", "expense", "revenue", "tax"],
         },
         # -- Everyday finance fields --
         {
@@ -177,12 +248,14 @@ IMPORT_METADATA = {
             "label": "Merchant Name",
             "is_required": False,
             "type": "string",
+            "op_types": ["expense", "revenue"],
         },
         {
             "key": "merchant_category",
             "label": "Merchant Category",
             "is_required": False,
             "type": "string",
+            "op_types": ["expense", "revenue"],
         },
         {
             "key": "expense_category",
@@ -204,6 +277,7 @@ IMPORT_METADATA = {
                 "insurance",
                 "other",
             ],
+            "op_types": ["expense"],
         },
         {
             "key": "revenue_category",
@@ -218,6 +292,7 @@ IMPORT_METADATA = {
                 "gift",
                 "other",
             ],
+            "op_types": ["revenue"],
         },
         {
             "key": "payment_method",
@@ -232,6 +307,7 @@ IMPORT_METADATA = {
                 "crypto",
                 "other",
             ],
+            "op_types": ["expense", "revenue"],
         },
         # -- Transfer fields --
         {
@@ -239,12 +315,14 @@ IMPORT_METADATA = {
             "label": "Source Reference",
             "is_required": False,
             "type": "string",
+            "op_types": ["transfer_in", "fx_rate_change"],
         },
         {
             "key": "destination_reference",
             "label": "Destination Reference",
             "is_required": False,
             "type": "string",
+            "op_types": ["transfer_out", "fx_rate_change"],
         },
         {
             "key": "interest_type",
@@ -262,6 +340,8 @@ IMPORT_METADATA = {
                 "peer_to_peer_interest",
                 "other",
             ],
+            "op_types": ["interest"],
+            "required_for": ["interest"],
         },
         # -- Stock split sub-type --
         {
@@ -270,6 +350,21 @@ IMPORT_METADATA = {
             "is_required": False,
             "type": "enum",
             "enum_values": ["close", "open", "combined"],
+            "op_types": ["stock_split"],
+        },
+        {
+            "key": "split_ratio",
+            "label": "Split Ratio",
+            "is_required": False,
+            "type": "numeric",
+            "op_types": ["stock_split"],
+        },
+        {
+            "key": "pre_split_quantity",
+            "label": "Pre-split Quantity",
+            "is_required": False,
+            "type": "numeric",
+            "op_types": ["stock_split"],
         },
     ],
 }
