@@ -59,6 +59,7 @@ Skills are modular, on-demand instructions loaded only when required. They are s
 - **`frontend-vue`**: Vue 3 composition, decoupled representation, and Tailwind v4 theme utility rules.
 - **`generate-themed-component`**: Automated Vue component styling and interface contracts.
 - **`git-commit`**: Mandatory commit guidelines, aliases, Conventional Commits format, and permissions.
+- **`import-pipeline`**: CSV import architecture — template mappings contract, formula engine, hash/dedup keys, and the mapping wizard state model.
 - **`stacked-branches`**: Stacked branch workflow — push current feature, scaffold next branch immediately without waiting for CI/merge, rebase cascade when parent merges.
 - **`testing`**: Pytest standards, E2E Playwright verification, and factory mock conventions.
 
