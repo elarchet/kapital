@@ -128,7 +128,7 @@ def evaluate_formula(
         elif "num" in token:
             try:
                 stack.append(Decimal(str(token["num"])))
-            except (InvalidOperation, ValueError, TypeError):
+            except InvalidOperation, ValueError, TypeError:
                 return None
         else:
             if len(stack) < 2:  # noqa: PLR2004
@@ -137,7 +137,7 @@ def evaluate_formula(
             left = stack.pop()
             try:
                 stack.append(_apply_op(token["op"], left, right))
-            except (ArithmeticError, InvalidOperation):
+            except ArithmeticError, InvalidOperation:
                 return None
     return stack[0] if len(stack) == 1 else None
 
