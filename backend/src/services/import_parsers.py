@@ -11,10 +11,12 @@ def parse_decimal_safe(val: str | None, decimal_sep: str = ".") -> Decimal | Non
     if not val or not val.strip():
         return None
     cleaned = val.strip()
-    if decimal_sep != ".":
-        cleaned = cleaned.replace(decimal_sep, ".")
-    # Remove any thousands separators
-    cleaned = cleaned.replace(",", "") if decimal_sep == "." else cleaned.replace(".", "").replace(" ", "")
+    # Strip thousands separators before swapping the decimal separator, otherwise
+    # the swapped-in "." would itself be stripped (e.g. "1,5" -> "15").
+    if decimal_sep == ".":
+        cleaned = cleaned.replace(",", "")
+    else:
+        cleaned = cleaned.replace(".", "").replace(" ", "").replace(decimal_sep, ".")
 
     try:
         return Decimal(cleaned)
