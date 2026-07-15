@@ -110,6 +110,17 @@ const cancelRename = () => {
   editingName.value = '';
 };
 
+const onRenameBlur = (e: FocusEvent, id: number) => {
+  // relatedTarget === null means focus fell to <body>: a list re-sort just
+  // moved the input's DOM node (or the click hit empty space). Keep editing
+  // and restore focus instead of silently committing the rename.
+  if (!e.relatedTarget && editingPortfolioId.value === id) {
+    nextTick(() => renameInput.value?.[0]?.focus());
+    return;
+  }
+  saveRename(id);
+};
+
 const saveRename = async (id: number) => {
   const trimmed = editingName.value.trim();
   if (!trimmed) {
@@ -341,7 +352,7 @@ onBeforeUnmount(() => {
                   class="bg-bg-tertiary text-text-primary border-0 outline-none ring-0 p-0 px-1.5 w-full rounded text-[0.925rem] font-medium leading-tight"
                   @keydown.enter="saveRename(p.id)"
                   @keydown.esc="cancelRename"
-                  @blur="saveRename(p.id)"
+                  @blur="onRenameBlur($event, p.id)"
                   @click.stop.prevent
                 />
               </div>
