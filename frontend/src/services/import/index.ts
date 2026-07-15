@@ -1,5 +1,7 @@
 export * from './types';
 export * from './csvParser';
+export * from './formula';
+export * from './livePreview';
 export * from './guesses';
 export * from './validation';
 export * from './preview';

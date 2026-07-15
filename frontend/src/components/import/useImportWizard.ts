@@ -9,8 +9,10 @@ import {
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
   parseSchemaMappings,
   parseCsvText,
+  readFileText,
   DEFAULT_INSTITUTION_KEY
 } from '../../services/import';
+import type { OpTypeSettings } from '../../services/import/types';
 
 interface Portfolio {
   id: number;
@@ -40,6 +42,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const columnConfigMap = ref<Record<string, any>>({});
   const uiColumns = ref<Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>>([]);
   const uiRowsOrder = ref<string[]>([]);
+  const opTypeSettings = ref<Record<string, OpTypeSettings>>({});
 
   const showExitConfirm = ref(false);
   const isDirty = computed(() => importFile.value !== null);
@@ -51,6 +54,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h, width: 180 }));
     uiRowsOrder.value = [];
     columnConfigMap.value = {};
+    opTypeSettings.value = {};
     uiColumns.value.forEach(col => {
       columnConfigMap.value[col.id] = { typeSpecific: {} };
     });
@@ -105,6 +109,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         columnConfigMap.value = parsed.columnConfigMap;
         uiColumns.value = parsed.uiColumns;
         uiRowsOrder.value = parsed.uiRowsOrder || [];
+        opTypeSettings.value = parsed.opTypeSettings || {};
       } else {
         isCustomMapping.value = true;
         handleColumnChange();
@@ -147,7 +152,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
       operationTypeMappings: operationTypeMappings.value,
       importFields: importFields.value,
       uiRowsOrder: uiRowsOrder.value,
-      institutionKey: institutionKey.value
+      institutionKey: institutionKey.value,
+      opTypeSettings: opTypeSettings.value
     });
   };
 
@@ -155,19 +161,13 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const schemaMgmt = useSchemaManagement();
 
   const wizardMapping = useWizardMapping(
-    uiColumns,
-    columnConfigMap,
-    importFileHeaders,
-    matchingRowsByType,
     matchingRowsByRawAction,
-    allRawRows,
     operationTypeMappings,
     uniqueOperationTypes
   );
 
   const { parsedPreviewRows } = useImportPreview({
-    fileText,
-    importDelimiter,
+    allRawRows,
     importDecimalSep,
     operationTypeColumnIdx,
     operationTypeMappings,
@@ -202,37 +202,33 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     executor.importError.value = '';
     executor.importSuccessSummary.value = null;
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      fileText.value = text;
+    const text = await readFileText(file);
+    fileText.value = text;
 
-      const parsed = parseCsvText(text);
-      if (parsed.headers.length > 0) {
-        importDelimiter.value = parsed.delimiter;
-        importFileHeaders.value = parsed.headers;
-        handleColumnChange();
-        allRawRows.value = parsed.rawRows;
-        currentStep.value = 1;
+    const parsed = parseCsvText(text);
+    if (parsed.headers.length > 0) {
+      importDelimiter.value = parsed.delimiter;
+      importFileHeaders.value = parsed.headers;
+      handleColumnChange();
+      allRawRows.value = parsed.rawRows;
+      currentStep.value = 1;
 
-        try {
-          const detectRes = await api.detectImportFileSchema(parsed.headers);
-          if (detectRes.schema_id) {
-            schemaMgmt.autodetectedSchemaId.value = detectRes.schema_id;
-            schemaMgmt.selectedSchemaId.value = detectRes.schema_id;
-            isCustomMapping.value = false;
-          } else {
-            schemaMgmt.autodetectedSchemaId.value = null;
-            schemaMgmt.selectedSchemaId.value = null;
-            isCustomMapping.value = true;
-          }
-        } catch (err: any) {
-          console.error('Failed to autodetect schema:', err);
+      try {
+        const detectRes = await api.detectImportFileSchema(parsed.headers);
+        if (detectRes.schema_id) {
+          schemaMgmt.autodetectedSchemaId.value = detectRes.schema_id;
+          schemaMgmt.selectedSchemaId.value = detectRes.schema_id;
+          isCustomMapping.value = false;
+        } else {
+          schemaMgmt.autodetectedSchemaId.value = null;
+          schemaMgmt.selectedSchemaId.value = null;
           isCustomMapping.value = true;
         }
+      } catch (err: any) {
+        console.error('Failed to autodetect schema:', err);
+        isCustomMapping.value = true;
       }
-    };
-    reader.readAsText(file);
+    }
   };
 
   // Watchers & Life Cycle
@@ -245,7 +241,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !wizardMapping.isWizardOpen.value) {
+    if (e.key === 'Escape') {
       if (showExitConfirm.value) {
         showExitConfirm.value = false;
       } else {
@@ -297,47 +293,17 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     isDeletingSchema: schemaMgmt.isDeletingSchema,
     handleDeleteTemplate: executor.handleDeleteTemplateWrapper,
 
-    isWizardOpen: wizardMapping.isWizardOpen,
-    wizardCsvHeaderName: wizardMapping.wizardCsvHeaderName,
-    wizardExampleValue: wizardMapping.wizardExampleValue,
-    wizardExampleRow: wizardMapping.wizardExampleRow,
-    wizardActiveOpType: wizardMapping.wizardActiveOpType,
-    wizardColId: wizardMapping.wizardColId,
-    wizardColIdx: wizardMapping.wizardColIdx,
-    wizardUniqueValues: wizardMapping.wizardUniqueValues,
-    wizardInitialMapping: wizardMapping.wizardInitialMapping,
-    wizardTargetCells: wizardMapping.wizardTargetCells,
     exampleTransactions: wizardMapping.exampleTransactions,
     nextExampleForType: wizardMapping.nextExampleForType,
     prevExampleForType: wizardMapping.prevExampleForType,
-    openWizard: wizardMapping.openWizard,
-    handleWizardSave: wizardMapping.handleWizardSave,
-    handleWizardClear: wizardMapping.handleWizardClear,
-    handleUpdateMapping: wizardMapping.handleUpdateMapping,
-    handleDuplicateColumn: wizardMapping.handleDuplicateColumn,
-    handleDeleteColumn: wizardMapping.handleDeleteColumn,
     handleUpdateOpTypeMapping: wizardMapping.handleUpdateOpTypeMapping,
 
-    handleResizeColumn: (payload: { colId: string; width: number }) => {
-      const col = uiColumns.value.find(c => c.id === payload.colId);
-      if (col) {
-        col.width = payload.width;
-      }
+    // Re-assign to refresh identity after nested mutations from the mapping board.
+    touchColumnConfig: () => {
+      columnConfigMap.value = { ...columnConfigMap.value };
     },
-
-    handleSortColumn: (payload: { colKey: 'raw' | 'db'; direction: 'asc' | 'desc' }) => {
-      const currentOrder = [...uniqueOperationTypes.value];
-      currentOrder.sort((a, b) => {
-        let valA = a;
-        let valB = b;
-        if (payload.colKey === 'db') {
-          valA = operationTypeMappings.value[a] || '';
-          valB = operationTypeMappings.value[b] || '';
-        }
-        const cmp = valA.localeCompare(valB);
-        return payload.direction === 'asc' ? cmp : -cmp;
-      });
-      uiRowsOrder.value = currentOrder;
+    updateOpTypeSettings: (payload: { opType: string; settings: OpTypeSettings }) => {
+      opTypeSettings.value = { ...opTypeSettings.value, [payload.opType]: payload.settings };
     },
 
     // Local states & computed
@@ -360,6 +326,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     operationTypeMappings,
     columnConfigMap,
     uiColumns,
+    opTypeSettings,
     showExitConfirm,
     showOverwriteConfirm: executor.showOverwriteConfirm,
     hasConfirmedOverwrite: executor.hasConfirmedOverwrite,
@@ -375,6 +342,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     enrichedNames,
     uniqueOperationTypes,
     activeDbOpTypes,
+    matchingRowsByType,
     liveValidationStats,
     handleColumnChange,
   };

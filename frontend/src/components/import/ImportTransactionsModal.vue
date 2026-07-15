@@ -6,7 +6,6 @@ import { Layers, Loader, Trash2, Pencil } from '@lucide/vue';
 import { useImportWizard } from './useImportWizard';
 
 // Subcomponents - nested subdirectories & globals
-import ColumnMappingWizard from './wizard/ColumnMappingWizard.vue';
 import Step1DelimiterMapping from './wizard/Step1DelimiterMapping.vue';
 import Step2ColumnMapping from './wizard/Step2ColumnMapping.vue';
 import ParsedPreviewTable from './wizard/ParsedPreviewTable.vue';
@@ -53,29 +52,17 @@ const {
   operationTypeMappings,
   columnConfigMap,
   uiColumns,
-  isWizardOpen,
-  wizardCsvHeaderName,
-  wizardExampleValue,
-  wizardExampleRow,
-  wizardActiveOpType,
-  wizardColId,
-  wizardUniqueValues,
-  wizardInitialMapping,
+  opTypeSettings,
+  allRawRows,
   showExitConfirm,
   showOverwriteConfirm,
   showDeleteConfirm,
   selectedSchema,
   selectedSchemaIdString,
   panelWidth,
-  handleDuplicateColumn,
-  handleDeleteColumn,
   handleUpdateOpTypeMapping,
   handleImport,
   handleDeleteTemplate,
-  handleUpdateMapping,
-  openWizard,
-  handleWizardSave,
-  handleWizardClear,
   requestClose,
   validationErrors,
   isValidCustomMapping,
@@ -83,14 +70,12 @@ const {
   enrichedNames,
   uniqueOperationTypes,
   activeDbOpTypes,
-  exampleTransactions,
+  matchingRowsByType,
   liveValidationStats,
-  prevExampleForType,
-  nextExampleForType,
   hasConfirmedOverwrite,
   handleColumnChange,
-  handleResizeColumn,
-  handleSortColumn,
+  touchColumnConfig,
+  updateOpTypeSettings,
 } = useImportWizard(props, emit);
 
 const isSchemaIncomplete = (schema: any) => {
@@ -286,33 +271,29 @@ onUnmounted(() => {
                   @next="currentStep = 2"
                 />
 
-                <!-- STEP 2: Columns mapping & live stats verification -->
+                <!-- STEP 2: Drag-and-drop column mapping per transaction type -->
                 <Step2ColumnMapping
                   v-else-if="currentStep === 2"
                   v-model:saveMappingTemplate="saveMappingTemplate"
                   v-model:mappingTemplateName="mappingTemplateName"
-                  :importFileHeaders="importFileHeaders"
                   :uiColumns="uiColumns"
-                  :operationTypeColumnIdx="operationTypeColumnIdx"
                   :columnConfigMap="columnConfigMap"
-                  :activeDbOpTypes="activeDbOpTypes"
-                  :uniqueOperationTypes="uniqueOperationTypes"
                   :operationTypeMappings="operationTypeMappings"
+                  :uniqueOperationTypes="uniqueOperationTypes"
+                  :activeDbOpTypes="activeDbOpTypes"
                   :importFields="importFields"
-                  :exampleTransactions="exampleTransactions"
+                  :allRawRows="allRawRows"
+                  :operationTypeColumnIdx="operationTypeColumnIdx"
+                  :matchingRowsByType="matchingRowsByType"
+                  :opTypeSettings="opTypeSettings"
+                  :importDecimalSep="importDecimalSep"
                   :liveValidationStats="liveValidationStats"
                   :validationErrors="validationErrors"
                   :enrichedNames="enrichedNames"
                   @back="currentStep = 1"
-                  @open-wizard="(payload: any) => openWizard(payload.colId, payload.opType, payload.targets, payload.rawAction)"
-                  @prev-example="prevExampleForType"
-                  @next-example="nextExampleForType"
-                  @update-mapping="handleUpdateMapping"
                   @update-optype-mapping="handleUpdateOpTypeMapping"
-                  @duplicate-column="handleDuplicateColumn"
-                  @delete-column="handleDeleteColumn"
-                  @resize-column="handleResizeColumn"
-                  @sort-column="handleSortColumn"
+                  @update-optype-settings="updateOpTypeSettings"
+                  @touch-config="touchColumnConfig"
                 />
               </div>
             </div>
@@ -366,27 +347,6 @@ onUnmounted(() => {
     message="You have uploaded a file and configured mappings. Leaving now will discard this configuration."
     @cancel="showExitConfirm = false" 
     @confirm="emit('close')" 
-  />
-
-  <ColumnMappingWizard
-    :show="isWizardOpen"
-    :currentColId="wizardColId || undefined"
-    :csvHeaderName="wizardCsvHeaderName"
-    :exampleValue="wizardExampleValue"
-    :importFields="importFields"
-    :activeOpType="wizardActiveOpType"
-    :activeOpTypes="activeDbOpTypes"
-    :delimiter="importDelimiter"
-    :decimalSeparator="importDecimalSep"
-    :uniqueCsvValues="wizardUniqueValues"
-    :initialMapping="wizardInitialMapping"
-    :uiColumns="uiColumns"
-    :columnConfigMap="columnConfigMap"
-    :exampleRow="wizardExampleRow"
-    :operationTypeMappings="operationTypeMappings"
-    @close="isWizardOpen = false"
-    @clear="handleWizardClear"
-    @save="handleWizardSave"
   />
 
   <!-- Overwrite template warning popup -->
