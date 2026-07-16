@@ -1,4 +1,4 @@
-import type { ColMapping } from './types';
+import type { ColMapping, ColumnConfig } from './types';
 import { getMappedColIdxForField, getColumnConfigForField } from './validation';
 import { evaluateFormulaTokens, parseNumericCell } from './formula';
 
@@ -7,7 +7,7 @@ export function parsePreviewRows(params: {
   importDecimalSep: string;
   operationTypeColumnIdx: number | null;
   operationTypeMappings: Record<string, string>;
-  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, Partial<ColumnConfig> & { global?: ColMapping }>;
   uiColumns: Array<{ id: string; colIdx: number; name?: string }>;
   importFields: any[];
 }) {

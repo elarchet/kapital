@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronLeft, ChevronRight } from '@lucide/vue';
-import OperationTypeMappingPanel from './mapping/OperationTypeMappingPanel.vue';
-import OpTypeSelector from './mapping/OpTypeSelector.vue';
+import OpTypeSelector, { type MappingVariant } from './mapping/OpTypeSelector.vue';
 import CsvColumnTray from './mapping/CsvColumnTray.vue';
 import FieldSlotList from './mapping/FieldSlotList.vue';
 import FieldConfigModal from './mapping/FieldConfigModal.vue';
@@ -14,12 +13,19 @@ import {
   isFieldRelevantForOpType,
   isFieldRequiredForOpType,
   parseDateTimeWithFormat,
+  extraGroupFields,
+  highestMappedGroup,
+  groupKindOf,
+  groupIndex,
+  baseFieldKey,
+  GROUP_SEP,
+  type FeeGroupKind,
 } from '../../../services/import';
-import type { ColMapping, ImportField, OpTypeSettings } from '../../../services/import/types';
+import type { ColMapping, ColumnConfig, ImportField, OpTypeSettings } from '../../../services/import/types';
 
 const props = defineProps<{
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string }>;
-  columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, ColumnConfig>;
   operationTypeMappings: Record<string, string>;
   uniqueOperationTypes: string[];
   activeDbOpTypes: string[];
@@ -27,6 +33,9 @@ const props = defineProps<{
   allRawRows: string[][];
   operationTypeColumnIdx: number | null;
   matchingRowsByType: Record<string, { csvRow: string[]; rowIdx: number }[]>;
+  matchingRowsByRawAction: Record<string, { csvRow: string[]; rowIdx: number }[]>;
+  splitOpTypes: string[];
+  feeTaxGroupCounts: Record<string, { fee: number; tax: number }>;
   opTypeSettings: Record<string, OpTypeSettings>;
   importDecimalSep: string;
   liveValidationStats: any;
@@ -39,40 +48,116 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:saveMappingTemplate', val: boolean): void;
   (e: 'update:mappingTemplateName', val: string): void;
-  (e: 'update-optype-mapping', payload: { rawAction: string; dbOpType: string }): void;
   (e: 'update-optype-settings', payload: { opType: string; settings: OpTypeSettings }): void;
+  (e: 'update-group-count', payload: { key: string; kind: FeeGroupKind; count: number }): void;
   (e: 'touch-config'): void;
   (e: 'back'): void;
 }>();
 
-// ---- Selected op type + example row cycling ----
-const selectedOpType = ref('');
-watch(() => props.activeDbOpTypes, (types) => {
-  if (!types.includes(selectedOpType.value)) selectedOpType.value = types[0] || '';
+// ---- Mapping variants (merged types: one per opType; split types: one per raw action) ----
+const mappingVariants = computed<MappingVariant[]>(() => {
+  const variants: MappingVariant[] = [];
+  props.activeDbOpTypes.forEach(opType => {
+    if (props.splitOpTypes.includes(opType)) {
+      Object.keys(props.operationTypeMappings)
+        .filter(raw => props.operationTypeMappings[raw] === opType)
+        .forEach(raw => variants.push({ opType, key: raw, rawAction: raw }));
+    } else {
+      variants.push({ opType, key: opType });
+    }
+  });
+  return variants;
+});
+
+// ---- Selected variant + example row cycling ----
+const selectedKey = ref('');
+watch(mappingVariants, (variants) => {
+  if (!variants.some(v => v.key === selectedKey.value)) selectedKey.value = variants[0]?.key || '';
 }, { immediate: true });
 
+const selectedVariant = computed(() => mappingVariants.value.find(v => v.key === selectedKey.value) || null);
+const selectedOpType = computed(() => selectedVariant.value?.opType || '');
+
 const exampleOffsets = ref<Record<string, number>>({});
-const matchesForSelected = computed(() => props.matchingRowsByType?.[selectedOpType.value] || []);
+const matchesForSelected = computed(() => {
+  const variant = selectedVariant.value;
+  if (!variant) return [];
+  return variant.rawAction
+    ? (props.matchingRowsByRawAction?.[variant.rawAction] || [])
+    : (props.matchingRowsByType?.[variant.opType] || []);
+});
 const exampleOffset = computed(() => {
-  const offset = exampleOffsets.value[selectedOpType.value] || 0;
+  const offset = exampleOffsets.value[selectedKey.value] || 0;
   return matchesForSelected.value.length ? offset % matchesForSelected.value.length : 0;
 });
 const exampleRow = computed<string[]>(() => matchesForSelected.value[exampleOffset.value]?.csvRow || []);
 const cycleExample = (delta: number) => {
   const total = matchesForSelected.value.length;
   if (total <= 1) return;
-  exampleOffsets.value[selectedOpType.value] = (exampleOffset.value + delta + total) % total;
+  exampleOffsets.value[selectedKey.value] = (exampleOffset.value + delta + total) % total;
 };
 
-const rowCountsByRawAction = computed<Record<string, number>>(() => {
-  const counts: Record<string, number> = {};
-  if (props.operationTypeColumnIdx === null) return counts;
-  props.allRawRows.forEach(row => {
-    const raw = row[props.operationTypeColumnIdx!]?.trim();
-    if (raw) counts[raw] = (counts[raw] || 0) + 1;
-  });
-  return counts;
+// ---- Extra fee/tax groups (fee_amount__2, tax_amount__2, ...) ----
+// Mapping keys the selected variant reads/writes (mirrors useFieldSlots.keysToCheck).
+const variantKeys = computed(() => {
+  const variant = selectedVariant.value;
+  if (!variant) return [];
+  return variant.rawAction
+    ? [variant.rawAction]
+    : [variant.opType, ...Object.keys(props.operationTypeMappings).filter(r => props.operationTypeMappings[r] === variant.opType)];
 });
+
+const mappedDbKeysForVariant = computed(() => {
+  const keys: string[] = [];
+  variantKeys.value.forEach(key => {
+    Object.values(props.columnConfigMap).forEach(conf => {
+      (conf?.typeSpecific?.[key] || []).forEach(m => { if (m.dbKey) keys.push(m.dbKey); });
+    });
+  });
+  return keys;
+});
+
+// Effective count = groups the user added this session or groups already mapped
+// (restores extra groups when a saved template is loaded).
+const groupCount = (kind: FeeGroupKind) => Math.max(
+  props.feeTaxGroupCounts?.[selectedKey.value]?.[kind] || 1,
+  highestMappedGroup(mappedDbKeysForVariant.value, kind)
+);
+const feeGroupCount = computed(() => groupCount('fee'));
+const taxGroupCount = computed(() => groupCount('tax'));
+
+const effectiveImportFields = computed<ImportField[]>(() => [
+  ...props.importFields,
+  ...extraGroupFields(props.importFields, 'fee', feeGroupCount.value),
+  ...extraGroupFields(props.importFields, 'tax', taxGroupCount.value),
+]);
+
+const canAddGroup = (kind: FeeGroupKind) =>
+  props.importFields.some(f => f.key === `${kind}_amount` && isFieldRelevantForOpType(f, selectedOpType.value));
+
+const addGroup = (kind: FeeGroupKind) => {
+  emit('update-group-count', { key: selectedKey.value, kind, count: groupCount(kind) + 1 });
+};
+
+const removeGroup = ({ kind, index }: { kind: FeeGroupKind; index: number }) => {
+  // Drop the group's mappings and compact higher group indexes down by one.
+  variantKeys.value.forEach(key => {
+    Object.values(props.columnConfigMap).forEach(conf => {
+      const list = conf?.typeSpecific?.[key];
+      if (!list?.length) return;
+      conf.typeSpecific[key] = list
+        .filter(m => !(m.dbKey && groupKindOf(m.dbKey) === kind && groupIndex(m.dbKey) === index))
+        .map(m => {
+          if (m.dbKey && groupKindOf(m.dbKey) === kind && groupIndex(m.dbKey) > index) {
+            return { ...m, dbKey: `${baseFieldKey(m.dbKey)}${GROUP_SEP}${groupIndex(m.dbKey) - 1}` };
+          }
+          return m;
+        });
+    });
+  });
+  emit('touch-config');
+  emit('update-group-count', { key: selectedKey.value, kind, count: groupCount(kind) - 1 });
+};
 
 // ---- Slots + drag & drop ----
 const columnConfigMapRef = computed({
@@ -83,9 +168,10 @@ const columnConfigMapRef = computed({
 const fieldSlots = useFieldSlots({
   columnConfigMap: columnConfigMapRef as any,
   uiColumns: computed(() => props.uiColumns),
-  importFields: computed(() => props.importFields),
+  importFields: effectiveImportFields,
   operationTypeMappings: computed(() => props.operationTypeMappings),
   selectedOpType,
+  selectedKey,
 });
 
 const dnd = useDragDrop();
@@ -99,24 +185,30 @@ const onEscape = (e: KeyboardEvent) => {
 onMounted(() => window.addEventListener('keydown', onEscape, true));
 onBeforeUnmount(() => window.removeEventListener('keydown', onEscape, true));
 
-// ---- Per-op-type completion stats for the selector pills ----
-const opTypeStats = computed(() => {
+// ---- Per-variant completion stats for the selector pills ----
+const variantStats = computed(() => {
   const stats: Record<string, { requiredMapped: number; requiredTotal: number; rowCount: number }> = {};
-  props.activeDbOpTypes.forEach(opType => {
-    const rawActions = Object.keys(props.operationTypeMappings).filter(r => props.operationTypeMappings[r] === opType);
-    const keys = [opType, ...rawActions];
+  mappingVariants.value.forEach(variant => {
+    const { opType } = variant;
+    // Split variants only count their own rawAction-keyed mappings; merged
+    // variants also accept legacy rawAction-keyed entries of their group.
+    const keys = variant.rawAction
+      ? [variant.rawAction]
+      : [opType, ...Object.keys(props.operationTypeMappings).filter(r => props.operationTypeMappings[r] === opType)];
     const requiredFields = props.importFields.filter(f =>
       f.key !== 'operation_type' && isFieldRelevantForOpType(f, opType) && isFieldRequiredForOpType(f, opType)
     );
     const mapped = requiredFields.filter(f =>
       keys.some(key =>
-        Object.values(props.columnConfigMap).some(conf => conf?.typeSpecific?.[key]?.dbKey === f.key)
+        Object.values(props.columnConfigMap).some(conf => conf?.typeSpecific?.[key]?.some(m => m.dbKey === f.key))
       )
     ).length;
-    stats[opType] = {
+    stats[variant.key] = {
       requiredMapped: mapped,
       requiredTotal: requiredFields.length,
-      rowCount: props.matchingRowsByType?.[opType]?.length || 0,
+      rowCount: variant.rawAction
+        ? (props.matchingRowsByRawAction?.[variant.rawAction]?.length || 0)
+        : (props.matchingRowsByType?.[opType]?.length || 0),
     };
   });
   return stats;
@@ -148,7 +240,7 @@ const uniqueValuesForCol = (colId: string | null): string[] => {
 };
 
 const openConfig = (fieldKey: string) => {
-  const field = props.importFields.find(f => f.key === fieldKey);
+  const field = effectiveImportFields.value.find(f => f.key === fieldKey);
   if (!field) return;
   const found = fieldSlots.findMapping(fieldKey);
   const col = found ? props.uiColumns.find(c => c.id === found.colId) : null;
@@ -166,7 +258,8 @@ const openConfig = (fieldKey: string) => {
     exampleRowByHeader: rowByHeader.value,
     tickerMapped: !!tickerMapping,
     exampleTicker: tickerCol ? (exampleRow.value?.[tickerCol.colIdx] ?? '').trim() : '',
-    opTypeSettings: props.opTypeSettings?.[selectedOpType.value] ?? null,
+    // Settings are stored per variant key so split variants configure independently.
+    opTypeSettings: props.opTypeSettings?.[selectedKey.value] ?? null,
     decimalSeparator: props.importDecimalSep,
   };
   showConfigModal.value = true;
@@ -177,7 +270,7 @@ const assignField = (fieldKey: string, colId: string) => {
   emit('touch-config');
   // Enum fields can't import without value mappings; datetimes that fail
   // auto-parse need an explicit format. Open the modal right away.
-  const field = props.importFields.find(f => f.key === fieldKey);
+  const field = effectiveImportFields.value.find(f => f.key === fieldKey);
   const col = props.uiColumns.find(c => c.id === colId);
   const example = col ? (exampleRow.value?.[col.colIdx] ?? '') : '';
   const needsConfig = field?.type === 'enum'
@@ -201,7 +294,7 @@ const onModalSave = (payload: { mapping: ColMapping; opTypeSettings?: OpTypeSett
     fieldSlots.updateMapping(configFieldKey.value, payload.mapping);
   }
   if (payload.opTypeSettings) {
-    emit('update-optype-settings', { opType: selectedOpType.value, settings: payload.opTypeSettings });
+    emit('update-optype-settings', { opType: selectedKey.value, settings: payload.opTypeSettings });
   }
   emit('touch-config');
   showConfigModal.value = false;
@@ -213,10 +306,13 @@ const onModalClear = () => {
   showConfigModal.value = false;
 };
 
-// ---- Per-op-type verification ----
+// ---- Per-variant verification ----
 const showVerification = ref(false);
 const aggregatedStats = computed(() => {
-  const rawActions = Object.keys(props.operationTypeMappings).filter(r => props.operationTypeMappings[r] === selectedOpType.value);
+  const variant = selectedVariant.value;
+  const rawActions = variant?.rawAction
+    ? [variant.rawAction]
+    : Object.keys(props.operationTypeMappings).filter(r => props.operationTypeMappings[r] === selectedOpType.value);
   const agg = { total: 0, success: 0, failed: 0, errors: [] as any[] };
   rawActions.forEach(raw => {
     const s = props.liveValidationStats?.[raw];
@@ -239,28 +335,19 @@ const aggregatedStats = computed(() => {
       <button @click="emit('back')" class="btn btn-sm shrink-0">&larr; Back to Step 1</button>
     </div>
 
-    <!-- Raw action -> DB type mapping -->
-    <OperationTypeMappingPanel
-      :uniqueOperationTypes="uniqueOperationTypes"
-      :operationTypeMappings="operationTypeMappings"
-      :importFields="importFields"
-      :rowCountsByRawAction="rowCountsByRawAction"
-      @update-optype-mapping="(payload) => emit('update-optype-mapping', payload)"
-    />
-
-    <!-- Op type pills -->
+    <!-- Variant pills (one per DB type, or one per raw action for split types) -->
     <OpTypeSelector
-      v-if="activeDbOpTypes.length"
-      :opTypes="activeDbOpTypes"
-      :selected="selectedOpType"
-      :stats="opTypeStats"
-      @select="(t: string) => selectedOpType = t"
+      v-if="mappingVariants.length"
+      :variants="mappingVariants"
+      :selected="selectedKey"
+      :stats="variantStats"
+      @select="(k: string) => selectedKey = k"
     />
     <p v-else class="text-[0.78rem] text-warning-color m-0">
-      Map at least one of your file's actions to a transaction type above to start mapping columns.
+      Map at least one of your file's actions to a transaction type in Step 1 to start mapping columns.
     </p>
 
-    <template v-if="selectedOpType">
+    <template v-if="selectedKey">
       <!-- Sticky CSV column tray -->
       <CsvColumnTray
         :uiColumns="uiColumns"
@@ -299,13 +386,17 @@ const aggregatedStats = computed(() => {
         :exampleRow="exampleRow"
         :decimalSeparator="importDecimalSep"
         :enrichedNames="enrichedNames"
-        :opTypeSettings="opTypeSettings?.[selectedOpType]"
+        :opTypeSettings="opTypeSettings?.[selectedKey]"
         :dropEnabled="!!dnd.draggingColId.value || !!dnd.armedColId.value"
+        :canAddFee="canAddGroup('fee')"
+        :canAddTax="canAddGroup('tax')"
         @drop-column="({ fieldKey, event }) => onSlotDrop(fieldKey, event)"
         @assign="({ fieldKey, colId }) => assignField(fieldKey, colId)"
         @clear="fieldSlots.clearField"
         @configure="openConfig"
         @slot-click="onSlotClick"
+        @add-group="addGroup"
+        @remove-group="removeGroup"
       />
     </template>
 

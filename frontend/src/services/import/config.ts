@@ -1,4 +1,4 @@
-import type { ColMapping, FormulaToken, OpTypeSettings } from './types';
+import type { ColMapping, ColumnConfig, FormulaToken, OpTypeSettings } from './types';
 
 export function getEnumMappingsForField(dbKey: string, mappings: any): Record<string, string> {
   const result: Record<string, string> = {};
@@ -16,13 +16,14 @@ export function getEnumMappingsForField(dbKey: string, mappings: any): Record<st
 export function buildCustomMappingPayload(params: {
   operationTypeColumnIdx: number | null;
   importFileHeaders: string[];
-  columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, ColumnConfig>;
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>;
   operationTypeMappings: Record<string, string>;
   importFields: any[];
   uiRowsOrder?: string[];
   institutionKey?: string;
   opTypeSettings?: Record<string, OpTypeSettings>;
+  splitOpTypes?: string[];
 }) {
   const transformations: Record<string, any> = {};
   const enum_mappings: Record<string, Record<string, string[]>> = {};
@@ -44,7 +45,8 @@ export function buildCustomMappingPayload(params: {
     if (!col) return;
     const headerName = params.importFileHeaders[col.colIdx];
 
-    Object.entries(conf.typeSpecific).forEach(([opType, specificConf]) => {
+    Object.entries(conf.typeSpecific).forEach(([opType, mappingList]) => {
+      (mappingList || []).forEach(specificConf => {
       if (specificConf.dbKey === 'name' && specificConf.enrichAssetNames) {
         enrich_asset_names[opType] = specificConf.enrichAssetNames;
       }
@@ -93,6 +95,7 @@ export function buildCustomMappingPayload(params: {
           cleared_type_specifics[headerName].push(opType);
         }
       }
+      });
     });
   });
 
@@ -141,6 +144,9 @@ export function buildCustomMappingPayload(params: {
     enrich_asset_names,
     enrich_transaction_ids,
     ...(Object.keys(hash_columns).length > 0 ? { hash_columns } : {}),
+    // Ignored by the backend (rawAction-keyed columns already win over opType keys);
+    // persisted so the wizard restores the split/merged choice per DB type.
+    ...(params.splitOpTypes?.length ? { split_types: params.splitOpTypes } : {}),
     ui_columns: params.uiColumns,
     ui_rows_order: params.uiRowsOrder || [],
     ...(Object.keys(cleared_type_specifics).length > 0 ? { cleared_type_specifics } : {})
@@ -153,25 +159,33 @@ export function parseSchemaMappings(
 ): {
   operationTypeColumnIdx: number | null;
   operationTypeMappings: Record<string, string>;
-  columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, ColumnConfig>;
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>;
   uiRowsOrder?: string[];
   opTypeSettings: Record<string, OpTypeSettings>;
+  splitTypes: string[];
 } {
   let operationTypeColumnIdx: number | null = null;
   const operationTypeMappings: Record<string, string> = {};
-  const columnConfigMap: Record<string, { typeSpecific: Record<string, ColMapping> }> = {};
+  const columnConfigMap: Record<string, ColumnConfig> = {};
   const uiColumns: Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }> = [];
   let uiRowsOrder: string[] = [];
   const opTypeSettings: Record<string, OpTypeSettings> = {};
+  let splitTypes: string[] = [];
 
   let mappings: any = {};
   try {
     mappings = JSON.parse(mappingsJson);
   } catch (e) { }
 
+  if (Array.isArray(mappings.split_types)) {
+    splitTypes = mappings.split_types.filter((t: any) => typeof t === 'string');
+  }
+
   if (mappings.ui_columns && Array.isArray(mappings.ui_columns) && mappings.ui_columns.length > 0) {
-    uiColumns.push(...mappings.ui_columns);
+    // Legacy templates carried duplicate "(Copy)" columns because one column could
+    // only feed one field; mappings now stack per column, so fold duplicates away.
+    uiColumns.push(...mappings.ui_columns.filter((c: any) => !c.isDuplicate));
     uiColumns.forEach(c => {
       columnConfigMap[c.id] = { typeSpecific: {} };
     });
@@ -187,24 +201,14 @@ export function parseSchemaMappings(
     uiRowsOrder = mappings.ui_rows_order;
   }
 
-  // Find or create a UI column for the given CSV index that has a free typeSpecific
-  // slot for `opType`, creating a duplicate column only when there's a real conflict.
-  const getOrCreateColIdForMapping = (idx: number, dbKey: string, opType: string): string => {
-    for (const col of uiColumns) {
-      if (col.colIdx !== idx) continue;
-      const conf = columnConfigMap[col.id];
-      if (!conf) continue;
-      const existing = conf.typeSpecific[opType];
-      // Reuse if the slot is free or already set to this same dbKey.
-      if (!existing || existing.dbKey === dbKey) return col.id;
-    }
-    // No suitable slot found — create a duplicate UI column.
-    const headerName = importFileHeaders[idx];
-    const dupCount = uiColumns.filter(c => c.colIdx === idx).length;
-    const newId = `col-${idx}_dup_${dupCount}`;
-    uiColumns.push({ id: newId, colIdx: idx, name: headerName, label: `${headerName} (Copy)`, isDuplicate: true });
-    columnConfigMap[newId] = { typeSpecific: {} };
-    return newId;
+  const getColIdForMapping = (idx: number): string | null =>
+    uiColumns.find(col => col.colIdx === idx && columnConfigMap[col.id])?.id ?? null;
+
+  const pushMapping = (colId: string, key: string, mapping: ColMapping) => {
+    const list = (columnConfigMap[colId].typeSpecific[key] ||= []);
+    const existingIdx = list.findIndex(m => m.dbKey === mapping.dbKey);
+    if (existingIdx >= 0) list[existingIdx] = mapping;
+    else list.push(mapping);
   };
 
   try {
@@ -236,7 +240,8 @@ export function parseSchemaMappings(
       Object.entries(valObj).forEach(([opType, headerName]) => {
         const idx = importFileHeaders.indexOf(headerName);
         if (idx < 0) return;
-        const colId = getOrCreateColIdForMapping(idx, dbKey, opType);
+        const colId = getColIdForMapping(idx);
+        if (!colId) return;
         const dfVal = dateFormats[dbKey];
         const specDateFormat = !dfVal
           ? 'auto'
@@ -261,7 +266,7 @@ export function parseSchemaMappings(
           specConf.enrichTransactionIds = mappings.enrich_transaction_ids?.[opType] || 'when_empty';
         }
 
-        columnConfigMap[colId].typeSpecific[opType] = specConf;
+        pushMapping(colId, opType, specConf);
       });
     });
 
@@ -271,15 +276,11 @@ export function parseSchemaMappings(
       const idx = importFileHeaders.indexOf(headerName);
       if (idx < 0) return;
       (opTypes as string[]).forEach(opType => {
-        for (const col of uiColumns) {
-          if (col.colIdx !== idx) continue;
-          const conf = columnConfigMap[col.id];
-          if (!conf) continue;
-          const existing = conf.typeSpecific[opType];
-          if (!existing || !existing.dbKey) {
-            conf.typeSpecific[opType] = { dbKey: '' };
-            break;
-          }
+        const colId = getColIdForMapping(idx);
+        if (!colId) return;
+        const list = columnConfigMap[colId].typeSpecific[opType];
+        if (!list || !list.some(m => m.dbKey)) {
+          columnConfigMap[colId].typeSpecific[opType] = [{ dbKey: '' }];
         }
       });
     });
@@ -303,5 +304,5 @@ export function parseSchemaMappings(
     console.error('Failed to parse schema mappings:', err);
   }
 
-  return { operationTypeColumnIdx, operationTypeMappings, columnConfigMap, uiColumns, uiRowsOrder, opTypeSettings };
+  return { operationTypeColumnIdx, operationTypeMappings, columnConfigMap, uiColumns, uiRowsOrder, opTypeSettings, splitTypes };
 }

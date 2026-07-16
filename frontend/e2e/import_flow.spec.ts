@@ -89,15 +89,30 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
     .locator('button');
   await pickOption(page, typeColDropdown, 'Action');
 
-  await page.click('button:has-text("Next: Configure Column Mappings")');
-
-  // ---- 5. Step 2: map raw actions to operation types ----
+  // ---- 5. Step 1: map raw actions to operation types ----
+  const nextBtn = page.locator('button:has-text("Next: Configure Column Mappings")');
+  await expect(nextBtn).toBeDisabled(); // nothing mapped yet
   await expect(page.getByText('3 unmapped')).toBeVisible();
   await pickOption(page, page.getByTestId('optype-row-BUY').locator('button'), 'trade');
+  await expect(nextBtn).toBeEnabled(); // one mapped action is enough to proceed
   await pickOption(page, page.getByTestId('optype-row-SELL').locator('button'), 'trade');
   await pickOption(page, page.getByTestId('optype-row-DIVIDEND').locator('button'), 'dividend');
   // Panel auto-collapses once everything is mapped.
   await expect(page.getByText('3 mapped')).toBeVisible();
+
+  // ---- 5b. Split mode round-trip: trade (BUY+SELL) can map each action separately ----
+  const splitToggle = page.getByTestId('split-toggle-trade');
+  await expect(splitToggle).toBeVisible(); // stays visible while the rows list is collapsed
+  await splitToggle.check();
+  await nextBtn.click();
+  // One pill per raw action instead of a single trade pill.
+  await expect(page.getByTestId('optype-pill-BUY')).toBeVisible();
+  await expect(page.getByTestId('optype-pill-SELL')).toBeVisible();
+  await expect(page.getByTestId('optype-pill-trade')).not.toBeVisible();
+  await page.click('button:has-text("Back to Step 1")');
+  await splitToggle.uncheck();
+
+  await nextBtn.click();
 
   // Op type pills appear; trade is auto-selected and shows its row count.
   const tradePill = page.getByTestId('optype-pill-trade');
@@ -128,6 +143,12 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
 
   // (c) Per-slot dropdown.
   await pickOption(page, page.getByTestId('field-slot-currency').locator('button').first(), 'Currency');
+  await expect(mappedChip('currency', 'Currency')).toBeVisible();
+
+  // One CSV column can feed several DB fields: reuse "Currency" for price_currency
+  // without clearing the existing currency mapping.
+  await pickOption(page, page.getByTestId('field-slot-price_currency').locator('button').first(), 'Currency');
+  await expect(mappedChip('price_currency', 'Currency')).toBeVisible();
   await expect(mappedChip('currency', 'Currency')).toBeVisible();
 
   await page.getByTestId('csv-chip-Ticker').click();
@@ -184,6 +205,13 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await configModal.locator('button:has-text("Save")').click();
   await expect(page.getByTestId('field-slot-total_amount')).toContainText('formula');
   await expect(page.getByText('2/2 rows parse cleanly')).toBeVisible();
+
+  // ---- 8b. Extra fee groups: add creates suffixed slots, remove cleans them up ----
+  await page.getByTestId('add-fee-group').click();
+  await expect(page.getByTestId('field-slot-fee_amount__2')).toBeVisible();
+  await expect(page.getByTestId('field-slot-fee_type__2')).toBeVisible();
+  await page.getByTestId('remove-fee-group-2').click();
+  await expect(page.getByTestId('field-slot-fee_amount__2')).not.toBeVisible();
 
   // ---- 9. Dividend op type: map required fields + auto-generated ID ----
   await dividendPill.click();

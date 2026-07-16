@@ -23,7 +23,7 @@ const emit = defineEmits<{
     </div>
     <!-- Wraps on tall screens (capped so field slots keep priority), single scrollable row on short screens -->
     <div
-      class="flex flex-wrap gap-1.5 max-h-[22vh] overflow-y-auto overflow-x-hidden [@media(max-height:700px)]:flex-nowrap [@media(max-height:700px)]:overflow-x-auto [@media(max-height:700px)]:overflow-y-hidden pb-0.5"
+      class="flex flex-wrap content-start items-start gap-1.5 min-h-[6rem] max-h-[22vh] overflow-y-auto overflow-x-hidden [@media(max-height:700px)]:flex-nowrap [@media(max-height:700px)]:min-h-0 [@media(max-height:700px)]:overflow-x-auto [@media(max-height:700px)]:overflow-y-hidden pb-0.5"
     >
       <CsvColumnChip
         v-for="col in uiColumns"

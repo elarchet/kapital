@@ -44,7 +44,7 @@ const onDrop = (e: DragEvent) => {
 
 <template>
   <div
-    class="group/slot rounded-md border transition-colors"
+    class="group/slot rounded-md border transition-colors h-full"
     :data-testid="`field-slot-${slotView?.field?.key}`"
     :class="[
       dragOver ? 'border-accent ring-2 ring-accent/30 bg-accent-light/60'
@@ -58,22 +58,41 @@ const onDrop = (e: DragEvent) => {
     @drop.prevent="onDrop"
     @click="emit('slot-click')"
   >
-    <div class="flex items-center gap-2 py-1.5 px-2.5">
-      <!-- Field identity -->
-      <div class="w-[38%] min-w-0 shrink-0">
-        <div class="flex items-center gap-1.5 min-w-0">
-          <span class="text-[0.78rem] font-semibold truncate" :class="slotView?.isRequired && !isMapped ? 'text-danger-color' : ''">
-            {{ slotView?.field?.label }}
-          </span>
-          <span v-if="slotView?.isRequired" class="text-danger-color font-bold" title="Required field">*</span>
-        </div>
-        <span class="inline-block text-[0.6rem] font-semibold uppercase rounded-sm px-1 py-px" :class="typeBadgeClass">
+    <div class="flex flex-col gap-1 py-1.5 px-2.5 h-full">
+      <!-- Field identity + actions -->
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="text-[0.78rem] font-semibold truncate" :class="slotView?.isRequired && !isMapped ? 'text-danger-color' : ''">
+          {{ slotView?.field?.label }}
+        </span>
+        <span v-if="slotView?.isRequired" class="text-danger-color font-bold" title="Required field">*</span>
+        <span class="inline-block text-[0.6rem] font-semibold uppercase rounded-sm px-1 py-px shrink-0" :class="typeBadgeClass">
           {{ slotView?.field?.type }}
         </span>
+        <!-- Actions -->
+        <div class="ml-auto flex items-center gap-0.5 shrink-0" @click.stop>
+          <button
+            v-if="showConfigure"
+            type="button"
+            class="p-1 rounded-sm text-text-secondary hover:text-accent hover:bg-accent-light"
+            title="Advanced settings (formula, enums, hashing, enrichment)"
+            @click="emit('configure')"
+          >
+            <Settings2 class="w-4 h-4" />
+          </button>
+          <button
+            v-if="isMapped"
+            type="button"
+            class="p-1 rounded-sm text-text-secondary hover:text-danger-color hover:bg-danger-light"
+            title="Clear mapping"
+            @click="emit('clear')"
+          >
+            <X class="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <!-- Mapping state -->
-      <div class="flex-1 min-w-0">
+      <div class="min-w-0">
         <template v-if="isMapped">
           <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
             <span v-if="slotView?.mapping?.formula?.length" class="flex items-center gap-1 text-[0.72rem] font-mono bg-bg-tertiary border border-border-color rounded-sm py-0.5 px-1.5 truncate max-w-full" title="Formula mapping">
@@ -123,28 +142,6 @@ const onDrop = (e: DragEvent) => {
             </div>
           </div>
         </template>
-      </div>
-
-      <!-- Actions -->
-      <div class="flex items-center gap-1 shrink-0" @click.stop>
-        <button
-          v-if="showConfigure"
-          type="button"
-          class="p-1 rounded-sm text-text-secondary hover:text-accent hover:bg-accent-light"
-          title="Advanced settings (formula, enums, hashing, enrichment)"
-          @click="emit('configure')"
-        >
-          <Settings2 class="w-4 h-4" />
-        </button>
-        <button
-          v-if="isMapped"
-          type="button"
-          class="p-1 rounded-sm text-text-secondary hover:text-danger-color hover:bg-danger-light"
-          title="Clear mapping"
-          @click="emit('clear')"
-        >
-          <X class="w-4 h-4" />
-        </button>
       </div>
     </div>
   </div>

@@ -38,6 +38,12 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
 
   const operationTypeColumnIdx = ref<number | null>(null);
   const operationTypeMappings = ref<Record<string, string>>({});
+  // DB op types whose raw actions are mapped separately (one variant per raw value).
+  const splitOpTypes = ref<string[]>([]);
+  // Session-side fee/tax group counts per mapping-variant key (>= 1). Groups with
+  // mapped columns are re-derived from columnConfigMap; this only keeps still-empty
+  // groups alive across step navigation.
+  const feeTaxGroupCounts = ref<Record<string, { fee: number; tax: number }>>({});
 
   const columnConfigMap = ref<Record<string, any>>({});
   const uiColumns = ref<Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>>([]);
@@ -51,6 +57,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
 
   const handleColumnChange = () => {
     operationTypeMappings.value = {};
+    splitOpTypes.value = [];
+    feeTaxGroupCounts.value = {};
     uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h, width: 180 }));
     uiRowsOrder.value = [];
     columnConfigMap.value = {};
@@ -110,6 +118,9 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         uiColumns.value = parsed.uiColumns;
         uiRowsOrder.value = parsed.uiRowsOrder || [];
         opTypeSettings.value = parsed.opTypeSettings || {};
+        splitOpTypes.value = parsed.splitTypes || [];
+        // Groups with mapped columns are re-derived from columnConfigMap.
+        feeTaxGroupCounts.value = {};
       } else {
         isCustomMapping.value = true;
         handleColumnChange();
@@ -140,7 +151,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     columnConfigMap,
     uiColumns,
     uiRowsOrder,
-    enrichedNames
+    enrichedNames,
+    splitOpTypes
   });
 
   const buildCustomMappingPayload = () => {
@@ -153,7 +165,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
       importFields: importFields.value,
       uiRowsOrder: uiRowsOrder.value,
       institutionKey: institutionKey.value,
-      opTypeSettings: opTypeSettings.value
+      opTypeSettings: opTypeSettings.value,
+      splitOpTypes: splitOpTypes.value
     });
   };
 
@@ -163,7 +176,9 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const wizardMapping = useWizardMapping(
     matchingRowsByRawAction,
     operationTypeMappings,
-    uniqueOperationTypes
+    uniqueOperationTypes,
+    columnConfigMap,
+    splitOpTypes
   );
 
   const { parsedPreviewRows } = useImportPreview({
@@ -297,6 +312,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     nextExampleForType: wizardMapping.nextExampleForType,
     prevExampleForType: wizardMapping.prevExampleForType,
     handleUpdateOpTypeMapping: wizardMapping.handleUpdateOpTypeMapping,
+    toggleSplitType: wizardMapping.toggleSplitType,
 
     // Re-assign to refresh identity after nested mutations from the mapping board.
     touchColumnConfig: () => {
@@ -304,6 +320,13 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     },
     updateOpTypeSettings: (payload: { opType: string; settings: OpTypeSettings }) => {
       opTypeSettings.value = { ...opTypeSettings.value, [payload.opType]: payload.settings };
+    },
+    updateFeeTaxGroupCount: (payload: { key: string; kind: 'fee' | 'tax'; count: number }) => {
+      const current = feeTaxGroupCounts.value[payload.key] || { fee: 1, tax: 1 };
+      feeTaxGroupCounts.value = {
+        ...feeTaxGroupCounts.value,
+        [payload.key]: { ...current, [payload.kind]: Math.max(1, payload.count) },
+      };
     },
 
     // Local states & computed
@@ -324,6 +347,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     currentStep,
     operationTypeColumnIdx,
     operationTypeMappings,
+    splitOpTypes,
+    feeTaxGroupCounts,
     columnConfigMap,
     uiColumns,
     opTypeSettings,
@@ -343,6 +368,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     uniqueOperationTypes,
     activeDbOpTypes,
     matchingRowsByType,
+    matchingRowsByRawAction,
     liveValidationStats,
     handleColumnChange,
   };

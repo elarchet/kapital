@@ -50,6 +50,8 @@ const {
   currentStep,
   operationTypeColumnIdx,
   operationTypeMappings,
+  splitOpTypes,
+  toggleSplitType,
   columnConfigMap,
   uiColumns,
   opTypeSettings,
@@ -71,11 +73,14 @@ const {
   uniqueOperationTypes,
   activeDbOpTypes,
   matchingRowsByType,
+  matchingRowsByRawAction,
   liveValidationStats,
   hasConfirmedOverwrite,
   handleColumnChange,
   touchColumnConfig,
   updateOpTypeSettings,
+  updateFeeTaxGroupCount,
+  feeTaxGroupCounts,
 } = useImportWizard(props, emit);
 
 const isSchemaIncomplete = (schema: any) => {
@@ -267,7 +272,11 @@ onUnmounted(() => {
                   :uniqueOperationTypes="uniqueOperationTypes"
                   :importFields="importFields"
                   :activeDbOpTypes="activeDbOpTypes"
+                  :allRawRows="allRawRows"
+                  :splitOpTypes="splitOpTypes"
                   @column-change="handleColumnChange"
+                  @update-optype-mapping="handleUpdateOpTypeMapping"
+                  @toggle-split="({ opType, enabled }) => toggleSplitType(opType, enabled)"
                   @next="currentStep = 2"
                 />
 
@@ -285,14 +294,17 @@ onUnmounted(() => {
                   :allRawRows="allRawRows"
                   :operationTypeColumnIdx="operationTypeColumnIdx"
                   :matchingRowsByType="matchingRowsByType"
+                  :matchingRowsByRawAction="matchingRowsByRawAction"
+                  :splitOpTypes="splitOpTypes"
+                  :feeTaxGroupCounts="feeTaxGroupCounts"
                   :opTypeSettings="opTypeSettings"
                   :importDecimalSep="importDecimalSep"
                   :liveValidationStats="liveValidationStats"
                   :validationErrors="validationErrors"
                   :enrichedNames="enrichedNames"
                   @back="currentStep = 1"
-                  @update-optype-mapping="handleUpdateOpTypeMapping"
                   @update-optype-settings="updateOpTypeSettings"
+                  @update-group-count="updateFeeTaxGroupCount"
                   @touch-config="touchColumnConfig"
                 />
               </div>

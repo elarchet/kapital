@@ -1,8 +1,25 @@
 import type { ColMapping, RowError } from './types';
 import { evaluateFormulaTokens, formulaToDisplayString } from './formula';
 
+// Loose shape accepted by the resolvers below: typeSpecific keys hold LISTS of
+// mappings (one CSV column can feed several DB fields). `global` is a legacy
+// single-mapping fallback kept for old in-memory shapes.
+type AnyColumnConfig = {
+  global?: ColMapping;
+  typeSpecific?: Record<string, ColMapping[]>;
+};
+
+// Find the mapping for fieldKey inside one column's list for the given key.
+export function findFieldMappingInList(
+  conf: AnyColumnConfig | undefined | null,
+  key: string,
+  fieldKey: string
+): ColMapping | null {
+  return conf?.typeSpecific?.[key]?.find(m => m.dbKey === fieldKey) ?? null;
+}
+
 export function getColumnConfigForField(
-  columnConfigMap: Record<string | number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
+  columnConfigMap: Record<string | number, AnyColumnConfig>,
   fieldKey: string,
   rawAction: string,
   opType: string
@@ -12,10 +29,12 @@ export function getColumnConfigForField(
   if (!columnConfigMap) return foundConf;
   Object.entries(columnConfigMap).forEach(([_, conf]) => {
     if (!conf) return;
-    if (conf.typeSpecific && conf.typeSpecific[rawAction]?.dbKey === fieldKey) {
-      foundConf = conf.typeSpecific[rawAction];
-    } else if (conf.typeSpecific && opType && conf.typeSpecific[opType]?.dbKey === fieldKey) {
-      foundConf = conf.typeSpecific[opType];
+    const byRaw = findFieldMappingInList(conf, rawAction, fieldKey);
+    const byOpType = opType ? findFieldMappingInList(conf, opType, fieldKey) : null;
+    if (byRaw) {
+      foundConf = byRaw;
+    } else if (byOpType) {
+      foundConf = byOpType;
     } else if (conf.global?.dbKey === fieldKey) {
       foundConf = conf.global;
     }
@@ -90,7 +109,7 @@ export function getMappedColIdxForField(
   dbKey: string,
   rawAction: string,
   dbOpType: string,
-  columnConfigMap: Record<string | number, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>,
+  columnConfigMap: Record<string | number, AnyColumnConfig>,
   uiColumns?: Array<{ id: string; colIdx: number }>
 ): number {
   let mappedIdx = -1;
@@ -107,9 +126,9 @@ export function getMappedColIdxForField(
 
   Object.entries(columnConfigMap).forEach(([idOrIdxStr, conf]) => {
     if (!conf) return;
-    if (conf.typeSpecific && conf.typeSpecific[rawAction]?.dbKey === dbKey) {
+    if (findFieldMappingInList(conf, rawAction, dbKey)) {
       mappedIdx = resolveIdx(idOrIdxStr);
-    } else if (conf.typeSpecific && dbOpType && conf.typeSpecific[dbOpType]?.dbKey === dbKey) {
+    } else if (dbOpType && findFieldMappingInList(conf, dbOpType, dbKey)) {
       mappedIdx = resolveIdx(idOrIdxStr);
     } else if (conf.global?.dbKey === dbKey) {
       mappedIdx = resolveIdx(idOrIdxStr);
@@ -123,7 +142,7 @@ export function validateLiveStats(params: {
   importFields: any[];
   importDelimiter: string;
   importDecimalSep: string;
-  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, AnyColumnConfig>;
   uiColumns: Array<{ id: string; colIdx: number }>;
   activeDbOpTypes: string[];
   allRawRows: string[][];
@@ -339,9 +358,10 @@ export function getValidationErrors(params: {
   operationTypeMappings: Record<string, string>;
   activeDbOpTypes: string[];
   importFields: any[];
-  columnConfigMap: Record<string, { global: ColMapping; typeSpecific: Record<string, ColMapping> }>;
+  columnConfigMap: Record<string, AnyColumnConfig>;
   uiColumns: Array<{ id: string; colIdx: number }>;
   liveValidationStats: Record<string, { failed: number }>;
+  splitTypes?: string[];
 }): string[] {
   const errors: string[] = [];
   if (!params.importFile) return errors;
@@ -363,6 +383,27 @@ export function getValidationErrors(params: {
   });
 
   params.activeDbOpTypes.forEach(opType => {
+    // Split types map each raw action separately: required fields must be
+    // satisfied per raw action, not by any sibling action's mapping.
+    if (params.splitTypes?.includes(opType)) {
+      const rawActions = params.uniqueOperationTypes.filter(r => params.operationTypeMappings[r] === opType);
+      rawActions.forEach(rawAction => {
+        params.importFields.forEach(f => {
+          const isRequired = isFieldRequiredForOpType(f, opType) && isFieldRelevantForOpType(f, opType);
+          if (!isRequired) return;
+          const colIdx = f.key === 'operation_type'
+            ? (params.operationTypeColumnIdx ?? -1)
+            : getMappedColIdxForField(f.key, rawAction, opType, params.columnConfigMap, params.uiColumns);
+          const hasFormula = colIdx === -1 && f.type === 'numeric'
+            && !!getColumnConfigForField(params.columnConfigMap, f.key, rawAction, opType)?.formula?.length;
+          if (colIdx === -1 && !hasFormula) {
+            errors.push(`Required database field "${f.label}" is not mapped for "${opType}" rows with action "${rawAction}".`);
+          }
+        });
+      });
+      return;
+    }
+
     params.importFields.forEach(f => {
       const isRequired = isFieldRequiredForOpType(f, opType) && isFieldRelevantForOpType(f, opType);
       if (isRequired) {
