@@ -56,6 +56,7 @@ const {
   uiColumns,
   opTypeSettings,
   allRawRows,
+  rawRowSources,
   showExitConfirm,
   showOverwriteConfirm,
   showDeleteConfirm,
@@ -278,6 +279,7 @@ onUnmounted(() => {
                   :importFields="importFields"
                   :activeDbOpTypes="activeDbOpTypes"
                   :allRawRows="allRawRows"
+                  :rawRowSources="rawRowSources"
                   :splitOpTypes="splitOpTypes"
                   @column-change="handleColumnChange"
                   @update-optype-mapping="handleUpdateOpTypeMapping"

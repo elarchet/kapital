@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update-optype-mapping', payload: { rawAction: string; dbOpType: string }): void;
   (e: 'toggle-split', payload: { opType: string; enabled: boolean }): void;
+  (e: 'preview-rows', rawAction: string): void;
 }>();
 
 // DB types fed by 2+ raw actions can be mapped once for the whole group (default)
@@ -82,11 +83,17 @@ const modelFor = (rawAction: string) => ({
         class="grid grid-cols-[1fr_auto_1fr] gap-2 items-center"
       >
         <span
-          class="text-[0.75rem] font-mono bg-bg-tertiary py-1 px-2 rounded-sm truncate border border-border-color"
+          class="text-[0.75rem] font-mono bg-bg-tertiary py-1 px-2 rounded-sm border border-border-color flex items-center gap-1 min-w-0"
           :title="rawAction"
         >
-          {{ rawAction }}
-          <span class="text-text-tertiary">({{ rowCountsByRawAction?.[rawAction] ?? 0 }})</span>
+          <span class="truncate">{{ rawAction }}</span>
+          <button
+            type="button"
+            class="text-text-tertiary hover:text-accent hover:underline cursor-pointer shrink-0"
+            :data-testid="`optype-count-${rawAction}`"
+            title="Show the file rows with this action"
+            @click.stop="emit('preview-rows', rawAction)"
+          >({{ rowCountsByRawAction?.[rawAction] ?? 0 }})</button>
         </span>
         <span class="text-text-tertiary text-xs">→</span>
         <DynamicComponent

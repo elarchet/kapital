@@ -27,6 +27,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
   const importFiles = ref<File[]>([]);
   const importFileHeaders = ref<string[]>([]);
   const allRawRows = ref<string[][]>([]);
+  // Parallel to allRawRows: source file name of each row (for the raw-rows preview).
+  const rawRowSources = ref<string[]>([]);
 
   const isCustomMapping = ref(false);
   const mappingTemplateName = ref('');
@@ -219,7 +221,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
     executor.importError.value = '';
     executor.importSuccessSummary.value = null;
 
-    let merged: { delimiter: string; headers: string[]; rawRows: string[][] };
+    let merged: { delimiter: string; headers: string[]; rawRows: string[][]; rowSources: string[] };
     try {
       const parsedFiles: ParsedCsvFile[] = [];
       for (const file of files) {
@@ -240,6 +242,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
       importFileHeaders.value = merged.headers;
       handleColumnChange();
       allRawRows.value = merged.rawRows;
+      rawRowSources.value = merged.rowSources;
       currentStep.value = 1;
 
       try {
@@ -357,6 +360,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
     institutionKey,
     importFields,
     allRawRows,
+    rawRowSources,
     currentStep,
     operationTypeColumnIdx,
     operationTypeMappings,

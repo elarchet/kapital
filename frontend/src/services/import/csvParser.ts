@@ -104,10 +104,13 @@ export interface ParsedCsvFile {
 // silently misaligned rows would corrupt the import.
 export function mergeParsedCsvFiles(
   files: ParsedCsvFile[]
-): { delimiter: string; headers: string[]; rawRows: string[][] } {
+): { delimiter: string; headers: string[]; rawRows: string[][]; rowSources: string[] } {
   const ref = files[0];
   const headers: string[] = [...ref.headers];
   const rawRows: string[][] = ref.rawRows.map(r => [...r]);
+  // Parallel to rawRows: the name of the file each row came from, so the
+  // wizard can tell the user where a row originated after the merge.
+  const rowSources: string[] = ref.rawRows.map(() => ref.name);
   const hasDuplicates = (arr: string[]) => new Set(arr).size !== arr.length;
 
   files.slice(1).forEach(file => {
@@ -128,7 +131,10 @@ export function mergeParsedCsvFiles(
     const sameOrder = file.headers.length === headers.length
       && file.headers.every((h, i) => h === headers[i]);
     if (sameOrder) {
-      file.rawRows.forEach(r => rawRows.push([...r]));
+      file.rawRows.forEach(r => {
+        rawRows.push([...r]);
+        rowSources.push(file.name);
+      });
       return;
     }
     // Duplicate header names make a by-name remap ambiguous; they only work
@@ -147,6 +153,7 @@ export function mergeParsedCsvFiles(
     file.headers.forEach((h, i) => { idxByHeader[h] = i; });
     file.rawRows.forEach(row => {
       rawRows.push(headers.map(h => (idxByHeader[h] !== undefined ? (row[idxByHeader[h]] ?? '') : '')));
+      rowSources.push(file.name);
     });
   });
 
@@ -155,7 +162,7 @@ export function mergeParsedCsvFiles(
     while (row.length < headers.length) row.push('');
   });
 
-  return { delimiter: ref.delimiter, headers, rawRows };
+  return { delimiter: ref.delimiter, headers, rawRows, rowSources };
 }
 
 // Broker exports are not always UTF-8 (e.g. Fortuneo ships Latin-1); retry when

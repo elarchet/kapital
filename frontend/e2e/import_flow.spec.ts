@@ -105,10 +105,22 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   const nextBtn = page.locator('button:has-text("Next: Configure Column Mappings")');
   await expect(nextBtn).toBeDisabled(); // nothing mapped yet
   await expect(page.getByText('3 unmapped')).toBeVisible();
-  await pickOption(page, page.getByTestId('optype-row-BUY').locator('button'), 'trade');
+
+  // Clicking a raw action's row count opens the matching raw file rows, with
+  // per-file provenance since this batch merged two files.
+  await page.getByTestId('optype-count-BUY').click();
+  const rawRowsModal = page.getByTestId('raw-rows-modal');
+  await expect(rawRowsModal).toBeVisible();
+  await expect(rawRowsModal.locator('tbody tr')).toHaveCount(2); // one BUY per file
+  await expect(rawRowsModal.getByText('e2e_broker_export.csv', { exact: true })).toBeVisible();
+  await expect(rawRowsModal.getByText('e2e_broker_export_2.csv', { exact: true })).toBeVisible();
+  await rawRowsModal.getByRole('button', { name: 'Close' }).click();
+  await expect(rawRowsModal).not.toBeVisible();
+
+  await pickOption(page, page.getByTestId('optype-row-BUY').locator('button').last(), 'trade');
   await expect(nextBtn).toBeEnabled(); // one mapped action is enough to proceed
-  await pickOption(page, page.getByTestId('optype-row-SELL').locator('button'), 'trade');
-  await pickOption(page, page.getByTestId('optype-row-DIVIDEND').locator('button'), 'dividend');
+  await pickOption(page, page.getByTestId('optype-row-SELL').locator('button').last(), 'trade');
+  await pickOption(page, page.getByTestId('optype-row-DIVIDEND').locator('button').last(), 'dividend');
   // Panel auto-collapses once everything is mapped.
   await expect(page.getByText('3 mapped')).toBeVisible();
 

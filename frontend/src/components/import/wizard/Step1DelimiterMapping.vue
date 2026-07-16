@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import DynamicComponent from '../../DynamicComponent.vue';
 import OperationTypeMappingPanel from './mapping/OperationTypeMappingPanel.vue';
+import RawActionRowsModal from './mapping/RawActionRowsModal.vue';
 import { INSTITUTION_OPTIONS } from '../../../services/import';
 
 const props = defineProps<{
@@ -10,6 +11,7 @@ const props = defineProps<{
   importFields: any[];
   activeDbOpTypes: string[];
   allRawRows: string[][];
+  rawRowSources: string[];
   splitOpTypes: string[];
 }>();
 
@@ -63,6 +65,21 @@ const rowCountsByRawAction = computed<Record<string, number>>(() => {
     if (raw) counts[raw] = (counts[raw] || 0) + 1;
   });
   return counts;
+});
+
+// Raw action whose file rows are shown in the preview modal (opened by
+// clicking the row count next to an action).
+const previewRawAction = ref<string | null>(null);
+
+const previewRows = computed(() => {
+  if (previewRawAction.value === null || operationTypeColumnIdx.value === null) return [];
+  const rows: Array<{ cells: string[]; source: string }> = [];
+  props.allRawRows.forEach((row, idx) => {
+    if (row[operationTypeColumnIdx.value!]?.trim() === previewRawAction.value) {
+      rows.push({ cells: row, source: props.rawRowSources[idx] ?? '' });
+    }
+  });
+  return rows;
 });
 
 // Step 2 maps columns per DB type: entering it with zero mapped actions
@@ -152,6 +169,7 @@ const institutionOptions = INSTITUTION_OPTIONS;
             :splitOpTypes="splitOpTypes"
             @update-optype-mapping="(payload) => emit('update-optype-mapping', payload)"
             @toggle-split="(payload) => emit('toggle-split', payload)"
+            @preview-rows="(rawAction) => previewRawAction = rawAction"
           />
           <p v-if="!activeDbOpTypes.length" class="text-[0.75rem] text-warning-color mt-1 mb-0">
             Map at least one of your file's actions to a transaction type to continue.
@@ -169,5 +187,16 @@ const institutionOptions = INSTITUTION_OPTIONS;
         Next: Configure Column Mappings &rarr;
       </button>
     </div>
+
+    <!-- Raw file rows matching a clicked action, so the user can see what an
+         unfamiliar transaction type actually is without opening the file. -->
+    <RawActionRowsModal
+      :show="previewRawAction !== null"
+      :rawAction="previewRawAction ?? ''"
+      :headers="importFileHeaders"
+      :rows="previewRows"
+      :highlightColumnIdx="operationTypeColumnIdx"
+      @close="previewRawAction = null"
+    />
   </div>
 </template>
