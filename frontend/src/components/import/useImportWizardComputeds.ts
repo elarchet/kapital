@@ -9,7 +9,7 @@ import {
 } from '../../services/import';
 
 export function useImportWizardComputeds(params: {
-  importFile: Ref<File | null>;
+  importFiles: Ref<File[]>;
   allRawRows: Ref<string[][]>;
   operationTypeColumnIdx: Ref<number | null>;
   operationTypeMappings: Ref<Record<string, string>>;
@@ -106,7 +106,7 @@ export function useImportWizardComputeds(params: {
 
   const validationErrors = computed(() => {
     return getValidationErrors({
-      importFile: params.importFile.value,
+      importFile: params.importFiles.value[0] ?? null,
       operationTypeColumnIdx: params.operationTypeColumnIdx.value,
       uniqueOperationTypes: uniqueOperationTypes.value,
       operationTypeMappings: params.operationTypeMappings.value,

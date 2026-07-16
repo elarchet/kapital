@@ -10,6 +10,15 @@ const csvContent = [
   `T-${runId}-3,DIVIDEND,2026-03-10 09:00:00,NVDA,NVIDIA Corp,,,12.34,USD`,
 ].join('\n');
 
+// Second file of the same batch: columns reordered (rows are remapped by
+// header name), one row duplicated from file 1 (dropped by dedup at import)
+// and one genuinely new dividend.
+const csvContent2 = [
+  'Action,ID,Time,Ticker,Name,Quantity,Price,Total,Currency',
+  `BUY,T-${runId}-1,2026-01-15 10:30:00,NVDA,NVIDIA Corp,10,120.50,1205.00,USD`,
+  `DIVIDEND,T-${runId}-4,2026-04-10 09:00:00,NVDA,NVIDIA Corp,,,15.00,USD`,
+].join('\n');
+
 // Custom dropdowns teleport their option panel to the body: open the trigger,
 // then click the first option whose text matches.
 async function pickOption(page: Page, trigger: Locator, optionLabel: string) {
@@ -60,14 +69,14 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await renameInput.press('Enter');
   await expect(page.locator('.page-header h1')).toContainText(portfolioName);
 
-  // ---- 3. Upload the CSV through the hidden file input ----
-  await page.setInputFiles('input[type="file"]', {
-    name: 'e2e_broker_export.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(csvContent),
-  });
+  // ---- 3. Upload two CSVs at once through the hidden file input ----
+  await page.setInputFiles('input[type="file"]', [
+    { name: 'e2e_broker_export.csv', mimeType: 'text/csv', buffer: Buffer.from(csvContent) },
+    { name: 'e2e_broker_export_2.csv', mimeType: 'text/csv', buffer: Buffer.from(csvContent2) },
+  ]);
   const importHeader = page.locator('h3', { hasText: 'Import Transactions' });
   await expect(importHeader).toBeVisible();
+  await expect(page.getByText('2 files imported as one batch')).toBeVisible();
 
   // Force a fresh custom mapping even if an earlier run left a matching template.
   const templateDropdown = page
@@ -117,9 +126,11 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   // Op type pills appear; trade is auto-selected and shows its row count.
   const tradePill = page.getByTestId('optype-pill-trade');
   const dividendPill = page.getByTestId('optype-pill-dividend');
-  await expect(tradePill).toContainText('2 rows');
+  // Counts include both files' rows (the cross-file duplicate BUY counts here;
+  // it's only dropped by dedup at import time).
+  await expect(tradePill).toContainText('3 rows');
   await expect(tradePill).toContainText('0/7 required');
-  await expect(dividendPill).toContainText('1 rows');
+  await expect(dividendPill).toContainText('2 rows');
 
   // ---- 6. Map trade fields via all three assignment paths ----
   // A mapped slot renders the source header as a chip with title=<header>.
@@ -192,7 +203,7 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
 
   // All 7 required trade fields are now mapped and every trade row parses.
   await expect(tradePill).not.toContainText('required');
-  await expect(page.getByText('2/2 rows parse cleanly')).toBeVisible();
+  await expect(page.getByText('3/3 rows parse cleanly')).toBeVisible();
 
   // ---- 8. Formula builder: total_amount = Quantity × Price ----
   await page.getByTestId('field-slot-total_amount').locator('button[title*="Advanced settings"]').click();
@@ -204,7 +215,7 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await expect(configModal).toContainText('✓ On the current example row:');
   await configModal.locator('button:has-text("Save")').click();
   await expect(page.getByTestId('field-slot-total_amount')).toContainText('formula');
-  await expect(page.getByText('2/2 rows parse cleanly')).toBeVisible();
+  await expect(page.getByText('3/3 rows parse cleanly')).toBeVisible();
 
   // ---- 8b. Extra fee groups: add creates suffixed slots, remove cleans them up ----
   await page.getByTestId('add-fee-group').click();
@@ -260,7 +271,7 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await expect(page.getByTestId('field-slot-transaction_id')).toContainText('auto-generated');
 
   await expect(dividendPill).not.toContainText('required');
-  await expect(page.getByText('1/1 rows parse cleanly')).toBeVisible();
+  await expect(page.getByText('2/2 rows parse cleanly')).toBeVisible();
 
   // ---- 10. Save as template and import ----
   const templateName = `E2E Import QA ${runId}`;
@@ -269,11 +280,16 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await page.click('button:has-text("Save Template & Import")');
 
   await expect(page.getByText('successfully parsed and processed')).toBeVisible({ timeout: 15000 });
-  // The stat value renders in the label's sibling div.
+  // The stat value renders in the label's sibling div. 5 rows across both
+  // files, minus the cross-file duplicate BUY caught by dedup.
   const importedStat = page
     .getByText('Transactions Imported', { exact: true })
     .locator('xpath=following-sibling::div');
-  await expect(importedStat).toHaveText('3');
+  await expect(importedStat).toHaveText('4');
+  const skippedStat = page
+    .getByText('Skipped', { exact: true })
+    .locator('xpath=following-sibling::div');
+  await expect(skippedStat).toHaveText('1');
   await page.click('button:has-text("Done")');
   await expect(importHeader).not.toBeVisible();
 

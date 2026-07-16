@@ -83,6 +83,52 @@ export function parseCsvText(text: string): { delimiter: string; headers: string
   return { delimiter: delim, headers: allRows[0], rawRows: allRows.slice(1) };
 }
 
+export interface ParsedCsvFile {
+  name: string;
+  delimiter: string;
+  headers: string[];
+  rawRows: string[][];
+}
+
+// Merge several parsed CSV files into one batch using the first file's column
+// order. Broker exports drift over time, so later files may order the same
+// columns differently — their rows are remapped by header name. Files whose
+// delimiter or column set doesn't match the first file throw a user-readable
+// error: silently misaligned rows would corrupt the import.
+export function mergeParsedCsvFiles(
+  files: ParsedCsvFile[]
+): { delimiter: string; headers: string[]; rawRows: string[][] } {
+  const ref = files[0];
+  const rawRows: string[][] = [...ref.rawRows];
+
+  files.slice(1).forEach(file => {
+    if (file.delimiter !== ref.delimiter) {
+      throw new Error(`"${file.name}" uses a different delimiter than "${ref.name}". Import these files separately.`);
+    }
+    const sameOrder = file.headers.length === ref.headers.length
+      && file.headers.every((h, i) => h === ref.headers[i]);
+    if (sameOrder) {
+      rawRows.push(...file.rawRows);
+      return;
+    }
+    // Same column set in a different order: remap by header name. Duplicate
+    // header names make the remap ambiguous, so they must match positionally.
+    const sameSet = file.headers.length === ref.headers.length
+      && [...file.headers].sort().join('\x1f') === [...ref.headers].sort().join('\x1f');
+    const hasDuplicates = new Set(ref.headers).size !== ref.headers.length;
+    if (!sameSet || hasDuplicates) {
+      throw new Error(`"${file.name}" has different columns than "${ref.name}". Import files with identical columns together.`);
+    }
+    const idxByHeader: Record<string, number> = {};
+    file.headers.forEach((h, i) => { idxByHeader[h] = i; });
+    file.rawRows.forEach(row => {
+      rawRows.push(ref.headers.map(h => row[idxByHeader[h]] ?? ''));
+    });
+  });
+
+  return { delimiter: ref.delimiter, headers: ref.headers, rawRows };
+}
+
 // Broker exports are not always UTF-8 (e.g. Fortuneo ships Latin-1); retry when
 // UTF-8 decoding produces replacement characters.
 export async function readFileText(file: File): Promise<string> {

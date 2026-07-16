@@ -3,7 +3,7 @@ import { api } from '../../services/api';
 
 export interface UseImportExecutorOptions {
   portfolio: { id: number; name: string };
-  importFile: Ref<File | null>;
+  importFiles: Ref<File[]>;
   selectedSchemaId: Ref<number | null>;
   availableSchemas: Ref<any[]>;
   loadSchemas: () => Promise<void>;
@@ -28,7 +28,7 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
   const hasConfirmedOverwrite = ref(false);
 
   const handleImport = async () => {
-    if (!options.importFile.value || !options.portfolio.id) return;
+    if (!options.importFiles.value.length || !options.portfolio.id) return;
     isImporting.value = true;
     importError.value = '';
     importSuccessSummary.value = null;
@@ -127,7 +127,7 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
         } else {
           const res = await api.importPositions(
             options.portfolio.id,
-            options.importFile.value,
+            options.importFiles.value,
             null,
             {
               mappings: mappingConfig,
@@ -143,7 +143,7 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
       }
 
       if (finalSchemaId) {
-        const res = await api.importPositions(options.portfolio.id, options.importFile.value, finalSchemaId, null);
+        const res = await api.importPositions(options.portfolio.id, options.importFiles.value, finalSchemaId, null);
         importSuccessSummary.value = res;
         options.emit('success');
       }

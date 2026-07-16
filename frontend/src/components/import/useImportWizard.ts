@@ -9,8 +9,10 @@ import {
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
   parseSchemaMappings,
   parseCsvText,
+  mergeParsedCsvFiles,
   readFileText,
-  DEFAULT_INSTITUTION_KEY
+  DEFAULT_INSTITUTION_KEY,
+  type ParsedCsvFile
 } from '../../services/import';
 import type { OpTypeSettings } from '../../services/import/types';
 
@@ -19,10 +21,10 @@ interface Portfolio {
   name: string;
 }
 
-export function useImportWizard(props: { portfolio: Portfolio; initialFile?: File | null }, emit: any) {
-  // Shared state refs
-  const importFile = ref<File | null>(null);
-  const fileText = ref('');
+export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: File[] | null }, emit: any) {
+  // Shared state refs. Several files import as one batch: rows are merged
+  // client-side for the wizard, and the backend dedups across files.
+  const importFiles = ref<File[]>([]);
   const importFileHeaders = ref<string[]>([]);
   const allRawRows = ref<string[][]>([]);
 
@@ -51,7 +53,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const opTypeSettings = ref<Record<string, OpTypeSettings>>({});
 
   const showExitConfirm = ref(false);
-  const isDirty = computed(() => importFile.value !== null);
+  const isDirty = computed(() => importFiles.value.length > 0);
 
 
 
@@ -141,7 +143,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     validationErrors,
     isValidCustomMapping
   } = useImportWizardComputeds({
-    importFile,
+    importFiles,
     allRawRows,
     operationTypeColumnIdx,
     operationTypeMappings,
@@ -195,7 +197,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
 
   const executor = useImportExecutor({
     portfolio: props.portfolio,
-    importFile,
+    importFiles,
     selectedSchemaId: schemaMgmt.selectedSchemaId,
     availableSchemas: schemaMgmt.availableSchemas,
     loadSchemas: schemaMgmt.loadSchemas,
@@ -212,24 +214,36 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     emit,
   });
 
-  const processFile = async (file: File) => {
-    importFile.value = file;
+  const processFiles = async (files: File[]) => {
+    if (!files.length) return;
     executor.importError.value = '';
     executor.importSuccessSummary.value = null;
 
-    const text = await readFileText(file);
-    fileText.value = text;
+    let merged: { delimiter: string; headers: string[]; rawRows: string[][] };
+    try {
+      const parsedFiles: ParsedCsvFile[] = [];
+      for (const file of files) {
+        const text = await readFileText(file);
+        parsedFiles.push({ name: file.name, ...parseCsvText(text) });
+      }
+      merged = mergeParsedCsvFiles(parsedFiles);
+    } catch (err: any) {
+      // Mismatched files would silently misalign rows — refuse the whole batch.
+      importFiles.value = [];
+      executor.importError.value = err.message || 'Failed to read the selected files.';
+      return;
+    }
 
-    const parsed = parseCsvText(text);
-    if (parsed.headers.length > 0) {
-      importDelimiter.value = parsed.delimiter;
-      importFileHeaders.value = parsed.headers;
+    importFiles.value = files;
+    if (merged.headers.length > 0) {
+      importDelimiter.value = merged.delimiter;
+      importFileHeaders.value = merged.headers;
       handleColumnChange();
-      allRawRows.value = parsed.rawRows;
+      allRawRows.value = merged.rawRows;
       currentStep.value = 1;
 
       try {
-        const detectRes = await api.detectImportFileSchema(parsed.headers);
+        const detectRes = await api.detectImportFileSchema(merged.headers);
         if (detectRes.schema_id) {
           schemaMgmt.autodetectedSchemaId.value = detectRes.schema_id;
           schemaMgmt.selectedSchemaId.value = detectRes.schema_id;
@@ -280,15 +294,15 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     window.removeEventListener('keydown', handleKeyDown);
   });
 
-  watch(() => props.initialFile, (newFile) => {
-    if (newFile) processFile(newFile);
+  watch(() => props.initialFiles, (newFiles) => {
+    if (newFiles?.length) processFiles(newFiles);
   }, { immediate: true });
 
   const panelWidth = ref(550);
   watch(
-    () => importFile.value,
-    (newVal) => {
-      panelWidth.value = newVal ? Math.min(1400, window.innerWidth * 0.85) : 550;
+    () => importFiles.value.length,
+    (count) => {
+      panelWidth.value = count ? Math.min(1400, window.innerWidth * 0.85) : 550;
     },
     { immediate: true }
   );
@@ -330,8 +344,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     },
 
     // Local states & computed
-    importFile,
-    fileText,
+    importFiles,
     importFileHeaders,
     isCustomMapping,
     isImporting: executor.isImporting,
@@ -358,7 +371,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     isDirty,
     panelWidth,
     onSchemaSelect,
-    processFile,
+    processFiles,
     handleImport: executor.handleImport,
     requestClose,
     validationErrors,
