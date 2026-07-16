@@ -254,7 +254,10 @@ async def import_portfolio_positions(
     portfolio_id: Annotated[int, Path(description="ID of the portfolio to import positions to")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
-    file: Annotated[UploadFile, File(description="CSV/Excel file containing position operations data")],
+    file: Annotated[
+        list[UploadFile],
+        File(description="CSV file(s) containing operations data; several files are merged into one batch"),
+    ],
     schema_id: Annotated[int | None, Form(description="Schema ID to use for mappings")] = None,
     custom_schema_config: Annotated[
         str | None,
@@ -282,8 +285,8 @@ async def import_portfolio_positions(
             detail="Portfolio not found or not owned by user.",
         )
 
-    # Read file content
-    contents = await file.read()
+    # Read every uploaded file; they import as one deduplicated batch.
+    contents = [await f.read() for f in file]
 
     # Parse custom schema config JSON string if present
     custom_config = None

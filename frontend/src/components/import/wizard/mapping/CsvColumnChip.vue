@@ -25,9 +25,7 @@ const emit = defineEmits<{
     :class="[
       armed
         ? 'border-accent ring-2 ring-accent/30 bg-accent-light'
-        : used
-          ? 'border-border-color bg-bg-tertiary opacity-55 hover:opacity-80'
-          : 'border-border-color bg-bg-primary hover:border-accent/60 hover:bg-accent-light/50'
+        : 'border-border-color bg-bg-primary hover:border-accent/60 hover:bg-accent-light/50'
     ]"
     :title="armed ? 'Click a field slot to place, Escape to cancel' : `Drag onto a field, or click to select “${name}”`"
     @dragstart="emit('dragstart', $event)"

@@ -187,11 +187,16 @@ async def import_portfolio_transactions(
     db: Session,
     portfolio_id: int,
     user_id: int,
-    file_content: bytes,
+    file_content: bytes | list[bytes],
     schema_id: int | None = None,
     custom_schema_config: dict | None = None,
 ) -> ImportSummary:
-    """Parse an uploaded institution export and ingest it into a portfolio."""
+    """Parse one or several uploaded institution exports and ingest them into a portfolio.
+
+    Several files form one batch: each is parsed against its own header row (so
+    column order may differ between files), then the rows are merged before the
+    sort and the dedup pass — which also drops rows duplicated across files.
+    """
     mappings, delimiter, decimal_separator, institution_key = _resolve_schema_config(
         db,
         user_id,
@@ -206,12 +211,15 @@ async def import_portfolio_transactions(
             mappings = {**profile.mappings, **mappings}
     account = _resolve_account(db, mappings, institution_key)
 
-    try:
-        decoded = file_content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        # Some broker exports (e.g. Fortuneo) ship Latin-1 instead of UTF-8.
-        decoded = file_content.decode("latin-1")
-    parsed_operations = _parse_rows(decoded, delimiter, mappings, decimal_separator)
+    contents = file_content if isinstance(file_content, list) else [file_content]
+    parsed_operations: list[dict] = []
+    for content in contents:
+        try:
+            decoded = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            # Some broker exports (e.g. Fortuneo) ship Latin-1 instead of UTF-8.
+            decoded = content.decode("latin-1")
+        parsed_operations.extend(_parse_rows(decoded, delimiter, mappings, decimal_separator))
     parsed_operations.sort(key=lambda o: o["executed_at"])
     processed_ops = combine_stock_splits(parsed_operations)
 

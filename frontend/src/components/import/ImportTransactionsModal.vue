@@ -23,7 +23,7 @@ const props = defineProps<{
     id: number;
     name: string;
   };
-  initialFile?: File | null;
+  initialFiles?: File[] | null;
 }>();
 
 const emit = defineEmits<{
@@ -32,7 +32,7 @@ const emit = defineEmits<{
 }>();
 
 const {
-  importFile,
+  importFiles,
   importFileHeaders,
   availableSchemas,
   selectedSchemaId,
@@ -50,10 +50,13 @@ const {
   currentStep,
   operationTypeColumnIdx,
   operationTypeMappings,
+  splitOpTypes,
+  toggleSplitType,
   columnConfigMap,
   uiColumns,
   opTypeSettings,
   allRawRows,
+  rawRowSources,
   showExitConfirm,
   showOverwriteConfirm,
   showDeleteConfirm,
@@ -71,11 +74,14 @@ const {
   uniqueOperationTypes,
   activeDbOpTypes,
   matchingRowsByType,
+  matchingRowsByRawAction,
   liveValidationStats,
   hasConfirmedOverwrite,
   handleColumnChange,
   touchColumnConfig,
   updateOpTypeSettings,
+  updateFeeTaxGroupCount,
+  feeTaxGroupCounts,
 } = useImportWizard(props, emit);
 
 const isSchemaIncomplete = (schema: any) => {
@@ -202,14 +208,19 @@ onUnmounted(() => {
           :mappingTemplateName="mappingTemplateName"
         />
 
-        <template v-else-if="importFile">
-          <div v-if="!isCustomMapping || currentStep === 1" class="flex justify-between items-center bg-bg-tertiary py-2 px-3 rounded-sm border border-border-color mb-3">
-            <div class="flex items-center gap-2">
-              <Layers class="w-4 h-4 text-accent" />
-              <span class="text-[0.9rem] font-semibold">{{ importFile.name }}</span>
-              <span class="text-xs text-text-secondary">({{ (importFile.size / 1024).toFixed(1) }} KB)</span>
+        <template v-else-if="importFiles.length">
+          <div v-if="!isCustomMapping || currentStep === 1" class="flex justify-between items-center gap-3 bg-bg-tertiary py-2 px-3 rounded-sm border border-border-color mb-3">
+            <div class="flex items-center gap-x-2 gap-y-0.5 min-w-0 flex-wrap">
+              <Layers class="w-4 h-4 text-accent shrink-0" />
+              <span v-for="f in importFiles" :key="f.name" class="flex items-baseline gap-1 min-w-0">
+                <span class="text-[0.9rem] font-semibold truncate">{{ f.name }}</span>
+                <span class="text-xs text-text-secondary">({{ (f.size / 1024).toFixed(1) }} KB)</span>
+              </span>
+              <span v-if="importFiles.length > 1" class="text-xs text-text-secondary">
+                — {{ importFiles.length }} files imported as one batch; rows appearing in several files are only imported once
+              </span>
             </div>
-            <button @click="requestClose" class="bg-transparent border-none text-danger-color cursor-pointer text-[0.8rem] font-semibold">Remove</button>
+            <button @click="requestClose" class="bg-transparent border-none text-danger-color cursor-pointer text-[0.8rem] font-semibold shrink-0">Remove</button>
           </div>
 
           <div class="flex flex-col gap-3 w-full">
@@ -267,7 +278,12 @@ onUnmounted(() => {
                   :uniqueOperationTypes="uniqueOperationTypes"
                   :importFields="importFields"
                   :activeDbOpTypes="activeDbOpTypes"
+                  :allRawRows="allRawRows"
+                  :rawRowSources="rawRowSources"
+                  :splitOpTypes="splitOpTypes"
                   @column-change="handleColumnChange"
+                  @update-optype-mapping="handleUpdateOpTypeMapping"
+                  @toggle-split="({ opType, enabled }) => toggleSplitType(opType, enabled)"
                   @next="currentStep = 2"
                 />
 
@@ -285,14 +301,17 @@ onUnmounted(() => {
                   :allRawRows="allRawRows"
                   :operationTypeColumnIdx="operationTypeColumnIdx"
                   :matchingRowsByType="matchingRowsByType"
+                  :matchingRowsByRawAction="matchingRowsByRawAction"
+                  :splitOpTypes="splitOpTypes"
+                  :feeTaxGroupCounts="feeTaxGroupCounts"
                   :opTypeSettings="opTypeSettings"
                   :importDecimalSep="importDecimalSep"
                   :liveValidationStats="liveValidationStats"
                   :validationErrors="validationErrors"
                   :enrichedNames="enrichedNames"
                   @back="currentStep = 1"
-                  @update-optype-mapping="handleUpdateOpTypeMapping"
                   @update-optype-settings="updateOpTypeSettings"
+                  @update-group-count="updateFeeTaxGroupCount"
                   @touch-config="touchColumnConfig"
                 />
               </div>
@@ -323,7 +342,7 @@ onUnmounted(() => {
           v-else-if="!importSuccessSummary"
           @click="handleImport" 
           class="btn btn-sm btn-primary" 
-          :disabled="isImporting || !importFile || (isCustomMapping && !isValidCustomMapping) || (isCustomMapping && saveMappingTemplate && !mappingTemplateName.trim())"
+          :disabled="isImporting || !importFiles.length || (isCustomMapping && !isValidCustomMapping) || (isCustomMapping && saveMappingTemplate && !mappingTemplateName.trim())"
         >
           <Loader v-if="isImporting" class="w-3.5 h-3.5 animate-spin" />
           <span v-if="isImporting">Importing data...</span>

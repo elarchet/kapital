@@ -9,8 +9,10 @@ import {
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
   parseSchemaMappings,
   parseCsvText,
+  mergeParsedCsvFiles,
   readFileText,
-  DEFAULT_INSTITUTION_KEY
+  DEFAULT_INSTITUTION_KEY,
+  type ParsedCsvFile
 } from '../../services/import';
 import type { OpTypeSettings } from '../../services/import/types';
 
@@ -19,12 +21,14 @@ interface Portfolio {
   name: string;
 }
 
-export function useImportWizard(props: { portfolio: Portfolio; initialFile?: File | null }, emit: any) {
-  // Shared state refs
-  const importFile = ref<File | null>(null);
-  const fileText = ref('');
+export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: File[] | null }, emit: any) {
+  // Shared state refs. Several files import as one batch: rows are merged
+  // client-side for the wizard, and the backend dedups across files.
+  const importFiles = ref<File[]>([]);
   const importFileHeaders = ref<string[]>([]);
   const allRawRows = ref<string[][]>([]);
+  // Parallel to allRawRows: source file name of each row (for the raw-rows preview).
+  const rawRowSources = ref<string[]>([]);
 
   const isCustomMapping = ref(false);
   const mappingTemplateName = ref('');
@@ -38,6 +42,12 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
 
   const operationTypeColumnIdx = ref<number | null>(null);
   const operationTypeMappings = ref<Record<string, string>>({});
+  // DB op types whose raw actions are mapped separately (one variant per raw value).
+  const splitOpTypes = ref<string[]>([]);
+  // Session-side fee/tax group counts per mapping-variant key (>= 1). Groups with
+  // mapped columns are re-derived from columnConfigMap; this only keeps still-empty
+  // groups alive across step navigation.
+  const feeTaxGroupCounts = ref<Record<string, { fee: number; tax: number }>>({});
 
   const columnConfigMap = ref<Record<string, any>>({});
   const uiColumns = ref<Array<{ id: string; colIdx: number; name: string; label: string; isDuplicate?: boolean; width?: number }>>([]);
@@ -45,12 +55,14 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const opTypeSettings = ref<Record<string, OpTypeSettings>>({});
 
   const showExitConfirm = ref(false);
-  const isDirty = computed(() => importFile.value !== null);
+  const isDirty = computed(() => importFiles.value.length > 0);
 
 
 
   const handleColumnChange = () => {
     operationTypeMappings.value = {};
+    splitOpTypes.value = [];
+    feeTaxGroupCounts.value = {};
     uiColumns.value = importFileHeaders.value.map((h, idx) => ({ id: `col-${idx}`, colIdx: idx, name: h, label: h, width: 180 }));
     uiRowsOrder.value = [];
     columnConfigMap.value = {};
@@ -110,6 +122,9 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
         uiColumns.value = parsed.uiColumns;
         uiRowsOrder.value = parsed.uiRowsOrder || [];
         opTypeSettings.value = parsed.opTypeSettings || {};
+        splitOpTypes.value = parsed.splitTypes || [];
+        // Groups with mapped columns are re-derived from columnConfigMap.
+        feeTaxGroupCounts.value = {};
       } else {
         isCustomMapping.value = true;
         handleColumnChange();
@@ -130,7 +145,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     validationErrors,
     isValidCustomMapping
   } = useImportWizardComputeds({
-    importFile,
+    importFiles,
     allRawRows,
     operationTypeColumnIdx,
     operationTypeMappings,
@@ -140,7 +155,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     columnConfigMap,
     uiColumns,
     uiRowsOrder,
-    enrichedNames
+    enrichedNames,
+    splitOpTypes
   });
 
   const buildCustomMappingPayload = () => {
@@ -153,7 +169,8 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
       importFields: importFields.value,
       uiRowsOrder: uiRowsOrder.value,
       institutionKey: institutionKey.value,
-      opTypeSettings: opTypeSettings.value
+      opTypeSettings: opTypeSettings.value,
+      splitOpTypes: splitOpTypes.value
     });
   };
 
@@ -163,7 +180,9 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
   const wizardMapping = useWizardMapping(
     matchingRowsByRawAction,
     operationTypeMappings,
-    uniqueOperationTypes
+    uniqueOperationTypes,
+    columnConfigMap,
+    splitOpTypes
   );
 
   const { parsedPreviewRows } = useImportPreview({
@@ -180,7 +199,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
 
   const executor = useImportExecutor({
     portfolio: props.portfolio,
-    importFile,
+    importFiles,
     selectedSchemaId: schemaMgmt.selectedSchemaId,
     availableSchemas: schemaMgmt.availableSchemas,
     loadSchemas: schemaMgmt.loadSchemas,
@@ -197,24 +216,37 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     emit,
   });
 
-  const processFile = async (file: File) => {
-    importFile.value = file;
+  const processFiles = async (files: File[]) => {
+    if (!files.length) return;
     executor.importError.value = '';
     executor.importSuccessSummary.value = null;
 
-    const text = await readFileText(file);
-    fileText.value = text;
+    let merged: { delimiter: string; headers: string[]; rawRows: string[][]; rowSources: string[] };
+    try {
+      const parsedFiles: ParsedCsvFile[] = [];
+      for (const file of files) {
+        const text = await readFileText(file);
+        parsedFiles.push({ name: file.name, ...parseCsvText(text) });
+      }
+      merged = mergeParsedCsvFiles(parsedFiles);
+    } catch (err: any) {
+      // Mismatched files would silently misalign rows — refuse the whole batch.
+      importFiles.value = [];
+      executor.importError.value = err.message || 'Failed to read the selected files.';
+      return;
+    }
 
-    const parsed = parseCsvText(text);
-    if (parsed.headers.length > 0) {
-      importDelimiter.value = parsed.delimiter;
-      importFileHeaders.value = parsed.headers;
+    importFiles.value = files;
+    if (merged.headers.length > 0) {
+      importDelimiter.value = merged.delimiter;
+      importFileHeaders.value = merged.headers;
       handleColumnChange();
-      allRawRows.value = parsed.rawRows;
+      allRawRows.value = merged.rawRows;
+      rawRowSources.value = merged.rowSources;
       currentStep.value = 1;
 
       try {
-        const detectRes = await api.detectImportFileSchema(parsed.headers);
+        const detectRes = await api.detectImportFileSchema(merged.headers);
         if (detectRes.schema_id) {
           schemaMgmt.autodetectedSchemaId.value = detectRes.schema_id;
           schemaMgmt.selectedSchemaId.value = detectRes.schema_id;
@@ -265,15 +297,15 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     window.removeEventListener('keydown', handleKeyDown);
   });
 
-  watch(() => props.initialFile, (newFile) => {
-    if (newFile) processFile(newFile);
+  watch(() => props.initialFiles, (newFiles) => {
+    if (newFiles?.length) processFiles(newFiles);
   }, { immediate: true });
 
   const panelWidth = ref(550);
   watch(
-    () => importFile.value,
-    (newVal) => {
-      panelWidth.value = newVal ? Math.min(1400, window.innerWidth * 0.85) : 550;
+    () => importFiles.value.length,
+    (count) => {
+      panelWidth.value = count ? Math.min(1400, window.innerWidth * 0.85) : 550;
     },
     { immediate: true }
   );
@@ -297,6 +329,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     nextExampleForType: wizardMapping.nextExampleForType,
     prevExampleForType: wizardMapping.prevExampleForType,
     handleUpdateOpTypeMapping: wizardMapping.handleUpdateOpTypeMapping,
+    toggleSplitType: wizardMapping.toggleSplitType,
 
     // Re-assign to refresh identity after nested mutations from the mapping board.
     touchColumnConfig: () => {
@@ -305,10 +338,16 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     updateOpTypeSettings: (payload: { opType: string; settings: OpTypeSettings }) => {
       opTypeSettings.value = { ...opTypeSettings.value, [payload.opType]: payload.settings };
     },
+    updateFeeTaxGroupCount: (payload: { key: string; kind: 'fee' | 'tax'; count: number }) => {
+      const current = feeTaxGroupCounts.value[payload.key] || { fee: 1, tax: 1 };
+      feeTaxGroupCounts.value = {
+        ...feeTaxGroupCounts.value,
+        [payload.key]: { ...current, [payload.kind]: Math.max(1, payload.count) },
+      };
+    },
 
     // Local states & computed
-    importFile,
-    fileText,
+    importFiles,
     importFileHeaders,
     isCustomMapping,
     isImporting: executor.isImporting,
@@ -321,9 +360,12 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     institutionKey,
     importFields,
     allRawRows,
+    rawRowSources,
     currentStep,
     operationTypeColumnIdx,
     operationTypeMappings,
+    splitOpTypes,
+    feeTaxGroupCounts,
     columnConfigMap,
     uiColumns,
     opTypeSettings,
@@ -333,7 +375,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     isDirty,
     panelWidth,
     onSchemaSelect,
-    processFile,
+    processFiles,
     handleImport: executor.handleImport,
     requestClose,
     validationErrors,
@@ -343,6 +385,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFile?: Fil
     uniqueOperationTypes,
     activeDbOpTypes,
     matchingRowsByType,
+    matchingRowsByRawAction,
     liveValidationStats,
     handleColumnChange,
   };

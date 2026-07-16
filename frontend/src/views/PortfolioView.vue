@@ -17,7 +17,7 @@ const store = useKapitalStore();
 const showCreatePosModal = ref(false);
 const showImportModal = ref(false);
 const fileInput = ref<HTMLInputElement | null>(null);
-const initialImportFile = ref<File | null>(null);
+const initialImportFiles = ref<File[] | null>(null);
 
 // Rename title states
 const isEditingTitle = ref(false);
@@ -34,7 +34,7 @@ const triggerImportFile = () => {
 const onFileSelected = (e: Event) => {
   const target = e.target as HTMLInputElement;
   if (target.files && target.files.length > 0) {
-    initialImportFile.value = target.files[0];
+    initialImportFiles.value = Array.from(target.files);
     showImportModal.value = true;
   }
 };
@@ -330,12 +330,13 @@ const saveRenameTitle = async () => {
         />
 
         <!-- Hidden file input for direct upload -->
-        <input 
-          type="file" 
-          ref="fileInput" 
-          accept=".csv" 
-          style="display: none;" 
-          @change="onFileSelected" 
+        <input
+          type="file"
+          ref="fileInput"
+          accept=".csv"
+          multiple
+          style="display: none;"
+          @change="onFileSelected"
         />
 
         <!-- Import Positions Modal. Stays open on success so the summary screen
@@ -343,8 +344,8 @@ const saveRenameTitle = async () => {
         <ImportTransactionsModal
           v-if="showImportModal"
           :portfolio="portfolio"
-          :initialFile="initialImportFile"
-          @close="() => { showImportModal = false; initialImportFile = null; }"
+          :initialFiles="initialImportFiles"
+          @close="() => { showImportModal = false; initialImportFiles = null; }"
           @success="store.fetchAllData()"
         />
 

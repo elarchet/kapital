@@ -8,11 +8,27 @@ const props = defineProps<{
   operationTypeMappings: Record<string, string>;
   importFields: any[];
   rowCountsByRawAction: Record<string, number>;
+  splitOpTypes: string[];
 }>();
 
 const emit = defineEmits<{
   (e: 'update-optype-mapping', payload: { rawAction: string; dbOpType: string }): void;
+  (e: 'toggle-split', payload: { opType: string; enabled: boolean }): void;
+  (e: 'preview-rows', rawAction: string): void;
 }>();
+
+// DB types fed by 2+ raw actions can be mapped once for the whole group (default)
+// or split so each raw action gets its own column mappings in step 2.
+const multiActionGroups = computed(() => {
+  const byType: Record<string, string[]> = {};
+  props.uniqueOperationTypes.forEach(raw => {
+    const t = props.operationTypeMappings[raw];
+    if (t) (byType[t] ||= []).push(raw);
+  });
+  return Object.entries(byType)
+    .filter(([, raws]) => raws.length >= 2)
+    .map(([opType, raws]) => ({ opType, raws }));
+});
 
 const opTypeOptions = computed(() => {
   const opField = props.importFields.find(f => f?.key === 'operation_type');
@@ -59,7 +75,7 @@ const modelFor = (rawAction: string) => ({
       </span>
     </button>
 
-    <div v-if="!collapsed" class="border-t border-border-color p-2 flex flex-col gap-1.5 max-h-[30vh] overflow-y-auto">
+    <div v-if="!collapsed" class="border-t border-border-color p-2 flex flex-col gap-1.5 max-h-[40vh] overflow-y-auto">
       <div
         v-for="rawAction in uniqueOperationTypes"
         :key="rawAction"
@@ -67,11 +83,17 @@ const modelFor = (rawAction: string) => ({
         class="grid grid-cols-[1fr_auto_1fr] gap-2 items-center"
       >
         <span
-          class="text-[0.75rem] font-mono bg-bg-tertiary py-1 px-2 rounded-sm truncate border border-border-color"
+          class="text-[0.75rem] font-mono bg-bg-tertiary py-1 px-2 rounded-sm border border-border-color flex items-center gap-1 min-w-0"
           :title="rawAction"
         >
-          {{ rawAction }}
-          <span class="text-text-tertiary">({{ rowCountsByRawAction?.[rawAction] ?? 0 }})</span>
+          <span class="truncate">{{ rawAction }}</span>
+          <button
+            type="button"
+            class="text-text-tertiary hover:text-accent hover:underline cursor-pointer shrink-0"
+            :data-testid="`optype-count-${rawAction}`"
+            title="Show the file rows with this action"
+            @click.stop="emit('preview-rows', rawAction)"
+          >({{ rowCountsByRawAction?.[rawAction] ?? 0 }})</button>
         </span>
         <span class="text-text-tertiary text-xs">→</span>
         <DynamicComponent
@@ -85,6 +107,29 @@ const modelFor = (rawAction: string) => ({
           :compact="true"
           @update:modelValue="(val: string) => modelFor(rawAction).set(val)"
         />
+      </div>
+    </div>
+
+    <!-- Split/merge choice per DB type fed by several raw actions. Stays visible
+         when the rows list is collapsed so the option remains discoverable. -->
+    <div v-if="multiActionGroups.length" class="border-t border-border-color py-2 px-3 flex flex-col gap-1">
+      <div
+        v-for="group in multiActionGroups"
+        :key="group.opType"
+        class="flex items-center gap-2 text-[0.72rem]"
+      >
+        <span class="badge" :class="`badge-${group.opType}`">{{ group.opType }}</span>
+        <span class="text-text-secondary">{{ group.raws.length }} file actions</span>
+        <label class="ml-auto flex items-center gap-1.5 cursor-pointer font-medium" :title="`Off: all ${group.opType} actions share one column mapping. On: configure columns per action in step 2.`">
+          <input
+            type="checkbox"
+            class="w-3.5 h-3.5 cursor-pointer"
+            :data-testid="`split-toggle-${group.opType}`"
+            :checked="splitOpTypes.includes(group.opType)"
+            @change="emit('toggle-split', { opType: group.opType, enabled: ($event.target as HTMLInputElement).checked })"
+          />
+          <span>Map each action separately</span>
+        </label>
       </div>
     </div>
   </div>

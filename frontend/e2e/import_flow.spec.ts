@@ -10,6 +10,18 @@ const csvContent = [
   `T-${runId}-3,DIVIDEND,2026-03-10 09:00:00,NVDA,NVIDIA Corp,,,12.34,USD`,
 ].join('\n');
 
+// Second file of the same batch: columns reordered (rows are remapped by
+// header name) plus an extra "Notes" column that file 1 lacks (broker period
+// exports only carry the columns used in the period — merged as a union,
+// missing cells read as empty). One row is duplicated from file 1 — still
+// dropped by dedup at import since its extra Notes cell is empty — and one
+// dividend is genuinely new.
+const csvContent2 = [
+  'Action,ID,Time,Ticker,Name,Quantity,Price,Total,Currency,Notes',
+  `BUY,T-${runId}-1,2026-01-15 10:30:00,NVDA,NVIDIA Corp,10,120.50,1205.00,USD,`,
+  `DIVIDEND,T-${runId}-4,2026-04-10 09:00:00,NVDA,NVIDIA Corp,,,15.00,USD,April payout`,
+].join('\n');
+
 // Custom dropdowns teleport their option panel to the body: open the trigger,
 // then click the first option whose text matches.
 async function pickOption(page: Page, trigger: Locator, optionLabel: string) {
@@ -60,14 +72,14 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await renameInput.press('Enter');
   await expect(page.locator('.page-header h1')).toContainText(portfolioName);
 
-  // ---- 3. Upload the CSV through the hidden file input ----
-  await page.setInputFiles('input[type="file"]', {
-    name: 'e2e_broker_export.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(csvContent),
-  });
+  // ---- 3. Upload two CSVs at once through the hidden file input ----
+  await page.setInputFiles('input[type="file"]', [
+    { name: 'e2e_broker_export.csv', mimeType: 'text/csv', buffer: Buffer.from(csvContent) },
+    { name: 'e2e_broker_export_2.csv', mimeType: 'text/csv', buffer: Buffer.from(csvContent2) },
+  ]);
   const importHeader = page.locator('h3', { hasText: 'Import Transactions' });
   await expect(importHeader).toBeVisible();
+  await expect(page.getByText('2 files imported as one batch')).toBeVisible();
 
   // Force a fresh custom mapping even if an earlier run left a matching template.
   const templateDropdown = page
@@ -89,22 +101,51 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
     .locator('button');
   await pickOption(page, typeColDropdown, 'Action');
 
-  await page.click('button:has-text("Next: Configure Column Mappings")');
-
-  // ---- 5. Step 2: map raw actions to operation types ----
+  // ---- 5. Step 1: map raw actions to operation types ----
+  const nextBtn = page.locator('button:has-text("Next: Configure Column Mappings")');
+  await expect(nextBtn).toBeDisabled(); // nothing mapped yet
   await expect(page.getByText('3 unmapped')).toBeVisible();
-  await pickOption(page, page.getByTestId('optype-row-BUY').locator('button'), 'trade');
-  await pickOption(page, page.getByTestId('optype-row-SELL').locator('button'), 'trade');
-  await pickOption(page, page.getByTestId('optype-row-DIVIDEND').locator('button'), 'dividend');
+
+  // Clicking a raw action's row count opens the matching raw file rows, with
+  // per-file provenance since this batch merged two files.
+  await page.getByTestId('optype-count-BUY').click();
+  const rawRowsModal = page.getByTestId('raw-rows-modal');
+  await expect(rawRowsModal).toBeVisible();
+  await expect(rawRowsModal.locator('tbody tr')).toHaveCount(2); // one BUY per file
+  await expect(rawRowsModal.getByText('e2e_broker_export.csv', { exact: true })).toBeVisible();
+  await expect(rawRowsModal.getByText('e2e_broker_export_2.csv', { exact: true })).toBeVisible();
+  await rawRowsModal.getByRole('button', { name: 'Close' }).click();
+  await expect(rawRowsModal).not.toBeVisible();
+
+  await pickOption(page, page.getByTestId('optype-row-BUY').locator('button').last(), 'trade');
+  await expect(nextBtn).toBeEnabled(); // one mapped action is enough to proceed
+  await pickOption(page, page.getByTestId('optype-row-SELL').locator('button').last(), 'trade');
+  await pickOption(page, page.getByTestId('optype-row-DIVIDEND').locator('button').last(), 'dividend');
   // Panel auto-collapses once everything is mapped.
   await expect(page.getByText('3 mapped')).toBeVisible();
+
+  // ---- 5b. Split mode round-trip: trade (BUY+SELL) can map each action separately ----
+  const splitToggle = page.getByTestId('split-toggle-trade');
+  await expect(splitToggle).toBeVisible(); // stays visible while the rows list is collapsed
+  await splitToggle.check();
+  await nextBtn.click();
+  // One pill per raw action instead of a single trade pill.
+  await expect(page.getByTestId('optype-pill-BUY')).toBeVisible();
+  await expect(page.getByTestId('optype-pill-SELL')).toBeVisible();
+  await expect(page.getByTestId('optype-pill-trade')).not.toBeVisible();
+  await page.click('button:has-text("Back to Step 1")');
+  await splitToggle.uncheck();
+
+  await nextBtn.click();
 
   // Op type pills appear; trade is auto-selected and shows its row count.
   const tradePill = page.getByTestId('optype-pill-trade');
   const dividendPill = page.getByTestId('optype-pill-dividend');
-  await expect(tradePill).toContainText('2 rows');
+  // Counts include both files' rows (the cross-file duplicate BUY counts here;
+  // it's only dropped by dedup at import time).
+  await expect(tradePill).toContainText('3 rows');
   await expect(tradePill).toContainText('0/7 required');
-  await expect(dividendPill).toContainText('1 rows');
+  await expect(dividendPill).toContainText('2 rows');
 
   // ---- 6. Map trade fields via all three assignment paths ----
   // A mapped slot renders the source header as a chip with title=<header>.
@@ -128,6 +169,12 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
 
   // (c) Per-slot dropdown.
   await pickOption(page, page.getByTestId('field-slot-currency').locator('button').first(), 'Currency');
+  await expect(mappedChip('currency', 'Currency')).toBeVisible();
+
+  // One CSV column can feed several DB fields: reuse "Currency" for price_currency
+  // without clearing the existing currency mapping.
+  await pickOption(page, page.getByTestId('field-slot-price_currency').locator('button').first(), 'Currency');
+  await expect(mappedChip('price_currency', 'Currency')).toBeVisible();
   await expect(mappedChip('currency', 'Currency')).toBeVisible();
 
   await page.getByTestId('csv-chip-Ticker').click();
@@ -171,7 +218,7 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
 
   // All 7 required trade fields are now mapped and every trade row parses.
   await expect(tradePill).not.toContainText('required');
-  await expect(page.getByText('2/2 rows parse cleanly')).toBeVisible();
+  await expect(page.getByText('3/3 rows parse cleanly')).toBeVisible();
 
   // ---- 8. Formula builder: total_amount = Quantity × Price ----
   await page.getByTestId('field-slot-total_amount').locator('button[title*="Advanced settings"]').click();
@@ -183,7 +230,28 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await expect(configModal).toContainText('✓ On the current example row:');
   await configModal.locator('button:has-text("Save")').click();
   await expect(page.getByTestId('field-slot-total_amount')).toContainText('formula');
-  await expect(page.getByText('2/2 rows parse cleanly')).toBeVisible();
+  await expect(page.getByText('3/3 rows parse cleanly')).toBeVisible();
+
+  // ---- 8b. Extra fee groups: add creates suffixed slots, remove cleans them up ----
+  await page.getByTestId('add-fee-group').click();
+  await expect(page.getByTestId('field-slot-fee_amount__2')).toBeVisible();
+  await expect(page.getByTestId('field-slot-fee_type__2')).toBeVisible();
+  await page.getByTestId('remove-fee-group-2').click();
+  await expect(page.getByTestId('field-slot-fee_amount__2')).not.toBeVisible();
+
+  // ---- 8c. Multi-select pills: Ctrl+click adds a type; mappings apply to all ----
+  await dividendPill.click({ modifiers: ['ControlOrMeta'] });
+  // executed_at is mapped for trade but not dividend → the slot shows the divergence.
+  await expect(page.getByTestId('field-slot-executed_at')).toContainText('varies per type');
+  // One assignment maps the column for both selected types.
+  await page.getByTestId('csv-chip-Currency').click();
+  await page.getByTestId('field-slot-currency').click();
+  await expect(mappedChip('currency', 'Currency')).toBeVisible(); // unified again
+  // Plain click returns to single selection; both types kept the mapping.
+  await dividendPill.click();
+  await expect(mappedChip('currency', 'Currency')).toBeVisible();
+  await tradePill.click();
+  await expect(mappedChip('currency', 'Currency')).toBeVisible();
 
   // ---- 9. Dividend op type: map required fields + auto-generated ID ----
   await dividendPill.click();
@@ -218,7 +286,7 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await expect(page.getByTestId('field-slot-transaction_id')).toContainText('auto-generated');
 
   await expect(dividendPill).not.toContainText('required');
-  await expect(page.getByText('1/1 rows parse cleanly')).toBeVisible();
+  await expect(page.getByText('2/2 rows parse cleanly')).toBeVisible();
 
   // ---- 10. Save as template and import ----
   const templateName = `E2E Import QA ${runId}`;
@@ -227,11 +295,16 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await page.click('button:has-text("Save Template & Import")');
 
   await expect(page.getByText('successfully parsed and processed')).toBeVisible({ timeout: 15000 });
-  // The stat value renders in the label's sibling div.
+  // The stat value renders in the label's sibling div. 5 rows across both
+  // files, minus the cross-file duplicate BUY caught by dedup.
   const importedStat = page
     .getByText('Transactions Imported', { exact: true })
     .locator('xpath=following-sibling::div');
-  await expect(importedStat).toHaveText('3');
+  await expect(importedStat).toHaveText('4');
+  const skippedStat = page
+    .getByText('Skipped', { exact: true })
+    .locator('xpath=following-sibling::div');
+  await expect(skippedStat).toHaveText('1');
   await page.click('button:has-text("Done")');
   await expect(importHeader).not.toBeVisible();
 

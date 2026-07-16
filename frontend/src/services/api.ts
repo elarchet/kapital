@@ -296,12 +296,14 @@ export const api = {
 
   async importPositions(
     portfolioId: number,
-    file: File,
+    files: File[],
     schemaId: number | null,
     customSchemaConfig: any | null
   ): Promise<any> {
     const formData = new FormData();
-    formData.append('file', file);
+    // Several files upload as repeated "file" parts; the backend merges them
+    // into one deduplicated batch.
+    files.forEach(f => formData.append('file', f));
     if (schemaId !== null) {
       formData.append('schema_id', String(schemaId));
     }

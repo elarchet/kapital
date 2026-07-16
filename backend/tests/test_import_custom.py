@@ -647,3 +647,114 @@ async def test_latin1_file_decodes(session):
     op = session.exec(select(RawTransaction)).first()
     assert op is not None
     assert op.name == "Société Générale"
+
+
+@pytest.mark.asyncio
+async def test_import_multiple_fee_tax_groups(session):
+    """Indexed fee/tax groups (fee_amount__2, ...) each become their own Fee row,
+    with per-group transformations and enum mappings applied."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "ticker": "Ticker",
+            "currency": "Currency",
+            "quantity": "Qty",
+            "unit_price": "Price",
+            "total_amount": "Total",
+            "fee_amount": "ConvFee",
+            "fee_currency": "ConvFeeCur",
+            "fee_amount__2": "Commission",
+            "fee_type__2": "FeeKind",
+            "tax_amount": "WHT",
+        },
+        "type_mappings": {"buy": ["BUY"]},
+        "transformations": {
+            "fee_amount__2": {"divisor": 100},
+        },
+        "enum_mappings": {
+            "fee_type__2": {"commission": ["COM"]},
+        },
+    }
+    csv_content = (
+        b"Type,Date,Asset,Ticker,Qty,Price,Total,Currency,ConvFee,ConvFeeCur,Commission,FeeKind,WHT\n"
+        b"BUY,2026-06-01 15:30:00,Apple,AAPL,10,150.5,1505.0,USD,0.15,EUR,250,COM,1.2\n"
+    )
+
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["raw_transactions_imported"] == 1
+    op = session.exec(select(RawTransaction)).first()
+    assert op is not None
+    assert len(op.fees) == 3
+
+    by_amount = {f.amount: f for f in op.fees}
+    base_fee = by_amount[Decimal("0.15")]
+    assert base_fee.currency == "EUR"
+    assert base_fee.fee_type == "conversion"
+
+    second_fee = by_amount[Decimal("2.5")]  # 250 / 100 via fee_amount__2 divisor
+    assert second_fee.currency == "USD"  # falls back to the row currency
+    assert second_fee.fee_type == "commission"  # via fee_type__2 enum mapping
+
+    tax = by_amount[Decimal("1.2")]
+    assert tax.currency == "USD"
+    assert tax.fee_type == "withholding_tax"
+
+
+@pytest.mark.asyncio
+async def test_import_rawaction_columns_override_optype(session):
+    """Split-type mappings key columns by raw action; those override the opType-keyed
+    mapping for matching rows while other raw actions fall back to the opType key."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+
+    custom_mappings = {
+        "columns": {
+            "operation_type": "Type",
+            "executed_at": "Date",
+            "name": "Asset",
+            "currency": "Currency",
+            "quantity": "Qty",
+            "total_amount": {"DIV CASH": "TotalA", "dividend": "TotalB"},
+        },
+        "type_mappings": {"dividend": ["DIV CASH", "DIV ADJ"]},
+        "split_types": ["dividend"],  # ignored by the backend, round-tripped for the UI
+    }
+    csv_content = (
+        b"Type,Date,Asset,Qty,TotalA,TotalB,Currency\n"
+        b"DIV CASH,2026-06-01 15:30:00,Apple,10,50.0,999.0,USD\n"
+        b"DIV ADJ,2026-06-02 15:30:00,Apple,10,999.0,7.5,USD\n"
+    )
+
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=csv_content,
+        custom_schema_config={
+            "mappings": custom_mappings,
+            "delimiter": ",",
+            "decimal_separator": ".",
+        },
+    )
+
+    assert summary["raw_transactions_imported"] == 2
+    ops = session.exec(select(RawTransaction).order_by(RawTransaction.executed_at)).all()
+    assert [op.total_amount for op in ops] == [Decimal("50.0"), Decimal("7.5")]

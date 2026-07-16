@@ -29,8 +29,9 @@ export function useImportPreview(params: {
     return rawPreview.map(row => {
       let enrichOption: 'never' | 'when_empty' | 'always' = 'when_empty';
       for (const conf of Object.values(params.columnConfigMap.value) as any[]) {
-        if (conf?.typeSpecific?.[row.opType]?.dbKey === 'name') {
-          enrichOption = conf.typeSpecific[row.opType].enrichAssetNames || 'when_empty';
+        const nameMapping = conf?.typeSpecific?.[row.opType]?.find((m: any) => m.dbKey === 'name');
+        if (nameMapping) {
+          enrichOption = nameMapping.enrichAssetNames || 'when_empty';
         }
       }
 
@@ -56,8 +57,9 @@ export function useImportPreview(params: {
     for (const row of newRows) {
       let enrichOption: 'never' | 'when_empty' | 'always' = 'when_empty';
       for (const conf of Object.values(colConfig) as any[]) {
-        if (conf?.typeSpecific?.[row.opType]?.dbKey === 'name') {
-          enrichOption = conf.typeSpecific[row.opType].enrichAssetNames || 'when_empty';
+        const nameMapping = conf?.typeSpecific?.[row.opType]?.find((m: any) => m.dbKey === 'name');
+        if (nameMapping) {
+          enrichOption = nameMapping.enrichAssetNames || 'when_empty';
         }
       }
 
@@ -78,10 +80,10 @@ export function useImportPreview(params: {
       let nameColIdx = -1;
       params.uiColumns.value.forEach((col: any) => {
         const conf = colConfig[col.id];
-        if (conf?.typeSpecific?.[example.opType]?.dbKey === 'ticker') {
+        if (conf?.typeSpecific?.[example.opType]?.some((m: any) => m.dbKey === 'ticker')) {
           tickerColIdx = col.colIdx;
         }
-        if (conf?.typeSpecific?.[example.opType]?.dbKey === 'name') {
+        if (conf?.typeSpecific?.[example.opType]?.some((m: any) => m.dbKey === 'name')) {
           nameColIdx = col.colIdx;
         }
       });
@@ -92,8 +94,9 @@ export function useImportPreview(params: {
 
       let enrichOption: 'never' | 'when_empty' | 'always' = 'when_empty';
       for (const conf of Object.values(colConfig) as any[]) {
-        if (conf?.typeSpecific?.[example.opType]?.dbKey === 'name') {
-          enrichOption = conf.typeSpecific[example.opType].enrichAssetNames || 'when_empty';
+        const nameMapping = conf?.typeSpecific?.[example.opType]?.find((m: any) => m.dbKey === 'name');
+        if (nameMapping) {
+          enrichOption = nameMapping.enrichAssetNames || 'when_empty';
         }
       }
 

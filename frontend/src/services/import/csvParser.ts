@@ -83,6 +83,88 @@ export function parseCsvText(text: string): { delimiter: string; headers: string
   return { delimiter: delim, headers: allRows[0], rawRows: allRows.slice(1) };
 }
 
+export interface ParsedCsvFile {
+  name: string;
+  delimiter: string;
+  headers: string[];
+  rawRows: string[][];
+}
+
+// Merge several parsed CSV files into one batch over the UNION of their
+// columns. Broker exports only carry the columns used in the export period
+// (e.g. Trading212 omits the withholding-tax columns when no dividend was
+// paid), and may order shared columns differently — so rows are remapped by
+// header name and a column missing from a file reads as empty for its rows,
+// exactly like an empty cell would.
+//
+// Because column sets can legitimately differ, "same export format" is
+// guarded heuristically: a file must share at least half of the smaller
+// column set (minimum 2) with the batch, otherwise it's likely a different
+// provider's export and the whole batch is rejected with a readable error —
+// silently misaligned rows would corrupt the import.
+export function mergeParsedCsvFiles(
+  files: ParsedCsvFile[]
+): { delimiter: string; headers: string[]; rawRows: string[][]; rowSources: string[] } {
+  const ref = files[0];
+  const headers: string[] = [...ref.headers];
+  const rawRows: string[][] = ref.rawRows.map(r => [...r]);
+  // Parallel to rawRows: the name of the file each row came from, so the
+  // wizard can tell the user where a row originated after the merge.
+  const rowSources: string[] = ref.rawRows.map(() => ref.name);
+  const hasDuplicates = (arr: string[]) => new Set(arr).size !== arr.length;
+
+  files.slice(1).forEach(file => {
+    if (file.delimiter !== ref.delimiter) {
+      throw new Error(`"${file.name}" uses a different delimiter than "${ref.name}". Import these files separately.`);
+    }
+
+    const known = new Set(headers);
+    const shared = file.headers.filter(h => known.has(h)).length;
+    const smaller = Math.min(file.headers.length, headers.length);
+    if (shared < 2 || shared * 2 < smaller) {
+      throw new Error(
+        `"${file.name}" shares only ${shared} column${shared === 1 ? '' : 's'} with "${ref.name}" — `
+        + `it doesn't look like the same export format. Import it separately.`
+      );
+    }
+
+    const sameOrder = file.headers.length === headers.length
+      && file.headers.every((h, i) => h === headers[i]);
+    if (sameOrder) {
+      file.rawRows.forEach(r => {
+        rawRows.push([...r]);
+        rowSources.push(file.name);
+      });
+      return;
+    }
+    // Duplicate header names make a by-name remap ambiguous; they only work
+    // when the files match positionally (handled above).
+    if (hasDuplicates(headers) || hasDuplicates(file.headers)) {
+      throw new Error(`"${file.name}" and "${ref.name}" use duplicate column names; such files must have identical columns.`);
+    }
+
+    file.headers.forEach(h => {
+      if (!known.has(h)) {
+        known.add(h);
+        headers.push(h);
+      }
+    });
+    const idxByHeader: Record<string, number> = {};
+    file.headers.forEach((h, i) => { idxByHeader[h] = i; });
+    file.rawRows.forEach(row => {
+      rawRows.push(headers.map(h => (idxByHeader[h] !== undefined ? (row[idxByHeader[h]] ?? '') : '')));
+      rowSources.push(file.name);
+    });
+  });
+
+  // Earlier files' rows may predate union columns added by later files.
+  rawRows.forEach(row => {
+    while (row.length < headers.length) row.push('');
+  });
+
+  return { delimiter: ref.delimiter, headers, rawRows, rowSources };
+}
+
 // Broker exports are not always UTF-8 (e.g. Fortuneo ships Latin-1); retry when
 // UTF-8 decoding produces replacement characters.
 export async function readFileText(file: File): Promise<string> {

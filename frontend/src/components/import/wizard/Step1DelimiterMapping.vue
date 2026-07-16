@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import DynamicComponent from '../../DynamicComponent.vue';
+import OperationTypeMappingPanel from './mapping/OperationTypeMappingPanel.vue';
+import RawActionRowsModal from './mapping/RawActionRowsModal.vue';
 import { INSTITUTION_OPTIONS } from '../../../services/import';
 
 const props = defineProps<{
@@ -8,15 +10,21 @@ const props = defineProps<{
   uniqueOperationTypes: string[];
   importFields: any[];
   activeDbOpTypes: string[];
+  allRawRows: string[][];
+  rawRowSources: string[];
+  splitOpTypes: string[];
 }>();
 
 const delimiter = defineModel<string>('delimiter', { required: true });
 const decimalSeparator = defineModel<string>('decimalSeparator', { required: true });
 const operationTypeColumnIdx = defineModel<number | null>('operationTypeColumnIdx', { required: true });
 const institutionKey = defineModel<string>('institutionKey', { required: true });
+const operationTypeMappings = defineModel<Record<string, string>>('operationTypeMappings', { required: true });
 
 const emit = defineEmits<{
   (e: 'column-change'): void;
+  (e: 'update-optype-mapping', payload: { rawAction: string; dbOpType: string }): void;
+  (e: 'toggle-split', payload: { opType: string; enabled: boolean }): void;
   (e: 'next'): void;
 }>();
 
@@ -48,6 +56,37 @@ const columnOptions = computed(() => {
     label: h
   }));
 });
+
+const rowCountsByRawAction = computed<Record<string, number>>(() => {
+  const counts: Record<string, number> = {};
+  if (operationTypeColumnIdx.value === null) return counts;
+  props.allRawRows.forEach(row => {
+    const raw = row[operationTypeColumnIdx.value!]?.trim();
+    if (raw) counts[raw] = (counts[raw] || 0) + 1;
+  });
+  return counts;
+});
+
+// Raw action whose file rows are shown in the preview modal (opened by
+// clicking the row count next to an action).
+const previewRawAction = ref<string | null>(null);
+
+const previewRows = computed(() => {
+  if (previewRawAction.value === null || operationTypeColumnIdx.value === null) return [];
+  const rows: Array<{ cells: string[]; source: string }> = [];
+  props.allRawRows.forEach((row, idx) => {
+    if (row[operationTypeColumnIdx.value!]?.trim() === previewRawAction.value) {
+      rows.push({ cells: row, source: props.rawRowSources[idx] ?? '' });
+    }
+  });
+  return rows;
+});
+
+// Step 2 maps columns per DB type: entering it with zero mapped actions
+// would show an empty board, so require at least one mapping here.
+const canGoNext = computed(() =>
+  operationTypeColumnIdx.value !== null && props.activeDbOpTypes.length > 0
+);
 
 const delimiterOptions = [
   { value: ',', label: 'Comma (,)' },
@@ -119,17 +158,45 @@ const institutionOptions = INSTITUTION_OPTIONS;
             Select the column in your CSV file that contains the transaction action type (e.g. "Buy", "Sell", "Dividend").
           </p>
         </div>
+
+        <!-- Raw action -> DB type mapping -->
+        <div v-if="operationTypeColumnIdx !== null" style="margin-top: 0.75rem;">
+          <OperationTypeMappingPanel
+            :uniqueOperationTypes="uniqueOperationTypes"
+            :operationTypeMappings="operationTypeMappings"
+            :importFields="importFields"
+            :rowCountsByRawAction="rowCountsByRawAction"
+            :splitOpTypes="splitOpTypes"
+            @update-optype-mapping="(payload) => emit('update-optype-mapping', payload)"
+            @toggle-split="(payload) => emit('toggle-split', payload)"
+            @preview-rows="(rawAction) => previewRawAction = rawAction"
+          />
+          <p v-if="!activeDbOpTypes.length" class="text-[0.75rem] text-warning-color mt-1 mb-0">
+            Map at least one of your file's actions to a transaction type to continue.
+          </p>
+        </div>
       </div>
     </div>
 
     <div style="margin-top: 0.75rem; display: flex; justify-content: flex-end;">
-      <button 
-        @click="goToStep2" 
-        class="btn btn-primary" 
-        :disabled="operationTypeColumnIdx === null"
+      <button
+        @click="goToStep2"
+        class="btn btn-primary"
+        :disabled="!canGoNext"
       >
         Next: Configure Column Mappings &rarr;
       </button>
     </div>
+
+    <!-- Raw file rows matching a clicked action, so the user can see what an
+         unfamiliar transaction type actually is without opening the file. -->
+    <RawActionRowsModal
+      :show="previewRawAction !== null"
+      :rawAction="previewRawAction ?? ''"
+      :headers="importFileHeaders"
+      :rows="previewRows"
+      :highlightColumnIdx="operationTypeColumnIdx"
+      @close="previewRawAction = null"
+    />
   </div>
 </template>

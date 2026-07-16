@@ -190,6 +190,10 @@ IMPORT_METADATA = {
             "op_types": ["trade"],
         },
         # -- Fee / Tax fields --
+        # The wizard can map several fee/tax groups per row: extra groups reuse these
+        # base keys with an __N suffix (fee_amount__2, fee_currency__2, fee_type__2,
+        # tax_amount__2, ...). Each mapped group becomes one Fee row on import
+        # (see import_row_parser_helpers.resolve_fees_and_taxes).
         {
             "key": "fee_amount",
             "label": "Fee Amount",

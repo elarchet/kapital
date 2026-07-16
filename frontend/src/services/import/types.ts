@@ -17,6 +17,13 @@ export interface ColMapping {
   enrichTransactionIds?: EnrichMode;
 }
 
+// Per column (by UI column id): mappings keyed by DB op type (or raw action string
+// for split types / legacy templates). Each key holds a LIST so one CSV column can
+// feed several DB fields. `{ dbKey: '' }` entries are explicit-clear sentinels.
+export interface ColumnConfig {
+  typeSpecific: Record<string, ColMapping[]>;
+}
+
 // Per-op-type settings that don't hang off a column mapping: some brokers have
 // no transaction-id column at all, yet still need auto-generated IDs.
 export interface OpTypeSettings {

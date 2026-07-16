@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -31,6 +32,76 @@ def resolve_enum_mapping(
     return default
 
 
+def _group_suffixes(base: str, columns: dict[str, Any], schema_mappings: dict[str, Any]) -> list[str]:
+    """Collect the mapped suffixes ('' plus '__N' variants) for a fee/tax field group.
+
+    The wizard maps extra fee/tax groups as indexed db keys (fee_amount__2, ...).
+    Formula-mapped groups have no `columns` entry, so formula keys count too.
+    The regex is anchored: `fee_amount` must never match unrelated future keys.
+    """
+    pattern = re.compile(rf"^{re.escape(base)}(__\d+)$")
+    keys = set(columns or {}) | set((schema_mappings or {}).get("formulas") or {})
+    suffixes = {""}
+    for key in keys:
+        match = pattern.match(key)
+        if match:
+            suffixes.add(match.group(1))
+    return sorted(suffixes, key=lambda s: int(s[2:]) if s else 0)
+
+
+def _resolve_fee_group(
+    row: dict[str, str],
+    columns: dict[str, Any],
+    transformations: dict[str, Any],
+    schema_mappings: dict[str, Any],
+    decimal_separator: str,
+    op_type: str,
+    csv_action: str,
+    currency: str,
+    base: str,
+    suffix: str,
+    default_type: str,
+    fallback_enum: FeeType,
+) -> FeeCreate | None:
+    """Resolve one fee/tax group (base group when suffix == '') into a FeeCreate."""
+    # resolve_numeric_value supports formula-mapped fee/tax fields with no column entry.
+    val = resolve_numeric_value(
+        f"{base}_amount{suffix}",
+        row,
+        columns=columns,
+        schema_mappings=schema_mappings,
+        transformations=transformations,
+        decimal_separator=decimal_separator,
+        op_type=op_type,
+        csv_action=csv_action,
+    )
+    if not val or val <= 0:
+        return None
+
+    curr = row.get(get_mapped_col(columns, f"{base}_currency{suffix}", op_type, csv_action)) or currency
+    # Categorization column: the group's own fee_type__N when mapped, else the shared fee_type.
+    type_col = get_mapped_col(columns, f"fee_type{suffix}", op_type, csv_action) if suffix else None
+    if not type_col:
+        type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
+    raw_type = row.get(type_col) if type_col else None
+    resolved_type = None
+    if suffix:
+        resolved_type = resolve_enum_mapping(schema_mappings, f"fee_type{suffix}", raw_type)
+    if not resolved_type:
+        resolved_type = resolve_enum_mapping(schema_mappings, "fee_type", raw_type, default=default_type)
+    try:
+        type_enum = FeeType(resolved_type)
+    except ValueError:
+        type_enum = fallback_enum
+
+    if base == "tax":
+        notes = "Withholding tax"
+    else:
+        notes = "Currency conversion fee" if resolved_type == "conversion" else "Fee"
+
+    return FeeCreate(amount=val, currency=curr, fee_type=type_enum, notes=notes)
+
+
 def resolve_fees_and_taxes(
     row: dict[str, str],
     columns: dict[str, Any],
@@ -41,72 +112,33 @@ def resolve_fees_and_taxes(
     csv_action: str,
     currency: str,
 ) -> list[FeeCreate]:
-    """Parse and resolve FeeCreate child objects for the transaction row."""
-    fees = []
-    # resolve_numeric_value supports formula-mapped fee/tax fields with no column entry.
-    fee_val = resolve_numeric_value(
-        "fee_amount",
-        row,
-        columns=columns,
-        schema_mappings=schema_mappings,
-        transformations=transformations,
-        decimal_separator=decimal_separator,
-        op_type=op_type,
-        csv_action=csv_action,
-    )
-    if fee_val and fee_val > 0:
-        fee_curr = row.get(get_mapped_col(columns, "fee_currency", op_type, csv_action)) or currency
-        fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
-        raw_fee_type = row.get(fee_type_col) if fee_type_col else None
-        resolved_fee_type = resolve_enum_mapping(schema_mappings, "fee_type", raw_fee_type, default="conversion")
-        try:
-            fee_type_enum = FeeType(resolved_fee_type)
-        except ValueError:
-            fee_type_enum = FeeType.OTHER
+    """Parse and resolve FeeCreate child objects for the transaction row.
 
-        fees.append(
-            FeeCreate(
-                amount=fee_val,
-                currency=fee_curr,
-                fee_type=fee_type_enum,
-                notes="Currency conversion fee" if resolved_fee_type == "conversion" else "Fee",
-            ),
-        )
-
-    tax_val = resolve_numeric_value(
-        "tax_amount",
-        row,
-        columns=columns,
-        schema_mappings=schema_mappings,
-        transformations=transformations,
-        decimal_separator=decimal_separator,
-        op_type=op_type,
-        csv_action=csv_action,
-    )
-    if tax_val and tax_val > 0:
-        tax_curr = row.get(get_mapped_col(columns, "tax_currency", op_type, csv_action)) or currency
-        fee_type_col = get_mapped_col(columns, "fee_type", op_type, csv_action)
-        raw_fee_type = row.get(fee_type_col) if fee_type_col else None
-        resolved_tax_type = resolve_enum_mapping(
-            schema_mappings,
-            "fee_type",
-            raw_fee_type,
-            default="withholding_tax",
-        )
-        try:
-            tax_type_enum = FeeType(resolved_tax_type)
-        except ValueError:
-            tax_type_enum = FeeType.WITHHOLDING_TAX
-
-        fees.append(
-            FeeCreate(
-                amount=tax_val,
-                currency=tax_curr,
-                fee_type=tax_type_enum,
-                notes="Withholding tax",
-            ),
-        )
-
+    Each mapped fee/tax group ('fee_amount', 'fee_amount__2', 'tax_amount', ...)
+    yields at most one FeeCreate; the DB stores them as a list per transaction.
+    """
+    fees: list[FeeCreate] = []
+    for base, default_type, fallback_enum in (
+        ("fee", "conversion", FeeType.OTHER),
+        ("tax", "withholding_tax", FeeType.WITHHOLDING_TAX),
+    ):
+        for suffix in _group_suffixes(f"{base}_amount", columns, schema_mappings):
+            fee = _resolve_fee_group(
+                row,
+                columns,
+                transformations,
+                schema_mappings,
+                decimal_separator,
+                op_type,
+                csv_action,
+                currency,
+                base,
+                suffix,
+                default_type,
+                fallback_enum,
+            )
+            if fee:
+                fees.append(fee)
     return fees
 
 

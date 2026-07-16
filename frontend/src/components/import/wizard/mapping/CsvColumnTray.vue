@@ -21,9 +21,9 @@ const emit = defineEmits<{
       <span class="text-[0.7rem] font-bold uppercase tracking-wider text-text-secondary">CSV Columns</span>
       <span class="text-[0.65rem] text-text-tertiary">drag a column onto a field — or click it, then click a field</span>
     </div>
-    <!-- Wraps on tall screens (capped so field slots keep priority), single scrollable row on short screens -->
+    <!-- Same layout rule as the type pills: wraps with a 2-row minimum, scrolls beyond the cap. -->
     <div
-      class="flex flex-wrap gap-1.5 max-h-[22vh] overflow-y-auto overflow-x-hidden [@media(max-height:700px)]:flex-nowrap [@media(max-height:700px)]:overflow-x-auto [@media(max-height:700px)]:overflow-y-hidden pb-0.5"
+      class="flex flex-wrap content-start items-start gap-1.5 min-h-[6rem] max-h-[22vh] overflow-y-auto overflow-x-hidden pb-0.5"
     >
       <CsvColumnChip
         v-for="col in uiColumns"
