@@ -11,12 +11,15 @@ const csvContent = [
 ].join('\n');
 
 // Second file of the same batch: columns reordered (rows are remapped by
-// header name), one row duplicated from file 1 (dropped by dedup at import)
-// and one genuinely new dividend.
+// header name) plus an extra "Notes" column that file 1 lacks (broker period
+// exports only carry the columns used in the period — merged as a union,
+// missing cells read as empty). One row is duplicated from file 1 — still
+// dropped by dedup at import since its extra Notes cell is empty — and one
+// dividend is genuinely new.
 const csvContent2 = [
-  'Action,ID,Time,Ticker,Name,Quantity,Price,Total,Currency',
-  `BUY,T-${runId}-1,2026-01-15 10:30:00,NVDA,NVIDIA Corp,10,120.50,1205.00,USD`,
-  `DIVIDEND,T-${runId}-4,2026-04-10 09:00:00,NVDA,NVIDIA Corp,,,15.00,USD`,
+  'Action,ID,Time,Ticker,Name,Quantity,Price,Total,Currency,Notes',
+  `BUY,T-${runId}-1,2026-01-15 10:30:00,NVDA,NVIDIA Corp,10,120.50,1205.00,USD,`,
+  `DIVIDEND,T-${runId}-4,2026-04-10 09:00:00,NVDA,NVIDIA Corp,,,15.00,USD,April payout`,
 ].join('\n');
 
 // Custom dropdowns teleport their option panel to the body: open the trigger,

@@ -74,6 +74,52 @@ async def test_multifile_import_merges_and_dedups(session):
 
 
 @pytest.mark.asyncio
+async def test_multifile_with_different_column_sets(session):
+    """Broker period exports only carry the columns used in that period: each
+    file parses against its own header, so a column missing from one file
+    simply reads as empty for its rows."""
+    user = cast("User", UserFactory())
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+    session.refresh(user)
+    session.refresh(portfolio)
+
+    file_a = (
+        b"Type,Date,Asset,Total,Currency,Qty\n"
+        b"BUY,2026-01-10 10:00:00,Apple,150.0,USD,10\n"
+    )
+    # No trades in file B's period: no Qty column; carries Notes instead.
+    file_b = (
+        b"Type,Date,Asset,Notes,Total,Currency\n"
+        b"DIV,2026-02-01 09:00:00,Apple,Q1 payout,2.5,USD\n"
+    )
+
+    config = {
+        **CUSTOM_CONFIG,
+        "mappings": {
+            **CUSTOM_CONFIG["mappings"],
+            "columns": {**CUSTOM_CONFIG["mappings"]["columns"], "notes": "Notes"},
+        },
+    }
+    summary = await import_portfolio_transactions(
+        db=session,
+        portfolio_id=portfolio.id,
+        user_id=user.id,
+        file_content=[file_a, file_b],
+        custom_schema_config=config,
+    )
+
+    assert summary["raw_transactions_imported"] == 2
+    assert summary["skipped_duplicates"] == 0
+
+    txns = session.exec(select(RawTransaction).order_by(RawTransaction.executed_at)).all()
+    assert txns[0].quantity == Decimal("10")
+    assert txns[0].notes is None  # Notes column absent from file A
+    assert txns[1].quantity is None  # Qty column absent from file B
+    assert txns[1].notes == "Q1 payout"
+
+
+@pytest.mark.asyncio
 async def test_single_bytes_content_still_supported(session):
     user = cast("User", UserFactory())
     portfolio = cast("Portfolio", PortfolioFactory(user=user))
