@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronLeft, ChevronRight } from '@lucide/vue';
-import OpTypeSelector, { type MappingVariant } from './mapping/OpTypeSelector.vue';
+import OpTypeSelector from './mapping/OpTypeSelector.vue';
 import CsvColumnTray from './mapping/CsvColumnTray.vue';
 import FieldSlotList from './mapping/FieldSlotList.vue';
 import FieldConfigModal from './mapping/FieldConfigModal.vue';
 import SimulationVerificationModal from '../modals/SimulationVerificationModal.vue';
-import { useFieldSlots } from './mapping/useFieldSlots';
+import { useFieldSlots, type MappingVariant } from './mapping/useFieldSlots';
 import { useDragDrop } from './mapping/useDragDrop';
 import type { FieldConfigContext } from './mapping/useFieldConfigModal';
 import {
@@ -69,42 +69,81 @@ const mappingVariants = computed<MappingVariant[]>(() => {
   return variants;
 });
 
-// ---- Selected variant + example row cycling ----
-const selectedKey = ref('');
+// ---- Selected variants (Ctrl+click adds to the selection) + example row cycling ----
+const selectedKeys = ref<string[]>([]);
 watch(mappingVariants, (variants) => {
-  if (!variants.some(v => v.key === selectedKey.value)) selectedKey.value = variants[0]?.key || '';
+  const valid = selectedKeys.value.filter(k => variants.some(v => v.key === k));
+  selectedKeys.value = valid.length ? valid : (variants[0] ? [variants[0].key] : []);
 }, { immediate: true });
 
-const selectedVariant = computed(() => mappingVariants.value.find(v => v.key === selectedKey.value) || null);
+const onSelectPill = ({ key, additive }: { key: string; additive: boolean }) => {
+  if (!additive) {
+    selectedKeys.value = [key];
+  } else if (selectedKeys.value.includes(key)) {
+    if (selectedKeys.value.length > 1) selectedKeys.value = selectedKeys.value.filter(k => k !== key);
+  } else {
+    selectedKeys.value = [...selectedKeys.value, key];
+  }
+};
+
+const selectedVariants = computed<MappingVariant[]>(() =>
+  selectedKeys.value
+    .map(k => mappingVariants.value.find(v => v.key === k))
+    .filter((v): v is MappingVariant => !!v)
+);
+// Primary variant: single-variant consumers (config modal, verification) follow it.
+const primaryKey = computed(() => selectedKeys.value[0] || '');
+const selectedVariant = computed(() => selectedVariants.value[0] || null);
 const selectedOpType = computed(() => selectedVariant.value?.opType || '');
 
 const exampleOffsets = ref<Record<string, number>>({});
-const matchesForSelected = computed(() => {
-  const variant = selectedVariant.value;
+const matchesFor = (variant: MappingVariant | null) => {
   if (!variant) return [];
   return variant.rawAction
     ? (props.matchingRowsByRawAction?.[variant.rawAction] || [])
     : (props.matchingRowsByType?.[variant.opType] || []);
-});
-const exampleOffset = computed(() => {
-  const offset = exampleOffsets.value[selectedKey.value] || 0;
-  return matchesForSelected.value.length ? offset % matchesForSelected.value.length : 0;
-});
+};
+const matchesForSelected = computed(() => matchesFor(selectedVariant.value));
+const offsetFor = (variant: MappingVariant) => {
+  const total = matchesFor(variant).length;
+  return total ? (exampleOffsets.value[variant.key] || 0) % total : 0;
+};
+const exampleOffset = computed(() => selectedVariant.value ? offsetFor(selectedVariant.value) : 0);
 const exampleRow = computed<string[]>(() => matchesForSelected.value[exampleOffset.value]?.csvRow || []);
+
+// One example entry per selected variant; labels only show in multi-select.
+const exampleEntries = computed(() =>
+  selectedVariants.value.map(v => ({
+    key: v.key,
+    label: selectedVariants.value.length > 1 ? (v.rawAction ? `${v.opType} · ${v.rawAction}` : v.opType) : null,
+    row: matchesFor(v)[offsetFor(v)]?.csvRow || [],
+  }))
+);
+
+const canCycle = computed(() => selectedVariants.value.some(v => matchesFor(v).length > 1));
 const cycleExample = (delta: number) => {
-  const total = matchesForSelected.value.length;
-  if (total <= 1) return;
-  exampleOffsets.value[selectedKey.value] = (exampleOffset.value + delta + total) % total;
+  selectedVariants.value.forEach(v => {
+    const total = matchesFor(v).length;
+    if (total <= 1) return;
+    exampleOffsets.value[v.key] = (offsetFor(v) + delta + total) % total;
+  });
 };
 
 // ---- Extra fee/tax groups (fee_amount__2, tax_amount__2, ...) ----
-// Mapping keys the selected variant reads/writes (mirrors useFieldSlots.keysToCheck).
+// Mapping keys the selected variants read/write (mirrors useFieldSlots.keysToCheck).
 const variantKeys = computed(() => {
-  const variant = selectedVariant.value;
-  if (!variant) return [];
-  return variant.rawAction
-    ? [variant.rawAction]
-    : [variant.opType, ...Object.keys(props.operationTypeMappings).filter(r => props.operationTypeMappings[r] === variant.opType)];
+  const keys = new Set<string>();
+  selectedVariants.value.forEach(variant => {
+    if (variant.rawAction) {
+      keys.add(variant.rawAction);
+    } else {
+      keys.add(variant.opType);
+      Object.keys(props.operationTypeMappings)
+        .filter(r => props.operationTypeMappings[r] === variant.opType)
+        .forEach(r => keys.add(r));
+    }
+  });
+  return [...keys];
 });
 
 const mappedDbKeysForVariant = computed(() => {
@@ -120,7 +159,8 @@ const mappedDbKeysForVariant = computed(() => {
 // Effective count = groups the user added this session or groups already mapped
 // (restores extra groups when a saved template is loaded).
 const groupCount = (kind: FeeGroupKind) => Math.max(
-  props.feeTaxGroupCounts?.[selectedKey.value]?.[kind] || 1,
+  1,
+  ...selectedKeys.value.map(k => props.feeTaxGroupCounts?.[k]?.[kind] || 1),
   highestMappedGroup(mappedDbKeysForVariant.value, kind)
 );
 const feeGroupCount = computed(() => groupCount('fee'));
@@ -133,10 +173,15 @@ const effectiveImportFields = computed<ImportField[]>(() => [
 ]);
 
 const canAddGroup = (kind: FeeGroupKind) =>
-  props.importFields.some(f => f.key === `${kind}_amount` && isFieldRelevantForOpType(f, selectedOpType.value));
+  selectedVariants.value.length > 0
+  && props.importFields.some(f =>
+    f.key === `${kind}_amount`
+    && selectedVariants.value.every(v => isFieldRelevantForOpType(f, v.opType))
+  );
 
 const addGroup = (kind: FeeGroupKind) => {
-  emit('update-group-count', { key: selectedKey.value, kind, count: groupCount(kind) + 1 });
+  const count = groupCount(kind) + 1;
+  selectedKeys.value.forEach(key => emit('update-group-count', { key, kind, count }));
 };
 
 const removeGroup = ({ kind, index }: { kind: FeeGroupKind; index: number }) => {
@@ -156,7 +201,8 @@ const removeGroup = ({ kind, index }: { kind: FeeGroupKind; index: number }) => 
     });
   });
   emit('touch-config');
-  emit('update-group-count', { key: selectedKey.value, kind, count: groupCount(kind) - 1 });
+  const count = groupCount(kind) - 1;
+  selectedKeys.value.forEach(key => emit('update-group-count', { key, kind, count }));
 };
 
 // ---- Slots + drag & drop ----
@@ -170,8 +216,7 @@ const fieldSlots = useFieldSlots({
   uiColumns: computed(() => props.uiColumns),
   importFields: effectiveImportFields,
   operationTypeMappings: computed(() => props.operationTypeMappings),
-  selectedOpType,
-  selectedKey,
+  selectedVariants,
 });
 
 const dnd = useDragDrop();
@@ -259,7 +304,9 @@ const openConfig = (fieldKey: string) => {
     tickerMapped: !!tickerMapping,
     exampleTicker: tickerCol ? (exampleRow.value?.[tickerCol.colIdx] ?? '').trim() : '',
     // Settings are stored per variant key so split variants configure independently.
-    opTypeSettings: props.opTypeSettings?.[selectedKey.value] ?? null,
+    // Multi-select: the modal shows the primary variant's settings; saving
+    // applies them to every selected variant.
+    opTypeSettings: props.opTypeSettings?.[primaryKey.value] ?? null,
     decimalSeparator: props.importDecimalSep,
   };
   showConfigModal.value = true;
@@ -294,7 +341,9 @@ const onModalSave = (payload: { mapping: ColMapping; opTypeSettings?: OpTypeSett
     fieldSlots.updateMapping(configFieldKey.value, payload.mapping);
   }
   if (payload.opTypeSettings) {
-    emit('update-optype-settings', { opType: selectedKey.value, settings: payload.opTypeSettings });
+    selectedKeys.value.forEach(key =>
+      emit('update-optype-settings', { opType: key, settings: payload.opTypeSettings! })
+    );
   }
   emit('touch-config');
   showConfigModal.value = false;
@@ -309,10 +358,16 @@ const onModalClear = () => {
 // ---- Per-variant verification ----
 const showVerification = ref(false);
 const aggregatedStats = computed(() => {
-  const variant = selectedVariant.value;
-  const rawActions = variant?.rawAction
-    ? [variant.rawAction]
-    : Object.keys(props.operationTypeMappings).filter(r => props.operationTypeMappings[r] === selectedOpType.value);
+  const rawActions = new Set<string>();
+  selectedVariants.value.forEach(variant => {
+    if (variant.rawAction) {
+      rawActions.add(variant.rawAction);
+    } else {
+      Object.keys(props.operationTypeMappings)
+        .filter(r => props.operationTypeMappings[r] === variant.opType)
+        .forEach(r => rawActions.add(r));
+    }
+  });
   const agg = { total: 0, success: 0, failed: 0, errors: [] as any[] };
   rawActions.forEach(raw => {
     const s = props.liveValidationStats?.[raw];
@@ -330,7 +385,7 @@ const aggregatedStats = computed(() => {
   <div class="flex flex-col gap-3">
     <div class="flex justify-between items-center gap-4">
       <p class="text-xs text-text-secondary m-0 flex-1">
-        Map one transaction type at a time: drag CSV columns onto the database fields below.
+        Map one transaction type at a time — or Ctrl+click several pills to map their shared columns together.
       </p>
       <button @click="emit('back')" class="btn btn-sm shrink-0">&larr; Back to Step 1</button>
     </div>
@@ -339,15 +394,15 @@ const aggregatedStats = computed(() => {
     <OpTypeSelector
       v-if="mappingVariants.length"
       :variants="mappingVariants"
-      :selected="selectedKey"
+      :selected="selectedKeys"
       :stats="variantStats"
-      @select="(k: string) => selectedKey = k"
+      @select="onSelectPill"
     />
     <p v-else class="text-[0.78rem] text-warning-color m-0">
       Map at least one of your file's actions to a transaction type in Step 1 to start mapping columns.
     </p>
 
-    <template v-if="selectedKey">
+    <template v-if="primaryKey">
       <!-- Sticky CSV column tray -->
       <CsvColumnTray
         :uiColumns="uiColumns"
@@ -361,12 +416,12 @@ const aggregatedStats = computed(() => {
 
       <!-- Example row pager + verification -->
       <div class="flex items-center gap-2 text-[0.72rem] text-text-secondary">
-        <span>Example row</span>
-        <button type="button" class="btn btn-sm !p-0.5" :disabled="matchesForSelected.length <= 1" @click="cycleExample(-1)">
+        <span>Example row{{ selectedKeys.length > 1 ? 's' : '' }}</span>
+        <button type="button" class="btn btn-sm !p-0.5" :disabled="!canCycle" @click="cycleExample(-1)">
           <ChevronLeft class="w-3.5 h-3.5" />
         </button>
         <span class="font-mono">{{ matchesForSelected.length ? exampleOffset + 1 : 0 }}/{{ matchesForSelected.length }}</span>
-        <button type="button" class="btn btn-sm !p-0.5" :disabled="matchesForSelected.length <= 1" @click="cycleExample(1)">
+        <button type="button" class="btn btn-sm !p-0.5" :disabled="!canCycle" @click="cycleExample(1)">
           <ChevronRight class="w-3.5 h-3.5" />
         </button>
         <button
@@ -383,10 +438,10 @@ const aggregatedStats = computed(() => {
       <FieldSlotList
         :slots="fieldSlots.slots.value"
         :uiColumns="uiColumns"
-        :exampleRow="exampleRow"
+        :exampleEntries="exampleEntries"
         :decimalSeparator="importDecimalSep"
         :enrichedNames="enrichedNames"
-        :opTypeSettings="opTypeSettings?.[selectedKey]"
+        :opTypeSettings="opTypeSettings?.[primaryKey]"
         :dropEnabled="!!dnd.draggingColId.value || !!dnd.armedColId.value"
         :canAddFee="canAddGroup('fee')"
         :canAddTax="canAddGroup('tax')"

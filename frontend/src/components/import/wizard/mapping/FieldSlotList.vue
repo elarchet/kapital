@@ -2,13 +2,12 @@
 import { computed } from 'vue';
 import { Plus, Trash2 } from '@lucide/vue';
 import DbFieldSlot from './DbFieldSlot.vue';
-import type { FieldSlotView } from './useFieldSlots';
+import type { FieldSlotView, SlotPreviewEntry } from './useFieldSlots';
 import {
   computeLivePreview,
   isExtraGroupKey,
   groupKindOf,
   groupIndex,
-  type LivePreviewResult,
   type FeeGroupKind,
 } from '../../../../services/import';
 import type { OpTypeSettings } from '../../../../services/import/types';
@@ -16,7 +15,8 @@ import type { OpTypeSettings } from '../../../../services/import/types';
 const props = defineProps<{
   slots: FieldSlotView[];
   uiColumns: Array<{ id: string; colIdx: number; name: string; label: string }>;
-  exampleRow: string[];
+  // One example row per selected variant (a single entry outside multi-select).
+  exampleEntries: Array<{ key: string; label: string | null; row: string[] }>;
   decimalSeparator: string;
   enrichedNames: Record<string, string>;
   opTypeSettings?: OpTypeSettings;
@@ -59,36 +59,49 @@ const columnOptions = computed(() =>
   props.uiColumns.map(c => ({ value: c.id, label: c.name }))
 );
 
-const rowByHeader = computed(() => {
+const rowByHeaderFor = (row: string[]) => {
   const map: Record<string, string> = {};
   props.uiColumns.forEach(c => {
-    if (c?.name !== undefined) map[c.name] = props.exampleRow?.[c.colIdx] ?? '';
+    if (c?.name !== undefined) map[c.name] = row?.[c.colIdx] ?? '';
   });
   return map;
-});
-
-const exampleValueFor = (slot: FieldSlotView): string => {
-  const col = props.uiColumns.find(c => c.id === slot.colId);
-  return col ? (props.exampleRow?.[col.colIdx] ?? '') : '';
 };
 
-const previewFor = (slot: FieldSlotView): LivePreviewResult | null => {
-  if (!slot?.mapping?.dbKey && !slot?.mapping?.formula?.length) return null;
+const valueFor = (colId: string | null, row: string[]): string => {
+  const col = colId ? props.uiColumns.find(c => c.id === colId) : null;
+  return col ? (row?.[col.colIdx] ?? '') : '';
+};
 
-  const tickerSlot = props.slots.find(s => s.field?.key === 'ticker');
-  const tickerValue = tickerSlot ? exampleValueFor(tickerSlot).trim() : '';
+// One preview line per selected variant, each computed from that variant's own
+// mapping and example row.
+const previewsFor = (slot: FieldSlotView): SlotPreviewEntry[] =>
+  props.exampleEntries.map(entry => {
+    const pv = slot.perVariant.find(p => p.key === entry.key) || null;
+    const mapping = pv?.mapping;
+    const exampleValue = valueFor(pv?.colId ?? null, entry.row);
+    if (!mapping?.dbKey && !mapping?.formula?.length) {
+      return { label: entry.label, exampleValue, preview: null };
+    }
 
-  return computeLivePreview(slot.field, exampleValueFor(slot), slot.mapping || {}, {
-    decimalSeparator: props.decimalSeparator,
-    rowByHeader: rowByHeader.value,
-    isRequired: slot.isRequired,
-    enrichMode: slot.mapping?.enrichAssetNames,
-    tickerMapped: !!tickerSlot?.colId,
-    exampleTicker: tickerValue,
-    enrichedName: tickerValue ? props.enrichedNames?.[tickerValue] : undefined,
-    autoIdMode: props.opTypeSettings?.autoTransactionId ?? slot.mapping?.enrichTransactionIds,
+    const tickerSlot = props.slots.find(s => s.field?.key === 'ticker');
+    const tickerPv = tickerSlot?.perVariant.find(p => p.key === entry.key);
+    const tickerValue = tickerPv?.colId ? valueFor(tickerPv.colId, entry.row).trim() : '';
+
+    return {
+      label: entry.label,
+      exampleValue,
+      preview: computeLivePreview(slot.field, exampleValue, mapping || {}, {
+        decimalSeparator: props.decimalSeparator,
+        rowByHeader: rowByHeaderFor(entry.row),
+        isRequired: slot.isRequired,
+        enrichMode: mapping?.enrichAssetNames,
+        tickerMapped: !!tickerPv?.colId,
+        exampleTicker: tickerValue,
+        enrichedName: tickerValue ? props.enrichedNames?.[tickerValue] : undefined,
+        autoIdMode: props.opTypeSettings?.autoTransactionId ?? mapping?.enrichTransactionIds,
+      }),
+    };
   });
-};
 
 const autoIdEnabledFor = (slot: FieldSlotView) =>
   slot.field.key === 'transaction_id'
@@ -105,8 +118,7 @@ const autoIdEnabledFor = (slot: FieldSlotView) =>
           v-for="slot in requiredSlots"
           :key="slot.field.key"
           :slotView="slot"
-          :exampleValue="exampleValueFor(slot)"
-          :preview="previewFor(slot)"
+          :previews="previewsFor(slot)"
           :dropEnabled="dropEnabled"
           :columnOptions="columnOptions"
           :autoIdEnabled="autoIdEnabledFor(slot)"
@@ -126,8 +138,7 @@ const autoIdEnabledFor = (slot: FieldSlotView) =>
           v-for="slot in optionalSlots"
           :key="slot.field.key"
           :slotView="slot"
-          :exampleValue="exampleValueFor(slot)"
-          :preview="previewFor(slot)"
+          :previews="previewsFor(slot)"
           :dropEnabled="dropEnabled"
           :columnOptions="columnOptions"
           :autoIdEnabled="autoIdEnabledFor(slot)"
@@ -161,8 +172,7 @@ const autoIdEnabledFor = (slot: FieldSlotView) =>
           v-for="slot in group.slots"
           :key="slot.field.key"
           :slotView="slot"
-          :exampleValue="exampleValueFor(slot)"
-          :preview="previewFor(slot)"
+          :previews="previewsFor(slot)"
           :dropEnabled="dropEnabled"
           :columnOptions="columnOptions"
           :autoIdEnabled="false"

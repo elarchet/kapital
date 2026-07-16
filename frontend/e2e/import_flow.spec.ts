@@ -213,6 +213,20 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await page.getByTestId('remove-fee-group-2').click();
   await expect(page.getByTestId('field-slot-fee_amount__2')).not.toBeVisible();
 
+  // ---- 8c. Multi-select pills: Ctrl+click adds a type; mappings apply to all ----
+  await dividendPill.click({ modifiers: ['ControlOrMeta'] });
+  // executed_at is mapped for trade but not dividend → the slot shows the divergence.
+  await expect(page.getByTestId('field-slot-executed_at')).toContainText('varies per type');
+  // One assignment maps the column for both selected types.
+  await page.getByTestId('csv-chip-Currency').click();
+  await page.getByTestId('field-slot-currency').click();
+  await expect(mappedChip('currency', 'Currency')).toBeVisible(); // unified again
+  // Plain click returns to single selection; both types kept the mapping.
+  await dividendPill.click();
+  await expect(mappedChip('currency', 'Currency')).toBeVisible();
+  await tradePill.click();
+  await expect(mappedChip('currency', 'Currency')).toBeVisible();
+
   // ---- 9. Dividend op type: map required fields + auto-generated ID ----
   await dividendPill.click();
   await expect(mappedChip('executed_at', 'Time')).not.toBeVisible(); // per-op-type view

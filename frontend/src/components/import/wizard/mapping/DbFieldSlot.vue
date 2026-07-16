@@ -2,13 +2,11 @@
 import { computed, ref } from 'vue';
 import { Settings2, X, Sparkles, Hash, SigmaSquare } from '@lucide/vue';
 import DynamicComponent from '../../../DynamicComponent.vue';
-import type { FieldSlotView } from './useFieldSlots';
-import type { LivePreviewResult } from '../../../../services/import';
+import type { FieldSlotView, SlotPreviewEntry } from './useFieldSlots';
 
 const props = defineProps<{
   slotView: FieldSlotView;
-  exampleValue?: string;
-  preview: LivePreviewResult | null;
+  previews: SlotPreviewEntry[];
   dropEnabled: boolean;
   columnOptions: Array<{ value: string; label: string }>;
   autoIdEnabled?: boolean;
@@ -26,8 +24,13 @@ const dragOver = ref(false);
 
 const isTransactionId = computed(() => props.slotView?.field?.key === 'transaction_id');
 const isMapped = computed(() => !!props.slotView?.mapping?.dbKey || !!props.slotView?.mapping?.formula?.length);
+// Multi-select only: the selected types disagree on this field's source column.
+const isMixed = computed(() => !!props.slotView?.mixed);
 // transaction_id is configurable (auto-ID + hash columns) even with no column mapped.
-const showConfigure = computed(() => isMapped.value || isTransactionId.value);
+// Mixed slots hide configure: the modal would only show one variant's settings.
+const showConfigure = computed(() => isMapped.value || (isTransactionId.value && !isMixed.value));
+
+const visiblePreviews = computed(() => (props.previews || []).filter(p => p.preview));
 
 const typeBadgeClass = computed(() => ({
   numeric: 'bg-blue-50 text-blue-600',
@@ -48,7 +51,7 @@ const onDrop = (e: DragEvent) => {
     :data-testid="`field-slot-${slotView?.field?.key}`"
     :class="[
       dragOver ? 'border-accent ring-2 ring-accent/30 bg-accent-light/60'
-        : isMapped ? 'border-border-color bg-bg-primary'
+        : (isMapped || isMixed) ? 'border-border-color bg-bg-primary'
         : slotView?.isRequired ? 'border-dashed border-red-400/70 bg-bg-primary'
         : 'border-dashed border-border-color bg-bg-primary/60',
       dropEnabled ? 'cursor-pointer' : ''
@@ -61,7 +64,7 @@ const onDrop = (e: DragEvent) => {
     <div class="flex flex-col gap-1 py-1.5 px-2.5 h-full">
       <!-- Field identity + actions -->
       <div class="flex items-center gap-1.5 min-w-0">
-        <span class="text-[0.78rem] font-semibold truncate" :class="slotView?.isRequired && !isMapped ? 'text-danger-color' : ''">
+        <span class="text-[0.78rem] font-semibold truncate" :class="slotView?.isRequired && !isMapped && !isMixed ? 'text-danger-color' : ''">
           {{ slotView?.field?.label }}
         </span>
         <span v-if="slotView?.isRequired" class="text-danger-color font-bold" title="Required field">*</span>
@@ -80,10 +83,10 @@ const onDrop = (e: DragEvent) => {
             <Settings2 class="w-4 h-4" />
           </button>
           <button
-            v-if="isMapped"
+            v-if="isMapped || isMixed"
             type="button"
             class="p-1 rounded-sm text-text-secondary hover:text-danger-color hover:bg-danger-light"
-            title="Clear mapping"
+            :title="isMixed ? 'Clear mapping for all selected types' : 'Clear mapping'"
             @click="emit('clear')"
           >
             <X class="w-4 h-4" />
@@ -113,10 +116,34 @@ const onDrop = (e: DragEvent) => {
               class="w-3 h-3 text-amber-500" title="Auto-enrichment enabled"
             />
           </div>
-          <div v-if="preview" class="text-[0.66rem] truncate mt-0.5" :class="preview.success ? 'text-text-secondary' : 'text-danger-color'" :title="preview.success ? preview.value : preview.error">
-            <span class="font-mono">{{ exampleValue?.trim() || '—' }}</span>
+          <div
+            v-for="(p, i) in visiblePreviews"
+            :key="i"
+            class="text-[0.66rem] truncate mt-0.5"
+            :class="p.preview!.success ? 'text-text-secondary' : 'text-danger-color'"
+            :title="p.preview!.success ? p.preview!.value : p.preview!.error"
+          >
+            <span v-if="p.label" class="font-semibold text-text-tertiary">{{ p.label }}: </span>
+            <span class="font-mono">{{ p.exampleValue?.trim() || '—' }}</span>
             <span> → </span>
-            <span class="font-mono font-semibold">{{ preview.success ? preview.value : preview.error }}</span>
+            <span class="font-mono font-semibold">{{ p.preview!.success ? p.preview!.value : p.preview!.error }}</span>
+          </div>
+        </template>
+        <!-- Multi-select with diverging mappings: show each type's source column. -->
+        <template v-else-if="isMixed">
+          <div class="flex flex-col gap-0.5" data-testid="mixed-mapping">
+            <span class="text-[0.62rem] font-bold uppercase tracking-wide text-amber-600">varies per type</span>
+            <div
+              v-for="pv in slotView.perVariant"
+              :key="pv.key"
+              class="text-[0.66rem] truncate text-text-secondary"
+              :title="`${pv.rawAction || pv.opType} → ${pv.header || 'not mapped'}`"
+            >
+              <span class="font-semibold">{{ pv.rawAction || pv.opType }}</span>
+              <span> → </span>
+              <span class="font-mono">{{ pv.mapping?.formula?.length ? 'formula' : (pv.header || '—') }}</span>
+            </div>
+            <span class="text-[0.62rem] text-text-tertiary">Drop a column to align all selected types.</span>
           </div>
         </template>
         <template v-else>
