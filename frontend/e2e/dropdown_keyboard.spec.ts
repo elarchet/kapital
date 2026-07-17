@@ -49,6 +49,9 @@ test('verify custom dropdown keyboard navigation and filtering', async ({ page }
   const importHeader = page.locator('h3', { hasText: 'Import Transactions' });
   await expect(importHeader).toBeVisible();
 
+  // The upload joins the file selector's list ticked; continue to build the batch.
+  await page.getByTestId('continue-with-files').click();
+
   // --- Test Non-Searchable Dropdown (Delimiter) ---
   const delimiterDropdown = page.locator('.form-group', { hasText: 'Delimiter' }).locator('button');
   await expect(delimiterDropdown).toBeVisible();

@@ -52,6 +52,8 @@ const emit = defineEmits<{
   (e: 'update-group-count', payload: { key: string; kind: FeeGroupKind; count: number }): void;
   (e: 'touch-config'): void;
   (e: 'back'): void;
+  // Keeps the always-visible drawer header in sync with the variant(s) being mapped.
+  (e: 'selection-change', variants: MappingVariant[]): void;
 }>();
 
 // ---- Mapping variants (merged types: one per opType; split types: one per raw action) ----
@@ -95,6 +97,8 @@ const selectedVariants = computed<MappingVariant[]>(() =>
 const primaryKey = computed(() => selectedKeys.value[0] || '');
 const selectedVariant = computed(() => selectedVariants.value[0] || null);
 const selectedOpType = computed(() => selectedVariant.value?.opType || '');
+
+watch(selectedVariants, (variants) => emit('selection-change', variants), { immediate: true });
 
 const exampleOffsets = ref<Record<string, number>>({});
 const matchesFor = (variant: MappingVariant | null) => {

@@ -1,19 +1,15 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../../services/api';
-import { useNotifications } from '../../composables/useNotifications';
 import { useSchemaManagement } from './useSchemaManagement';
 import { useWizardMapping } from './useWizardMapping';
 import { useImportExecutor } from './useImportExecutor';
 import { useImportPreview } from './useImportPreview';
 import { useImportWizardComputeds } from './useImportWizardComputeds';
+import { useImportFileLoading } from './useImportFileLoading';
 import {
   buildCustomMappingPayload as buildCustomMappingPayloadHelper,
   parseSchemaMappings,
-  parseCsvText,
-  mergeParsedCsvFiles,
-  readFileText,
-  DEFAULT_INSTITUTION_KEY,
-  type ParsedCsvFile
+  DEFAULT_INSTITUTION_KEY
 } from '../../services/import';
 import type { OpTypeSettings } from '../../services/import/types';
 
@@ -217,66 +213,21 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
     emit,
   });
 
-  const { notifyWarning } = useNotifications();
-
-  const processFiles = async (files: File[], opts: { alreadyStored?: boolean } = {}) => {
-    if (!files.length) return;
-    executor.importError.value = '';
-
-    let merged: { delimiter: string; headers: string[]; rawRows: string[][]; rowSources: string[] };
-    try {
-      const parsedFiles: ParsedCsvFile[] = [];
-      for (const file of files) {
-        const text = await readFileText(file);
-        parsedFiles.push({ name: file.name, ...parseCsvText(text) });
-      }
-      merged = mergeParsedCsvFiles(parsedFiles);
-    } catch (err: any) {
-      // Mismatched files would silently misalign rows — refuse the whole batch.
-      importFiles.value = [];
-      executor.importError.value = err.message || 'Failed to read the selected files.';
-      return;
-    }
-
-    importFiles.value = files;
-
-    // Persist the loaded files right away (deduplicated server-side), so they
-    // are kept for later re-import even if this import never completes — e.g.
-    // when the mapping template is still incomplete. Non-fatal on failure.
-    if (!opts.alreadyStored) {
-      api.storeImportedFiles(files).catch((err: any) => {
-        console.warn('Failed to store loaded files:', err);
-        notifyWarning('Files not stored for later re-import', {
-          message: err.message || 'The loaded files could not be saved to storage. Importing them still works.',
-        });
-      });
-    }
-
-    if (merged.headers.length > 0) {
-      importDelimiter.value = merged.delimiter;
-      importFileHeaders.value = merged.headers;
-      handleColumnChange();
-      allRawRows.value = merged.rawRows;
-      rawRowSources.value = merged.rowSources;
-      currentStep.value = 1;
-
-      try {
-        const detectRes = await api.detectImportFileSchema(merged.headers);
-        if (detectRes.schema_id) {
-          schemaMgmt.autodetectedSchemaId.value = detectRes.schema_id;
-          schemaMgmt.selectedSchemaId.value = detectRes.schema_id;
-          isCustomMapping.value = false;
-        } else {
-          schemaMgmt.autodetectedSchemaId.value = null;
-          schemaMgmt.selectedSchemaId.value = null;
-          isCustomMapping.value = true;
-        }
-      } catch (err: any) {
-        console.error('Failed to autodetect schema:', err);
-        isCustomMapping.value = true;
-      }
-    }
-  };
+  const { processFiles } = useImportFileLoading({
+    importFiles,
+    importFileHeaders,
+    allRawRows,
+    rawRowSources,
+    uiColumns,
+    columnConfigMap,
+    importDelimiter,
+    currentStep,
+    isCustomMapping,
+    importError: executor.importError,
+    autodetectedSchemaId: schemaMgmt.autodetectedSchemaId,
+    selectedSchemaId: schemaMgmt.selectedSchemaId,
+    initializeConfigs: handleColumnChange,
+  });
 
   // Watchers & Life Cycle
   const requestClose = () => {

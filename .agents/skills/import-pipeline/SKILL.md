@@ -62,6 +62,13 @@ required/relevant maps in the frontend; it reads them from `/portfolios/import-m
   mapped ticker as a row parse failure, so defaults must agree.
 - On import success the modal stays open showing `ImportSuccessSummary`; the parent view
   must only refresh data on `@success` and close on `@close` (Done button).
+- File selection is a tick-based staging list (`ImportFileSelector`): uploads are stored
+  server-side immediately and join the list ticked (flagged "New"); "Continue with N
+  files" materializes the ticked set into the batch (`useImportFileLoading.processFiles`).
+  Growing a loaded batch appends — merged headers come back as a prefix, so existing
+  `col-<idx>` mappings survive; shrinking/replacing rebuilds from scratch. List order =
+  batch order: it decides which file anchors the merge and which file gets credited with
+  cross-file duplicate rows (`transaction_count` attribution).
 
 ## 5. Gotchas that already bit us
 
