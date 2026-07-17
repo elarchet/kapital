@@ -6,6 +6,7 @@ import DefaultBaseConfirmModal from './defaults/DefaultBaseConfirmModal.vue';
 import DefaultAddPositionButton from './defaults/DefaultAddPositionButton.vue';
 import DefaultCreatePositionModal from './defaults/DefaultCreatePositionModal.vue';
 import DefaultRightPanelDrawer from './defaults/DefaultRightPanelDrawer.vue';
+import DefaultNotificationToasts from './defaults/DefaultNotificationToasts.vue';
 
 const props = defineProps<{
   componentKey: string;
@@ -18,6 +19,7 @@ const componentMap: Record<string, any> = {
   'add-position-button': DefaultAddPositionButton,
   'create-position-modal': DefaultCreatePositionModal,
   'right-panel-drawer': DefaultRightPanelDrawer,
+  'notification-toasts': DefaultNotificationToasts,
 };
 
 const component = computed(() => componentMap[props.componentKey]);

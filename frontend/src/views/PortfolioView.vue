@@ -16,7 +16,6 @@ const store = useKapitalStore();
 
 const showCreatePosModal = ref(false);
 const showImportModal = ref(false);
-const fileInput = ref<HTMLInputElement | null>(null);
 const initialImportFiles = ref<File[] | null>(null);
 
 // Rename title states
@@ -24,19 +23,11 @@ const isEditingTitle = ref(false);
 const editingTitleName = ref('');
 const titleInput = ref<HTMLInputElement | null>(null);
 
+// Opens the import wizard on its empty state: the user picks new files there
+// or re-imports a previously stored one.
 const triggerImportFile = () => {
-  if (fileInput.value) {
-    fileInput.value.value = '';
-    fileInput.value.click();
-  }
-};
-
-const onFileSelected = (e: Event) => {
-  const target = e.target as HTMLInputElement;
-  if (target.files && target.files.length > 0) {
-    initialImportFiles.value = Array.from(target.files);
-    showImportModal.value = true;
-  }
+  initialImportFiles.value = null;
+  showImportModal.value = true;
 };
 
 const portfolioId = computed(() => {
@@ -327,16 +318,6 @@ const saveRenameTitle = async () => {
           :portfolio="portfolio" 
           @close="showCreatePosModal = false" 
           @success="handleManualSuccess" 
-        />
-
-        <!-- Hidden file input for direct upload -->
-        <input
-          type="file"
-          ref="fileInput"
-          accept=".csv"
-          multiple
-          style="display: none;"
-          @change="onFileSelected"
         />
 
         <!-- Import Positions Modal. Stays open on success so the summary screen

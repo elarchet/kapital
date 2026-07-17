@@ -35,7 +35,10 @@ test('verify custom dropdown keyboard navigation and filtering', async ({ page }
   // Verify portfolio page loaded
   await expect(page.locator('.page-header h1')).toContainText(portfolioName);
 
-  // 3. Trigger Import modal by setting files on the hidden input
+  // 3. Open the import wizard and upload through its empty-state file input
+  await page.click('#btn-add-position-component');
+  await page.click('button:has-text("Import File")');
+  await expect(page.getByTestId('import-file-dropzone')).toBeVisible();
   await page.setInputFiles('input[type="file"]', {
     name: 'test.csv',
     mimeType: 'text/csv',
@@ -105,6 +108,17 @@ test('verify custom dropdown keyboard navigation and filtering', async ({ page }
   await confirmDiscardBtn.click();
 
   await expect(importHeader).not.toBeVisible();
+
+  // Loading the file stored it server-side; remove it so the persistent dev
+  // DB doesn't accumulate this spec's scratch file.
+  const token = await page.evaluate(() => localStorage.getItem('kapital_token'));
+  const auth = { Authorization: `Bearer ${token}` };
+  const storedFiles = await (await page.request.get('/api/v1/imported-files/', { headers: auth })).json();
+  for (const f of storedFiles) {
+    if (f.filename === 'test.csv') {
+      await page.request.delete(`/api/v1/imported-files/${f.id}`, { headers: auth });
+    }
+  }
 
   // 4. Delete Portfolio Strategy (Clean up)
   const deletePortfolioBtn = page.locator('button[title="Delete Portfolio"]');

@@ -14,6 +14,8 @@ from src.models.user import User
 from src.schemas.portfolio import PortfolioCreate, PortfolioRead, PortfolioUpdate
 from src.services.import_metadata import IMPORT_METADATA
 from src.services.import_service import ImportSummary
+from src.services.import_storage import UploadedFileInfo, persist_import_files
+from src.services.storage import StorageBackend, get_storage
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
 
@@ -254,6 +256,7 @@ async def import_portfolio_positions(
     portfolio_id: Annotated[int, Path(description="ID of the portfolio to import positions to")],
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_session)],
+    storage: Annotated[StorageBackend, Depends(get_storage)],
     file: Annotated[
         list[UploadFile],
         File(description="CSV file(s) containing operations data; several files are merged into one batch"),
@@ -288,6 +291,24 @@ async def import_portfolio_positions(
     # Read every uploaded file; they import as one deduplicated batch.
     contents = [await f.read() for f in file]
 
+    # Persist each file to object storage (deduplicated per user by content
+    # hash) so imports are auditable and re-importable. Non-fatal on storage
+    # outage: slots come back as None and those transactions stay unlinked.
+    stored_files = persist_import_files(
+        db,
+        storage,
+        user_id=current_user.id,
+        files=[
+            UploadedFileInfo(
+                filename=f.filename or "import.csv",
+                content=content,
+                content_type=f.content_type,
+            )
+            for f, content in zip(file, contents, strict=True)
+        ],
+    )
+    imported_file_ids = [record.id if record else None for record in stored_files]
+
     # Parse custom schema config JSON string if present
     custom_config = None
     if custom_schema_config:
@@ -307,6 +328,7 @@ async def import_portfolio_positions(
             file_content=contents,
             schema_id=schema_id,
             custom_schema_config=custom_config,
+            imported_file_ids=imported_file_ids,
         )
     except Exception as e:
         raise HTTPException(

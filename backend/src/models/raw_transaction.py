@@ -96,6 +96,12 @@ class RawTransaction(TimestampMixin, SoftDeleteMixin, SQLModel, table=True):
         nullable=False,
         index=True,
     )
+    # Source file provenance; NULL for rows imported before files were stored.
+    imported_file_id: int | None = Field(
+        default=None,
+        foreign_key="imported_file.id",
+        index=True,
+    )
 
     # -- relationships ---------------------------------------------------------
     financial_account: "FinancialAccount" = Relationship(back_populates="raw_transactions")

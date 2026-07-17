@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue';
 import { api } from '../../services/api';
+import { useNotifications } from '../../composables/useNotifications';
 
 export interface UseImportExecutorOptions {
   portfolio: { id: number; name: string };
@@ -23,15 +24,35 @@ export interface UseImportExecutorOptions {
 export function useImportExecutor(options: UseImportExecutorOptions) {
   const isImporting = ref(false);
   const importError = ref('');
-  const importSuccessSummary = ref<any>(null);
   const showOverwriteConfirm = ref(false);
   const hasConfirmedOverwrite = ref(false);
+  const { notifySuccess, notifyInfo } = useNotifications();
+
+  // Success feedback is a toast (the wizard closes right away), not a panel.
+  const reportImportResult = (res: any) => {
+    const imported = res.raw_transactions_imported ?? 0;
+    const details: string[] = [];
+    if (res.positions_created) {
+      details.push(`${res.positions_created} position${res.positions_created === 1 ? '' : 's'} created`);
+    }
+    if (res.skipped_duplicates) {
+      details.push(`${res.skipped_duplicates} duplicate${res.skipped_duplicates === 1 ? '' : 's'} skipped`);
+    }
+    if (res.skipped_invalid) {
+      details.push(`${res.skipped_invalid} invalid row${res.skipped_invalid === 1 ? '' : 's'} skipped`);
+    }
+    const message = details.join(' · ') || undefined;
+    if (imported > 0) {
+      notifySuccess(`${imported} transaction${imported === 1 ? '' : 's'} imported`, { message });
+    } else {
+      notifyInfo('No new transactions imported', { message });
+    }
+  };
 
   const handleImport = async () => {
     if (!options.importFiles.value.length || !options.portfolio.id) return;
     isImporting.value = true;
     importError.value = '';
-    importSuccessSummary.value = null;
 
     try {
       let finalSchemaId = options.selectedSchemaId.value;
@@ -81,16 +102,12 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
               await api.createImportFileSchema(templateData);
             }
 
-            importSuccessSummary.value = {
-              positions_created: 0,
-              raw_transactions_imported: 0,
-              allocations_created: 0,
-              skipped_duplicates: 0,
-              skipped_invalid: 0,
-              is_template_only: true,
-            };
+            notifySuccess('Template saved', {
+              message: `The configuration template "${options.mappingTemplateName.value.trim()}" has been saved.`,
+            });
             await options.loadSchemas();
             options.emit('success');
+            options.emit('close');
             return;
           } else {
             throw new Error('Please fix the validation errors before importing.');
@@ -124,6 +141,9 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
           }
           await options.loadSchemas();
           finalSchemaId = savedSchema.id;
+          notifySuccess('Template saved', {
+            message: `The configuration template "${options.mappingTemplateName.value.trim()}" has been saved.`,
+          });
         } else {
           const res = await api.importPositions(
             options.portfolio.id,
@@ -136,16 +156,18 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
               institution_key: options.institutionKey.value,
             }
           );
-          importSuccessSummary.value = res;
+          reportImportResult(res);
           options.emit('success');
+          options.emit('close');
           return;
         }
       }
 
       if (finalSchemaId) {
         const res = await api.importPositions(options.portfolio.id, options.importFiles.value, finalSchemaId, null);
-        importSuccessSummary.value = res;
+        reportImportResult(res);
         options.emit('success');
+        options.emit('close');
       }
     } catch (err: any) {
       importError.value = err.message || 'Import failed.';
@@ -167,7 +189,6 @@ export function useImportExecutor(options: UseImportExecutorOptions) {
   return {
     isImporting,
     importError,
-    importSuccessSummary,
     showOverwriteConfirm,
     hasConfirmedOverwrite,
     handleImport,

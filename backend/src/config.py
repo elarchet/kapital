@@ -24,5 +24,15 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "static/uploads"
     ASSETS_BASE_URL: str = "http://localhost:8000/static/uploads"
 
+    # Imported-file object storage ("local" filesystem or any "s3"-compatible
+    # provider — Oracle Object Storage, AWS S3, MinIO, R2 — chosen by config).
+    STORAGE_BACKEND: str = "local"
+    IMPORT_STORAGE_DIR: str = "static/import_files"
+    S3_ENDPOINT_URL: str | None = None
+    S3_REGION: str | None = None
+    S3_BUCKET: str | None = None
+    S3_ACCESS_KEY_ID: str | None = None
+    S3_SECRET_ACCESS_KEY: str | None = None
+
 
 settings = Settings()

@@ -131,6 +131,7 @@ def build_raw_transaction(
     native_transaction_id: str | None,
     financial_account_id: int,
     raw_payload: Mapping[str, Any] | None = None,
+    imported_file_id: int | None = None,
 ) -> RawTransaction:
     """Construct a RawTransaction from a parsed canonical row."""
     total_amount = op_info.get("total_amount")
@@ -142,6 +143,7 @@ def build_raw_transaction(
         financial_account_id=financial_account_id,
         total_amount=total_amount if total_amount is not None else Decimal(0),
         raw_payload=json.dumps(raw_payload, default=str) if raw_payload else None,
+        imported_file_id=imported_file_id,
     )
 
     for key in _SCALAR_FIELDS:

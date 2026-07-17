@@ -1,5 +1,6 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { api } from '../../services/api';
+import { useNotifications } from '../../composables/useNotifications';
 import { useSchemaManagement } from './useSchemaManagement';
 import { useWizardMapping } from './useWizardMapping';
 import { useImportExecutor } from './useImportExecutor';
@@ -216,10 +217,11 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
     emit,
   });
 
-  const processFiles = async (files: File[]) => {
+  const { notifyWarning } = useNotifications();
+
+  const processFiles = async (files: File[], opts: { alreadyStored?: boolean } = {}) => {
     if (!files.length) return;
     executor.importError.value = '';
-    executor.importSuccessSummary.value = null;
 
     let merged: { delimiter: string; headers: string[]; rawRows: string[][]; rowSources: string[] };
     try {
@@ -237,6 +239,19 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
     }
 
     importFiles.value = files;
+
+    // Persist the loaded files right away (deduplicated server-side), so they
+    // are kept for later re-import even if this import never completes — e.g.
+    // when the mapping template is still incomplete. Non-fatal on failure.
+    if (!opts.alreadyStored) {
+      api.storeImportedFiles(files).catch((err: any) => {
+        console.warn('Failed to store loaded files:', err);
+        notifyWarning('Files not stored for later re-import', {
+          message: err.message || 'The loaded files could not be saved to storage. Importing them still works.',
+        });
+      });
+    }
+
     if (merged.headers.length > 0) {
       importDelimiter.value = merged.delimiter;
       importFileHeaders.value = merged.headers;
@@ -265,7 +280,7 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
 
   // Watchers & Life Cycle
   const requestClose = () => {
-    if (isDirty.value && !executor.importSuccessSummary.value) {
+    if (isDirty.value) {
       showExitConfirm.value = true;
     } else {
       emit('close');
@@ -352,7 +367,6 @@ export function useImportWizard(props: { portfolio: Portfolio; initialFiles?: Fi
     isCustomMapping,
     isImporting: executor.isImporting,
     importError: executor.importError,
-    importSuccessSummary: executor.importSuccessSummary,
     mappingTemplateName,
     saveMappingTemplate,
     importDelimiter,

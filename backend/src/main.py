@@ -16,6 +16,7 @@ from src.routers import (
     financial_account,
     financial_info,
     import_file_schema,
+    imported_file,
     institution,
     portfolio,
     position,
@@ -58,6 +59,7 @@ app.include_router(institution.router, prefix="/api/v1")
 app.include_router(financial_account.router, prefix="/api/v1")
 app.include_router(transaction.router, prefix="/api/v1")
 app.include_router(import_file_schema.router, prefix="/api/v1")
+app.include_router(imported_file.router, prefix="/api/v1")
 app.include_router(financial_info.router, prefix="/api/v1")
 
 # Mount Static Files for component uploads

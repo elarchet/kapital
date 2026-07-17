@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue';
-import { Layers, Loader, Trash2, Pencil } from '@lucide/vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { Layers, Loader, Trash2, Pencil, Upload } from '@lucide/vue';
+import { api, type ImportedFileInfo } from '../../services/api';
 
 // Composables & services
 import { useImportWizard } from './useImportWizard';
@@ -14,7 +15,7 @@ import OverwriteTemplateConfirmModal from './modals/OverwriteTemplateConfirmModa
 import DeleteTemplateConfirmModal from './modals/DeleteTemplateConfirmModal.vue';
 import DiscardChangesConfirmModal from './modals/DiscardChangesConfirmModal.vue';
 
-import ImportSuccessSummary from './ImportSuccessSummary.vue';
+import PreviousImportsList from './PreviousImportsList.vue';
 
 import DynamicComponent from '../DynamicComponent.vue';
 
@@ -40,7 +41,6 @@ const {
   isCustomMapping,
   isImporting,
   importError,
-  importSuccessSummary,
   mappingTemplateName,
   saveMappingTemplate,
   importDelimiter,
@@ -82,7 +82,35 @@ const {
   updateOpTypeSettings,
   updateFeeTaxGroupCount,
   feeTaxGroupCounts,
+  processFiles,
 } = useImportWizard(props, emit);
+
+// Empty-state file selection (when the modal opens without preselected files).
+const emptyStateFileInput = ref<HTMLInputElement | null>(null);
+const previousImportsList = ref<InstanceType<typeof PreviousImportsList> | null>(null);
+
+const onEmptyStateFilesSelected = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    processFiles(Array.from(target.files));
+  }
+};
+
+// Re-import a stored file: fetch its original bytes and feed them through the
+// same wizard flow as a fresh upload (row dedup makes this idempotent).
+const loadStoredFile = async (stored: ImportedFileInfo) => {
+  importError.value = '';
+  try {
+    const blob = await api.downloadImportedFile(stored.id);
+    const file = new File([blob], stored.filename, { type: stored.content_type || 'text/csv' });
+    // Already persisted server-side — no need to round-trip it back to storage.
+    await processFiles([file], { alreadyStored: true });
+  } catch (err: any) {
+    importError.value = err.message || 'Failed to load the stored file.';
+  } finally {
+    previousImportsList.value?.clearDownloading();
+  }
+};
 
 const isSchemaIncomplete = (schema: any) => {
   return schema ? !!schema.is_incomplete : false;
@@ -201,14 +229,7 @@ onUnmounted(() => {
           {{ importError }}
         </div>
 
-        <!-- Success State -->
-        <ImportSuccessSummary
-          v-if="importSuccessSummary"
-          :importSuccessSummary="importSuccessSummary"
-          :mappingTemplateName="mappingTemplateName"
-        />
-
-        <template v-else-if="importFiles.length">
+        <template v-if="importFiles.length">
           <div v-if="!isCustomMapping || currentStep === 1" class="flex justify-between items-center gap-3 bg-bg-tertiary py-2 px-3 rounded-sm border border-border-color mb-3">
             <div class="flex items-center gap-x-2 gap-y-0.5 min-w-0 flex-wrap">
               <Layers class="w-4 h-4 text-accent shrink-0" />
@@ -324,12 +345,37 @@ onUnmounted(() => {
             />
           </div>
         </template>
+
+        <!-- Empty state: pick new files or re-import a stored one -->
+        <template v-else>
+          <div class="flex flex-col gap-4">
+            <div
+              class="flex flex-col items-center gap-2 border border-dashed border-border-color rounded-sm py-8 px-4 cursor-pointer hover:bg-bg-tertiary"
+              data-testid="import-file-dropzone"
+              @click="emptyStateFileInput?.click()"
+            >
+              <Upload class="w-6 h-6 text-accent" />
+              <span class="text-sm font-semibold">Choose CSV file(s) to import</span>
+              <span class="text-xs text-text-secondary">Several files are imported as one batch and deduplicated</span>
+              <input
+                type="file"
+                ref="emptyStateFileInput"
+                accept=".csv"
+                multiple
+                style="display: none;"
+                @change="onEmptyStateFilesSelected"
+              />
+            </div>
+
+            <PreviousImportsList ref="previousImportsList" @select="loadStoredFile" />
+          </div>
+        </template>
     </template>
 
     <template #footer>
         <button @click="requestClose" class="btn btn-sm">Cancel</button>
-        <button 
-          v-if="!importSuccessSummary && isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
+        <button
+          v-if="isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
           @click="handleImport"
           class="btn btn-sm btn-primary !bg-warning-color !border-warning-color !text-white"
           :disabled="isImporting || !mappingTemplateName.trim()"
@@ -338,23 +384,16 @@ onUnmounted(() => {
           <span v-if="isImporting">Saving template...</span>
           <span v-else>Save Incomplete Template</span>
         </button>
-        <button 
-          v-else-if="!importSuccessSummary"
-          @click="handleImport" 
-          class="btn btn-sm btn-primary" 
+        <button
+          v-else
+          @click="handleImport"
+          class="btn btn-sm btn-primary"
           :disabled="isImporting || !importFiles.length || (isCustomMapping && !isValidCustomMapping) || (isCustomMapping && saveMappingTemplate && !mappingTemplateName.trim())"
         >
           <Loader v-if="isImporting" class="w-3.5 h-3.5 animate-spin" />
           <span v-if="isImporting">Importing data...</span>
           <span v-else-if="isCustomMapping && saveMappingTemplate">Save Template & Import</span>
           <span v-else>Import Transactions</span>
-        </button>
-        <button 
-          v-else
-          @click="requestClose" 
-          class="btn btn-sm btn-primary"
-        >
-          Done
         </button>
     </template>
   </DynamicComponent>

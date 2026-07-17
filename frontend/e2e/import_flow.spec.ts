@@ -22,6 +22,23 @@ const csvContent2 = [
   `DIVIDEND,T-${runId}-4,2026-04-10 09:00:00,NVDA,NVIDIA Corp,,,15.00,USD,April payout`,
 ].join('\n');
 
+// A third file that is loaded into the wizard but deliberately never imported:
+// it must still end up stored, flagged as "Not imported".
+const csvContent3 = [
+  'ID,Action,Time,Ticker,Name,Quantity,Price,Total,Currency',
+  `T-${runId}-9,BUY,2026-05-05 11:00:00,NVDA,NVIDIA Corp,1,100.00,100.00,USD`,
+].join('\n');
+
+// Success feedback is a toast (top-right stack); dismiss after asserting so
+// later steps never match a stale toast.
+async function expectToastAndDismiss(page: Page, type: string, title: string, detail?: string) {
+  const toast = page.locator(`[data-testid="notification-toast"][data-type="${type}"]`, { hasText: title });
+  await expect(toast).toBeVisible({ timeout: 15000 });
+  if (detail) await expect(toast).toContainText(detail);
+  await toast.locator('button[title="Dismiss"]').click();
+  await expect(toast).not.toBeVisible();
+}
+
 // Custom dropdowns teleport their option panel to the body: open the trigger,
 // then click the first option whose text matches.
 async function pickOption(page: Page, trigger: Locator, optionLabel: string) {
@@ -29,6 +46,14 @@ async function pickOption(page: Page, trigger: Locator, optionLabel: string) {
   const option = page.locator('div[data-option-index]', { hasText: optionLabel }).first();
   await expect(option).toBeVisible();
   await option.click();
+}
+
+// The wizard opens on an empty state (file dropzone + previously imported
+// files); its hidden file input is the upload entry point.
+async function openImportWizard(page: Page) {
+  await page.click('#btn-add-position-component');
+  await page.click('button:has-text("Import File")');
+  await expect(page.getByTestId('import-file-dropzone')).toBeVisible();
 }
 
 test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, template round-trip', async ({ page }) => {
@@ -72,13 +97,14 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await renameInput.press('Enter');
   await expect(page.locator('.page-header h1')).toContainText(portfolioName);
 
-  // ---- 3. Upload two CSVs at once through the hidden file input ----
+  // ---- 3. Upload two CSVs at once through the wizard's empty state ----
+  await openImportWizard(page);
+  const importHeader = page.locator('h3', { hasText: 'Import Transactions' });
+  await expect(importHeader).toBeVisible();
   await page.setInputFiles('input[type="file"]', [
     { name: 'e2e_broker_export.csv', mimeType: 'text/csv', buffer: Buffer.from(csvContent) },
     { name: 'e2e_broker_export_2.csv', mimeType: 'text/csv', buffer: Buffer.from(csvContent2) },
   ]);
-  const importHeader = page.locator('h3', { hasText: 'Import Transactions' });
-  await expect(importHeader).toBeVisible();
   await expect(page.getByText('2 files imported as one batch')).toBeVisible();
 
   // Force a fresh custom mapping even if an earlier run left a matching template.
@@ -294,31 +320,47 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await page.fill('input[placeholder="e.g. My Custom Broker CSV"]', templateName);
   await page.click('button:has-text("Save Template & Import")');
 
-  await expect(page.getByText('successfully parsed and processed')).toBeVisible({ timeout: 15000 });
-  // The stat value renders in the label's sibling div. 5 rows across both
-  // files, minus the cross-file duplicate BUY caught by dedup.
-  const importedStat = page
-    .getByText('Transactions Imported', { exact: true })
-    .locator('xpath=following-sibling::div');
-  await expect(importedStat).toHaveText('4');
-  const skippedStat = page
-    .getByText('Skipped', { exact: true })
-    .locator('xpath=following-sibling::div');
-  await expect(skippedStat).toHaveText('1');
-  await page.click('button:has-text("Done")');
+  // Both actions confirm via toasts and the wizard closes on its own. 5 rows
+  // across both files, minus the cross-file duplicate BUY caught by dedup.
+  await expectToastAndDismiss(page, 'success', 'Template saved', templateName);
+  await expectToastAndDismiss(page, 'success', '4 transactions imported', '1 duplicate skipped');
   await expect(importHeader).not.toBeVisible();
 
   // The imported buy/sell trades materialized an NVDA position (10 bought − 5 sold).
   const nvdaRow = page.locator('.premium-table tbody tr', { hasText: 'NVDA' });
   await expect(nvdaRow).toBeVisible();
 
-  // ---- 11. Template round-trip: re-upload autodetects the saved template ----
+  // ---- 11. Stored-file round-trip: both files are listed and re-importable ----
+  // Every uploaded file was persisted server-side; the wizard's empty state
+  // lists them (most recently used first, so this run's files lead even on a
+  // persistent dev DB carrying files from earlier runs).
+  await openImportWizard(page);
+  const previousImports = page.getByTestId('previous-imports-list');
+  await expect(previousImports).toBeVisible();
+  const storedRows = previousImports.locator('[data-testid^="previous-import-row-"]');
+  await expect(storedRows.first()).toContainText(/e2e_broker_export(_2)?\.csv/);
+  await expect(storedRows.nth(1)).toContainText(/e2e_broker_export(_2)?\.csv/);
+  // File 1 produced 3 transactions (its BUY duplicated in file 2 counts on
+  // whichever file imported first — file 1) and is flagged as imported.
+  const file1Row = storedRows.filter({ hasText: 'e2e_broker_export.csv' }).first();
+  await expect(file1Row).toContainText('3 transactions');
+  await expect(file1Row).toContainText('Imported');
+
+  // Re-importing a stored file feeds it back through the wizard; row-level
+  // dedup then skips everything, importing nothing twice.
+  await file1Row.locator('button:has-text("Re-import")').click();
+  await expect(page.getByText('✓ Autodetected format matching this file')).toBeVisible();
+  await page.click('button:has-text("Import Transactions")');
+  await expectToastAndDismiss(page, 'info', 'No new transactions imported', '3 duplicates skipped');
+  await expect(importHeader).not.toBeVisible();
+
+  // ---- 12. Template round-trip: re-upload autodetects the saved template ----
+  await openImportWizard(page);
   await page.setInputFiles('input[type="file"]', {
     name: 'e2e_broker_export.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(csvContent),
   });
-  await expect(importHeader).toBeVisible();
   await expect(page.getByText('✓ Autodetected format matching this file')).toBeVisible();
   await expect(templateDropdown).toContainText(templateName);
 
@@ -334,7 +376,48 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await discardBtn.click();
   await expect(importHeader).not.toBeVisible();
 
-  // ---- 12. Delete the scratch portfolio ----
+  // ---- 13. Files persist the moment they are loaded, even if never imported ----
+  await openImportWizard(page);
+  await page.setInputFiles('input[type="file"]', {
+    name: 'e2e_loaded_only.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csvContent3),
+  });
+  await expect(page.getByText('e2e_loaded_only.csv')).toBeVisible();
+  // Abandon the wizard without importing anything.
+  await page.click('button:has-text("Cancel")');
+  await expect(discardBtn).toBeVisible();
+  await discardBtn.click();
+  await expect(importHeader).not.toBeVisible();
+
+  // The abandoned file was still stored, flagged as never imported.
+  await openImportWizard(page);
+  const loadedRow = storedRows.filter({ hasText: 'e2e_loaded_only.csv' }).first();
+  await expect(loadedRow).toContainText('Not imported');
+  await expect(loadedRow).toContainText('transactions not imported yet');
+  await expect(loadedRow.locator('button', { hasText: 'Import' })).toBeVisible();
+  await page.click('button:has-text("Cancel")'); // empty state isn't dirty: closes directly
+  await expect(importHeader).not.toBeVisible();
+
+  // ---- 14. Delete the stored copies (file-only delete; transactions stay) ----
+  // Also keeps the persistent dev DB from accumulating this run's files.
+  await openImportWizard(page);
+  await expect(previousImports).toBeVisible();
+  for (const name of ['e2e_broker_export.csv', 'e2e_broker_export_2.csv', 'e2e_loaded_only.csv']) {
+    const rows = storedRows.filter({ hasText: name });
+    const before = await rows.count();
+    await rows.first().locator('button[title="Delete stored file"]').click();
+    const deleteFileModal = page.locator('.fixed.inset-0', { hasText: 'Delete Stored File?' }).last();
+    await expect(deleteFileModal).toContainText('Transactions already imported from it are kept');
+    await deleteFileModal.locator('button:has-text("Delete File")').click();
+    await expect(rows).toHaveCount(before - 1);
+  }
+  await page.click('button:has-text("Cancel")'); // empty state isn't dirty: closes directly
+  await expect(importHeader).not.toBeVisible();
+  // The transactions imported from the deleted files are untouched.
+  await expect(nvdaRow).toBeVisible();
+
+  // ---- 15. Delete the scratch portfolio ----
   await page.locator('button[title="Delete Portfolio"]').click();
   const deletePortfolioModal = page.locator('.fixed.inset-0', { hasText: 'Delete Strategy?' });
   await deletePortfolioModal.locator('button:has-text("Delete Strategy")').click();
