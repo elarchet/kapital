@@ -11,6 +11,7 @@ from sqlmodel import Session, SQLModel
 from src.database import get_session
 from src.main import app
 from src.models import SABase
+from src.services.storage import LocalStorageBackend, get_storage
 from tests.factories import set_factory_session
 
 
@@ -65,14 +66,21 @@ def fixture_session(engine):
         set_factory_session(None)
 
 
+@pytest.fixture(name="storage")
+def fixture_storage(tmp_path):
+    """Isolated filesystem object store for a single test."""
+    return LocalStorageBackend(tmp_path / "object_store")
+
+
 @pytest.fixture(name="client")
-def fixture_client(session):
-    """Yield a TestClient with database session overridden."""
+def fixture_client(session, storage):
+    """Yield a TestClient with database session and object storage overridden."""
 
     def override_get_session():
         yield session
 
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_storage] = lambda: storage
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

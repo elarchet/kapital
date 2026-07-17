@@ -12,6 +12,7 @@ from src.models.base import SABase, SoftDeleteMixin, TimestampMixin
 from src.models.fee import Fee, FeeType
 from src.models.financial_account import FinancialAccount
 from src.models.import_file_schema import ImportFileSchema
+from src.models.imported_file import ImportedFile
 from src.models.institution import Institution
 from src.models.operation_enums import (
     ExpenseCategory,
@@ -36,6 +37,7 @@ __all__ = [
     "FeeType",
     "FinancialAccount",
     "ImportFileSchema",
+    "ImportedFile",
     "Institution",
     "InterestType",
     "OrderStatus",

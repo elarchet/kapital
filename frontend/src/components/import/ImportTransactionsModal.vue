@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue';
-import { Layers, Loader, Trash2, Pencil } from '@lucide/vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { Layers, Loader, Trash2, Pencil, Upload } from '@lucide/vue';
+import { api, type ImportedFileInfo } from '../../services/api';
 
 // Composables & services
 import { useImportWizard } from './useImportWizard';
@@ -15,6 +16,7 @@ import DeleteTemplateConfirmModal from './modals/DeleteTemplateConfirmModal.vue'
 import DiscardChangesConfirmModal from './modals/DiscardChangesConfirmModal.vue';
 
 import ImportSuccessSummary from './ImportSuccessSummary.vue';
+import PreviousImportsList from './PreviousImportsList.vue';
 
 import DynamicComponent from '../DynamicComponent.vue';
 
@@ -82,7 +84,34 @@ const {
   updateOpTypeSettings,
   updateFeeTaxGroupCount,
   feeTaxGroupCounts,
+  processFiles,
 } = useImportWizard(props, emit);
+
+// Empty-state file selection (when the modal opens without preselected files).
+const emptyStateFileInput = ref<HTMLInputElement | null>(null);
+const previousImportsList = ref<InstanceType<typeof PreviousImportsList> | null>(null);
+
+const onEmptyStateFilesSelected = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files.length > 0) {
+    processFiles(Array.from(target.files));
+  }
+};
+
+// Re-import a stored file: fetch its original bytes and feed them through the
+// same wizard flow as a fresh upload (row dedup makes this idempotent).
+const loadStoredFile = async (stored: ImportedFileInfo) => {
+  importError.value = '';
+  try {
+    const blob = await api.downloadImportedFile(stored.id);
+    const file = new File([blob], stored.filename, { type: stored.content_type || 'text/csv' });
+    await processFiles([file]);
+  } catch (err: any) {
+    importError.value = err.message || 'Failed to load the stored file.';
+  } finally {
+    previousImportsList.value?.clearDownloading();
+  }
+};
 
 const isSchemaIncomplete = (schema: any) => {
   return schema ? !!schema.is_incomplete : false;
@@ -322,6 +351,31 @@ onUnmounted(() => {
               v-if="!isCustomMapping"
               :parsedPreviewRows="parsedPreviewRows"
             />
+          </div>
+        </template>
+
+        <!-- Empty state: pick new files or re-import a stored one -->
+        <template v-else>
+          <div class="flex flex-col gap-4">
+            <div
+              class="flex flex-col items-center gap-2 border border-dashed border-border-color rounded-sm py-8 px-4 cursor-pointer hover:bg-bg-tertiary"
+              data-testid="import-file-dropzone"
+              @click="emptyStateFileInput?.click()"
+            >
+              <Upload class="w-6 h-6 text-accent" />
+              <span class="text-sm font-semibold">Choose CSV file(s) to import</span>
+              <span class="text-xs text-text-secondary">Several files are imported as one batch and deduplicated</span>
+              <input
+                type="file"
+                ref="emptyStateFileInput"
+                accept=".csv"
+                multiple
+                style="display: none;"
+                @change="onEmptyStateFilesSelected"
+              />
+            </div>
+
+            <PreviousImportsList ref="previousImportsList" @select="loadStoredFile" />
           </div>
         </template>
     </template>

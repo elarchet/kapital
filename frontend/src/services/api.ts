@@ -24,6 +24,17 @@ export interface Institution {
   updated_at: string;
 }
 
+export interface ImportedFileInfo {
+  id: number;
+  filename: string;
+  size_bytes: number;
+  sha256: string;
+  content_type: string | null;
+  created_at: string;
+  last_imported_at: string;
+  transaction_count: number;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -333,6 +344,35 @@ export const api = {
     }
 
     return response.json();
+  },
+
+  // Imported files (stored copies of every file that went through the wizard)
+  async getImportedFiles(): Promise<ImportedFileInfo[]> {
+    return request<ImportedFileInfo[]>('/api/v1/imported-files/');
+  },
+
+  // Returns the originally uploaded bytes so a stored file can be fed back
+  // through the wizard. Raw fetch: the shared request() wrapper is JSON-only.
+  async downloadImportedFile(id: number): Promise<Blob> {
+    const response = await fetch(`/api/v1/imported-files/${id}/content`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      let errorMsg = 'Failed to download the stored file.';
+      try {
+        const errorData = await response.json();
+        if (errorData?.detail) errorMsg = errorData.detail;
+      } catch { }
+      throw new Error(errorMsg);
+    }
+    return response.blob();
+  },
+
+  // Deletes the stored copy only — the transactions it created are kept.
+  async deleteImportedFile(id: number): Promise<void> {
+    return request<void>(`/api/v1/imported-files/${id}`, {
+      method: 'DELETE',
+    });
   },
 
   // User Preferences

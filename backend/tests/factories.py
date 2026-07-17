@@ -11,6 +11,7 @@ from src.models import (
     AllocationMethod,
     AssetType,
     FinancialAccount,
+    ImportedFile,
     Institution,
     OrderStatus,
     OrderType,
@@ -61,6 +62,18 @@ class PortfolioFactory(BaseFactory):
 
     name = factory.Faker("catch_phrase")
     user = factory.SubFactory(UserFactory)
+
+
+class ImportedFileFactory(BaseFactory):
+    class Meta:
+        model = ImportedFile
+
+    user = factory.SubFactory(UserFactory)
+    sha256 = factory.Faker("sha256")
+    filename = factory.Faker("file_name", extension="csv")
+    size_bytes = 1024
+    content_type = "text/csv"
+    storage_key = factory.LazyAttribute(lambda o: f"imports/0/{o.sha256}")
 
 
 class InstitutionFactory(BaseFactory):

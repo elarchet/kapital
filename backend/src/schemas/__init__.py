@@ -19,6 +19,7 @@ from src.schemas.import_file_schema import (
     ImportFileSchemaRead,
     ImportFileSchemaUpdate,
 )
+from src.schemas.imported_file import ImportedFileRead
 from src.schemas.institution import (
     InstitutionCreate,
     InstitutionRead,
@@ -59,6 +60,7 @@ __all__ = [
     "ImportFileSchemaCreate",
     "ImportFileSchemaRead",
     "ImportFileSchemaUpdate",
+    "ImportedFileRead",
     "InstitutionCreate",
     "InstitutionRead",
     "InstitutionUpdate",

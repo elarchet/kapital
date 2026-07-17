@@ -158,6 +158,35 @@ def _parse_rows(decoded: str, delimiter: str, mappings: dict, decimal_separator:
     return parsed
 
 
+def _parse_files(contents: list[bytes], delimiter: str, mappings: dict, decimal_separator: str) -> list[dict]:
+    """Parse each file against its own header, tagging rows with their source file.
+
+    The ``_file_index`` tag preserves per-file provenance before the merge
+    dissolves file boundaries, so each RawTransaction can link back to the
+    stored file it came from.
+    """
+    parsed_operations: list[dict] = []
+    for file_index, content in enumerate(contents):
+        try:
+            decoded = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            # Some broker exports (e.g. Fortuneo) ship Latin-1 instead of UTF-8.
+            decoded = content.decode("latin-1")
+        file_ops = _parse_rows(decoded, delimiter, mappings, decimal_separator)
+        for op in file_ops:
+            op["_file_index"] = file_index
+        parsed_operations.extend(file_ops)
+    return parsed_operations
+
+
+def _resolve_imported_file_id(op_info: dict, imported_file_ids: list[int | None] | None) -> int | None:
+    """Map a row's source-file index back to its stored ImportedFile id."""
+    file_index = op_info.get("_file_index")
+    if imported_file_ids is None or file_index is None or file_index >= len(imported_file_ids):
+        return None
+    return imported_file_ids[file_index]
+
+
 def _apply_balances(op_info: dict, position: Position, cache: PositionCache, *, is_cash_op: bool) -> None:
     """Update running position (and cash) balances for a single transaction."""
     trade_side = op_info.get("trade_side")
@@ -190,12 +219,17 @@ async def import_portfolio_transactions(
     file_content: bytes | list[bytes],
     schema_id: int | None = None,
     custom_schema_config: dict | None = None,
+    imported_file_ids: list[int | None] | None = None,
 ) -> ImportSummary:
     """Parse one or several uploaded institution exports and ingest them into a portfolio.
 
     Several files form one batch: each is parsed against its own header row (so
     column order may differ between files), then the rows are merged before the
     sort and the dedup pass — which also drops rows duplicated across files.
+
+    ``imported_file_ids`` is parallel to the file contents: each entry is the
+    stored ``ImportedFile`` id (or None) recorded on the transactions that file
+    produces, for audit and future re-mapping.
     """
     mappings, delimiter, decimal_separator, institution_key = _resolve_schema_config(
         db,
@@ -212,14 +246,7 @@ async def import_portfolio_transactions(
     account = _resolve_account(db, mappings, institution_key)
 
     contents = file_content if isinstance(file_content, list) else [file_content]
-    parsed_operations: list[dict] = []
-    for content in contents:
-        try:
-            decoded = content.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            # Some broker exports (e.g. Fortuneo) ship Latin-1 instead of UTF-8.
-            decoded = content.decode("latin-1")
-        parsed_operations.extend(_parse_rows(decoded, delimiter, mappings, decimal_separator))
+    parsed_operations = _parse_files(contents, delimiter, mappings, decimal_separator)
     parsed_operations.sort(key=lambda o: o["executed_at"])
     processed_ops = combine_stock_splits(parsed_operations)
 
@@ -269,6 +296,7 @@ async def import_portfolio_transactions(
                 native_transaction_id=op_info.get("native_transaction_id"),
                 financial_account_id=account.id,
                 raw_payload=raw_row,
+                imported_file_id=_resolve_imported_file_id(op_info, imported_file_ids),
             )
             if op_info.get("fees"):
                 raw_txn.fees = [
