@@ -72,8 +72,8 @@ const formatDate = (iso: string) =>
   <div v-else-if="files.length" data-testid="previous-imports-list">
     <div class="flex items-center gap-2 mb-2">
       <FileClock class="w-4 h-4 text-accent" />
-      <span class="text-sm font-semibold">Previously imported files</span>
-      <span class="text-xs text-text-secondary">— re-import any of them; already imported rows are skipped automatically</span>
+      <span class="text-sm font-semibold">Previously loaded files</span>
+      <span class="text-xs text-text-secondary">— every loaded file is kept here, imported or not; already imported rows are skipped automatically</span>
     </div>
     <div class="border border-border-color rounded-sm divide-y divide-border-color max-h-72 overflow-y-auto">
       <div
@@ -83,10 +83,25 @@ const formatDate = (iso: string) =>
         :data-testid="`previous-import-row-${file.id}`"
       >
         <div class="min-w-0">
-          <div class="text-[0.9rem] font-semibold truncate">{{ file.filename }}</div>
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-[0.9rem] font-semibold truncate">{{ file.filename }}</span>
+            <span
+              v-if="file.last_imported_at"
+              class="text-[0.65rem] font-semibold uppercase px-1.5 py-0.5 rounded-sm bg-emerald-50 text-emerald-600 shrink-0"
+            >Imported</span>
+            <span
+              v-else
+              class="text-[0.65rem] font-semibold uppercase px-1.5 py-0.5 rounded-sm bg-amber-50 text-amber-600 shrink-0"
+            >Not imported</span>
+          </div>
           <div class="text-xs text-text-secondary">
-            {{ formatSize(file.size_bytes) }} · last imported {{ formatDate(file.last_imported_at) }}
-            · {{ file.transaction_count }} transaction{{ file.transaction_count === 1 ? '' : 's' }}
+            <template v-if="file.last_imported_at">
+              {{ formatSize(file.size_bytes) }} · last imported {{ formatDate(file.last_imported_at) }}
+              · {{ file.transaction_count }} transaction{{ file.transaction_count === 1 ? '' : 's' }}
+            </template>
+            <template v-else>
+              {{ formatSize(file.size_bytes) }} · loaded {{ formatDate(file.created_at) }} · transactions not imported yet
+            </template>
           </div>
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
@@ -97,7 +112,7 @@ const formatDate = (iso: string) =>
           >
             <Loader v-if="downloadingId === file.id" class="w-3.5 h-3.5 animate-spin" />
             <RotateCcw v-else class="w-3.5 h-3.5" />
-            <span>Re-import</span>
+            <span>{{ file.last_imported_at ? 'Re-import' : 'Import' }}</span>
           </button>
           <button
             class="bg-transparent border-none text-danger-color cursor-pointer p-1.5 rounded-sm hover:bg-bg-tertiary"

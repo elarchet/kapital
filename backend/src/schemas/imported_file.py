@@ -14,6 +14,7 @@ class ImportedFileRead(BaseModel):
     sha256: str
     content_type: str | None = None
     created_at: datetime
-    last_imported_at: datetime
+    # None while the file has only been loaded into the wizard, never imported.
+    last_imported_at: datetime | None = None
     # How many raw transactions this file produced (0 for template-only runs).
     transaction_count: int = 0

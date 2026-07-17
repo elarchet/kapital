@@ -101,6 +101,66 @@ def test_import_endpoint_stores_files_and_dedups_reupload(client, session, stora
     assert len(session.exec(select(ImportedFile)).all()) == 1
 
 
+def test_store_endpoint_persists_loaded_files_without_marking_imported(client, session, storage):
+    user = cast("User", UserFactory(email="loader@example.com"))
+    portfolio = cast("Portfolio", PortfolioFactory(user=user))
+    session.commit()
+    headers = get_auth_headers(client, user.email)
+
+    # Loading a file into the wizard stores it immediately, unimported.
+    response = client.post(
+        "/api/v1/imported-files/",
+        headers=headers,
+        files=[("file", ("loaded.csv", CSV_A, "text/csv"))],
+    )
+    assert response.status_code == status.HTTP_200_OK, response.text
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["filename"] == "loaded.csv"
+    assert data[0]["last_imported_at"] is None
+
+    record = session.exec(select(ImportedFile)).one()
+    assert record.last_imported_at is None
+    assert storage.get(build_storage_key(user.id, record.sha256)) == CSV_A
+
+    # Loading it again is a dedup no-op.
+    response = client.post(
+        "/api/v1/imported-files/",
+        headers=headers,
+        files=[("file", ("loaded-again.csv", CSV_A, "text/csv"))],
+    )
+    assert response.status_code == status.HTTP_200_OK, response.text
+    assert len(session.exec(select(ImportedFile)).all()) == 1
+
+    # Finishing the import stamps the same record as imported.
+    response = _import_files(client, headers, portfolio.id, [("loaded.csv", CSV_A)])
+    assert response.status_code == status.HTTP_200_OK, response.text
+    session.refresh(record)
+    assert record.last_imported_at is not None
+
+    listed = client.get("/api/v1/imported-files/", headers=headers).json()
+    assert listed[0]["last_imported_at"] is not None
+
+
+def test_store_endpoint_storage_outage_is_502(client, session):
+    from src.main import app  # noqa: PLC0415
+    from src.services.storage import get_storage  # noqa: PLC0415
+    from tests.test_import_storage import _BrokenStorage  # noqa: PLC0415
+
+    user = cast("User", UserFactory(email="loader-outage@example.com"))
+    session.commit()
+    headers = get_auth_headers(client, user.email)
+
+    app.dependency_overrides[get_storage] = _BrokenStorage
+    response = client.post(
+        "/api/v1/imported-files/",
+        headers=headers,
+        files=[("file", ("loaded.csv", CSV_A, "text/csv"))],
+    )
+    assert response.status_code == status.HTTP_502_BAD_GATEWAY
+    assert session.exec(select(ImportedFile)).all() == []
+
+
 def test_list_imported_files_scoped_to_user_with_counts(client, session):
     user = cast("User", UserFactory(email="lister@example.com"))
     other = cast("User", UserFactory(email="other@example.com"))

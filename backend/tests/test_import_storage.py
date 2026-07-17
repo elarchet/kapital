@@ -72,6 +72,30 @@ def test_persist_dedups_within_one_batch(session, tmp_path):
     assert len(session.exec(select(ImportedFile)).all()) == 1
 
 
+def test_persist_without_mark_imported_leaves_file_never_imported(session, tmp_path):
+    user = cast("User", UserFactory())
+    session.commit()
+    storage = LocalStorageBackend(tmp_path)
+
+    # Loading a file into the wizard stores it but doesn't count as an import.
+    loaded = persist_import_files(session, storage, user.id, [_upload()], mark_imported=False)
+    assert loaded[0] is not None
+    assert loaded[0].last_imported_at is None
+    sha256 = hashlib.sha256(CSV).hexdigest()
+    assert storage.get(build_storage_key(user.id, sha256)) == CSV
+
+    # Actually importing the same content stamps the existing row.
+    imported = persist_import_files(session, storage, user.id, [_upload()])
+    assert imported[0] is not None
+    assert imported[0].id == loaded[0].id
+    assert imported[0].last_imported_at is not None
+
+    # Re-loading it later must not reset the imported timestamp.
+    reloaded = persist_import_files(session, storage, user.id, [_upload()], mark_imported=False)
+    assert reloaded[0] is not None
+    assert reloaded[0].last_imported_at == imported[0].last_imported_at
+
+
 class _BrokenStorage:
     """Storage stub whose writes always fail."""
 

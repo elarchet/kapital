@@ -15,7 +15,6 @@ import OverwriteTemplateConfirmModal from './modals/OverwriteTemplateConfirmModa
 import DeleteTemplateConfirmModal from './modals/DeleteTemplateConfirmModal.vue';
 import DiscardChangesConfirmModal from './modals/DiscardChangesConfirmModal.vue';
 
-import ImportSuccessSummary from './ImportSuccessSummary.vue';
 import PreviousImportsList from './PreviousImportsList.vue';
 
 import DynamicComponent from '../DynamicComponent.vue';
@@ -42,7 +41,6 @@ const {
   isCustomMapping,
   isImporting,
   importError,
-  importSuccessSummary,
   mappingTemplateName,
   saveMappingTemplate,
   importDelimiter,
@@ -105,7 +103,8 @@ const loadStoredFile = async (stored: ImportedFileInfo) => {
   try {
     const blob = await api.downloadImportedFile(stored.id);
     const file = new File([blob], stored.filename, { type: stored.content_type || 'text/csv' });
-    await processFiles([file]);
+    // Already persisted server-side — no need to round-trip it back to storage.
+    await processFiles([file], { alreadyStored: true });
   } catch (err: any) {
     importError.value = err.message || 'Failed to load the stored file.';
   } finally {
@@ -230,14 +229,7 @@ onUnmounted(() => {
           {{ importError }}
         </div>
 
-        <!-- Success State -->
-        <ImportSuccessSummary
-          v-if="importSuccessSummary"
-          :importSuccessSummary="importSuccessSummary"
-          :mappingTemplateName="mappingTemplateName"
-        />
-
-        <template v-else-if="importFiles.length">
+        <template v-if="importFiles.length">
           <div v-if="!isCustomMapping || currentStep === 1" class="flex justify-between items-center gap-3 bg-bg-tertiary py-2 px-3 rounded-sm border border-border-color mb-3">
             <div class="flex items-center gap-x-2 gap-y-0.5 min-w-0 flex-wrap">
               <Layers class="w-4 h-4 text-accent shrink-0" />
@@ -382,8 +374,8 @@ onUnmounted(() => {
 
     <template #footer>
         <button @click="requestClose" class="btn btn-sm">Cancel</button>
-        <button 
-          v-if="!importSuccessSummary && isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
+        <button
+          v-if="isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
           @click="handleImport"
           class="btn btn-sm btn-primary !bg-warning-color !border-warning-color !text-white"
           :disabled="isImporting || !mappingTemplateName.trim()"
@@ -392,23 +384,16 @@ onUnmounted(() => {
           <span v-if="isImporting">Saving template...</span>
           <span v-else>Save Incomplete Template</span>
         </button>
-        <button 
-          v-else-if="!importSuccessSummary"
-          @click="handleImport" 
-          class="btn btn-sm btn-primary" 
+        <button
+          v-else
+          @click="handleImport"
+          class="btn btn-sm btn-primary"
           :disabled="isImporting || !importFiles.length || (isCustomMapping && !isValidCustomMapping) || (isCustomMapping && saveMappingTemplate && !mappingTemplateName.trim())"
         >
           <Loader v-if="isImporting" class="w-3.5 h-3.5 animate-spin" />
           <span v-if="isImporting">Importing data...</span>
           <span v-else-if="isCustomMapping && saveMappingTemplate">Save Template & Import</span>
           <span v-else>Import Transactions</span>
-        </button>
-        <button 
-          v-else
-          @click="requestClose" 
-          class="btn btn-sm btn-primary"
-        >
-          Done
         </button>
     </template>
   </DynamicComponent>

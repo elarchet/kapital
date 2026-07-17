@@ -8,7 +8,7 @@ the user for the file again. ``storage_key`` locates the object in the
 configured storage backend (see ``services.storage``).
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime
@@ -33,12 +33,13 @@ class ImportedFile(TimestampMixin, SQLModel, table=True):
     size_bytes: int = Field(nullable=False)
     content_type: str | None = Field(default=None, max_length=100)
     storage_key: str = Field(nullable=False, max_length=255)
-    # Bumped every time the file is part of an import, including re-uploads of
-    # identical content (created_at keeps the first time it was seen).
-    last_imported_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+    # NULL while the file has only been loaded into the wizard; set (and bumped
+    # on every reuse) once its transactions are actually imported. created_at
+    # keeps the first time the file was seen.
+    last_imported_at: datetime | None = Field(
+        default=None,
         sa_type=DateTime(timezone=True),
-        nullable=False,
+        nullable=True,
     )
 
     user: "User" = Relationship()

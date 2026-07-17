@@ -45,8 +45,14 @@ def persist_import_files(
     storage: StorageBackend,
     user_id: int,
     files: list[UploadedFileInfo],
+    *,
+    mark_imported: bool = True,
 ) -> list[ImportedFile | None]:
     """Store each file once for this user and return records parallel to ``files``.
+
+    With ``mark_imported`` (the actual import flow), ``last_imported_at`` is
+    set/bumped; without it (files merely loaded into the wizard) the timestamp
+    is left alone, so it keeps meaning "never imported" until a real import.
 
     A slot is ``None`` when the object store rejected that file — the caller
     keeps importing and the resulting transactions stay unlinked.
@@ -63,8 +69,9 @@ def persist_import_files(
             ),
         ).first()
         if existing:
-            existing.last_imported_at = now
-            db.add(existing)
+            if mark_imported:
+                existing.last_imported_at = now
+                db.add(existing)
             records.append(existing)
             continue
 
@@ -88,7 +95,7 @@ def persist_import_files(
             size_bytes=len(info.content),
             content_type=info.content_type,
             storage_key=storage_key,
-            last_imported_at=now,
+            last_imported_at=now if mark_imported else None,
         )
         db.add(record)
         records.append(record)
