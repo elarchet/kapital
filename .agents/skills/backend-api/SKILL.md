@@ -17,21 +17,18 @@ This skill governs the structure and endpoints of the FastAPI application.
 - Ensure all models strictly type their fields.
 - Avoid passing raw database models directly to/from endpoints if serialization properties differ.
 
-## 3. Centralized Exception Strategy
-- Define a unified base exception (`KapitalError`) to manage domain-specific validation or business failures.
-- Raise specific sub-exceptions in the services/logic layers and handle them using global FastAPI exception handlers to yield consistent, structured JSON responses:
+## 3. Exception Strategy
+- **Current pattern**: routers raise FastAPI's `HTTPException` directly with an explicit `status_code` and `detail` (see `backend/src/routers/auth.py`):
   ```python
-  from fastapi import FastAPI, Request
-  from fastapi.responses import JSONResponse
+  from fastapi import HTTPException, status
 
-  class KapitalError(Exception):
-      pass
-
-  # Register a global exception handler in the app initialization
-  # @app.exception_handler(KapitalError)
-  # async def error_handler(request: Request, exc: KapitalError):
-  #     return JSONResponse(status_code=400, content={"detail": str(exc)})
+  raise HTTPException(
+      status_code=status.HTTP_401_UNAUTHORIZED,
+      detail="Invalid credentials",
+  )
   ```
+- There is **no** `KapitalError` base exception or global exception handler today — do not import one.
+- **Aspirational** (only if a task explicitly calls for it): a unified `KapitalError` base plus `@app.exception_handler` registration would let services/logic raise domain exceptions without importing FastAPI. Introduce it deliberately, not by assuming it already exists.
 
 ## 4. Self-Documenting APIs
 - Leverage FastAPI's automatic OpenAPI generation.

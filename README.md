@@ -17,8 +17,9 @@ Kapital is a scalable financial SaaS platform for wealth management and analysis
 - **Package Manager**: [`uv`](https://github.com/astral-sh/uv)
 - **Code Quality**:
   - `prek` workflow orchestrating:
-  - `ruff` (Linting/Formatting)
-  - `ty` (Type Checking)
+  - `ruff` / `ruff-format` (Linting/Formatting, scoped to `backend/`)
+  - `gitleaks` (Secret Scanning)
+  - `validate-pyproject` (Manifest Validation)
   - `commitizen` (Commit Standardization)
 
 ## 🚀 Getting Started

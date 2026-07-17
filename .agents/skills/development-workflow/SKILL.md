@@ -15,5 +15,5 @@ This skill details behavioral protocols for commits, code structures, and size c
 - **Subfolders Over Flat Dirs**: Group related components into subfolders (e.g., `components/import/`). Never keep flat directories with many files.
 
 ## 2. Git & Verification Flow
-- **Git Commit Workflow**: Refer to and strictly follow the [git-commit](file:///home/etien/dev/perso/kapital/.agents/skills/git-commit/SKILL.md) skill for commit aliases, formatting conventions, permissions, and approval processes.
+- **Git Commit Workflow**: Refer to and strictly follow the [git-commit](../git-commit/SKILL.md) skill for commit aliases, formatting conventions, permissions, and approval processes.
 - **Self-Correction**: If a test fails, analyze the logs and fix it before asking for help. Do not request commit approval for broken states.

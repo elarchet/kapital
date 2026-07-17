@@ -1,5 +1,5 @@
 # Repo-wide quality hooks.
-# Python-specific tools (ruff, ty, validate-pyproject) are scoped to
+# Python-specific tools (ruff, validate-pyproject) are scoped to
 # backend/ so they never run against frontend TS/Vue files.
 
 [[repos]]

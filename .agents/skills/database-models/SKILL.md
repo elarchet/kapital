@@ -22,15 +22,23 @@ This skill governs DB schemas, relationships, session management, and validation
 - Declare relationships explicitly using `Relationship`.
 
 ## 2. Session Management & Dependency Injection
-- Always use async database sessions for all operations when integrated with FastAPI.
-- Avoid manual session opens. Use router Dependency Injection to manage session lifecycles:
+- Sessions are **synchronous** SQLModel `Session` objects — this project does not use async DB sessions. The session dependency lives in `backend/src/database.py`:
   ```python
-  from sqlalchemy.ext.asyncio import AsyncSession
+  from collections.abc import Generator
+  from sqlmodel import Session
+
+  def get_session() -> Generator[Session]:
+      """Dependency injection generator yielding a SQLModel Session."""
+      with Session(engine) as session:
+          yield session
+  ```
+- Avoid manual session opens. Inject the session into router endpoints via DI:
+  ```python
   from typing import Annotated
   from fastapi import Depends
+  from src.database import get_session
 
-  # Inject the session into router endpoints
-  # db: Annotated[AsyncSession, Depends(get_db_session)]
+  # db: Annotated[Session, Depends(get_session)]
   ```
 
 ## 3. Bulk Operations & Performance
@@ -39,4 +47,4 @@ This skill governs DB schemas, relationships, session management, and validation
 - **In-Memory Caching**: Use dictionary caches to store references of existing entities (e.g., pre-fetched Positions, transaction IDs) during bulk operations to prevent N+1 select queries.
 
 ## 4. Database Migrations
-- For detailed migration commands and lifecycle procedures, refer to [alembic_migrations.md](file://./references/alembic_migrations.md).
+- For detailed migration commands and lifecycle procedures, refer to [alembic_migrations.md](./references/alembic_migrations.md).
