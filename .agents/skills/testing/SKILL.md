@@ -18,9 +18,11 @@ This skill details how to write and execute unit and integration tests.
 - Avoid manual, hardcoded dummy instantiations in tests to ensure diverse inputs and test robustness, unless specific edge-case numbers are required.
 
 ## 3. Local Verification Protocol
-- During active feature development, run tests locally for the specific module under test:
+- During active feature development, run tests locally for the specific module under test. `testpaths` is `tests`, so run from the `backend/` directory (a repo-root `uv run pytest` fails to spawn):
   ```bash
-  uv run pytest backend/tests/test_specific.py
+  cd backend && uv run pytest tests/test_specific.py
+  # or, from the repo root:
+  uv run --directory backend pytest tests/test_specific.py
   ```
 - Do not run the full verification suite (`prek` or global pytest run) automatically on startup or before the user reviews/approves changes.
 

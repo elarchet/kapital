@@ -23,7 +23,13 @@ or from a pending feature branch — no manual tracking needed.
 
 ```bash
 git fetch --prune                       # sync remote refs, mark deleted branches as [gone]
-git fetch origin main:main              # fast-forward local main without checkout (skip if errors)
+# Fast-forward local main. `fetch origin main:main` ALWAYS fails when main is
+# the checked-out branch ("refusing to fetch into branch ... checked out") — so:
+if [ "$(git branch --show-current)" = "main" ]; then
+  git pull --ff-only origin main         # on main: pull instead
+else
+  git fetch origin main:main             # off main: update the ref without checkout
+fi
 ```
 
 Delete local branches whose remote is gone, **only if fully merged**:
@@ -60,7 +66,7 @@ directly from `git branch -vv` at every conversation start.
 
 ## Push & Stack
 
-1. **Commit** current work following the [git-commit](file:///home/etien/dev/perso/kapital/.agents/skills/git-commit/SKILL.md) skill (all commit rules live there).
+1. **Commit** current work following the [git-commit](../git-commit/SKILL.md) skill (all commit rules live there).
 
 2. **Push** to trigger CI and auto-PR:
    ```bash

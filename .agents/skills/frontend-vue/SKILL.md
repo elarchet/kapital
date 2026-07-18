@@ -41,3 +41,11 @@ This skill governs the development of the frontend single-page application (SPA)
 - All routes must be created as `.vue` files inside the `frontend/src/pages/` directory (e.g., `[id].vue` for dynamic parameters).
 - Use the `definePage()` macro within the page component to define route metadata (e.g., `meta: { requiresAuth: true }`, or overriding route `name`).
 - Do not manually register routes in `src/router/index.ts`.
+- **`pages/` are thin wrappers over `views/`**: each page file declares its route via `definePage()` and renders a single imported view component from `frontend/src/views/`. Keep real markup and logic in the `views/` component; the page stays a routing shim.
+  ```vue
+  <script setup lang="ts">
+  import DashboardView from '../views/DashboardView.vue';
+  definePage({ name: 'dashboard', meta: { requiresAuth: true } });
+  </script>
+  <template><DashboardView /></template>
+  ```

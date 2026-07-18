@@ -38,8 +38,8 @@ All commit messages must strictly comply with Conventional Commits rules to pass
 
 ## 5. Pre-Commit Checklist & Verification
 Before requesting approval to commit, you must perform the following checks:
-1. **Local Test Run**: Ensure all tests in the affected modules pass. Run `uv run pytest backend/tests/test_...` for backend or Playwright for frontend.
-2. **Quality Control Hooks**: Run linting, quality, and verification checks (e.g., `prek` or equivalents running `ruff`, `ty`, `gitleaks`, and `commitizen`) to ensure zero errors prior to proposing the commit to the user.
-3. **Size Budget check**: Confirm compliance with size budget and folder structures as detailed in [development-workflow](file:///home/etien/dev/perso/kapital/.agents/skills/development-workflow/SKILL.md).
-4. **Ponytail Check**: Verify that YAGNI constraints are met and that any deliberate simplifications are marked with a `# ponytail:` comment per the guidelines in [ponytail.md](file:///home/etien/dev/perso/kapital/.agents/.rules/ponytail.md).
+1. **Local Test Run**: Ensure all tests in the affected modules pass. Run `cd backend && uv run pytest tests/test_...` for backend or Playwright for frontend.
+2. **Quality Control Hooks**: Run linting, quality, and verification checks (`prek` running `ruff`/`ruff-format`, `gitleaks`, `validate-pyproject`, and `commitizen`) to ensure zero errors prior to proposing the commit to the user.
+3. **Size Budget check**: Confirm compliance with size budget and folder structures as detailed in [development-workflow](../development-workflow/SKILL.md).
+4. **Ponytail Check**: Verify that YAGNI constraints are met and that any deliberate simplifications are marked with a `# ponytail:` comment per the guidelines in [ponytail.md](../../.rules/ponytail.md).
 5. **Skill/Doc Reflection**: Explicitly ask yourself: "Can I add a skill with the new modification, should I update some existing skills, or should I update the README.md?" If your changes introduce new architectural patterns, tools, or workflows, update the relevant documentation before committing.

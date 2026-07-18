@@ -21,37 +21,37 @@ This document defines the core architecture, stack definitions, subagent matrix,
 - **Tech Stack**: Vue.js, Tailwind CSS v4, Playwright, FastAPI (`Annotated` dependencies), SQLModel + Alembic, Polars, Pydantic v2 (Strict), PostgreSQL, `uv`, Modern Python.
 - **Bulk Mutations & Performance**: Optimize bulk updates or imports by caching database lookups in-memory and using a single batch `db.commit()` in a try-except-rollback block at the service layer, avoiding N+1 queries and loop commits.
 - **Defensive Rendering**: Defensively use optional chaining (`?.`) when displaying dynamic rows, custom templates, or mapped fields to prevent UI crashes if some attributes are missing.
-- **Ponytail / Minimalist Architecture**: Enforce YAGNI (You Ain't Gonna Need It) principles strictly. Avoid over-engineering, redundant file structures, and unnecessary abstractions. Consolidate logic into fewer, well-scoped files and prioritize standard library/native solutions as detailed in [.agents/.rules/ponytail.md](file:///home/etien/dev/perso/kapital/.agents/.rules/ponytail.md).
-- **Strict Commit Protocols**: Never perform git commits or push changes to the repository without explicit consent from the user. **You must ALWAYS explain your changes fully before asking for this consent.** Refer to and strictly follow the [git-commit](file:///home/etien/dev/perso/kapital/.agents/skills/git-commit/SKILL.md) skill.
-- **Quality Control**: Automated hooks via `prek` running `ruff`, `ty`, `gitleaks`, and `commitizen`.
+- **Ponytail / Minimalist Architecture**: Enforce YAGNI (You Ain't Gonna Need It) principles strictly. Avoid over-engineering, redundant file structures, and unnecessary abstractions. Consolidate logic into fewer, well-scoped files and prioritize standard library/native solutions as detailed in [.agents/.rules/ponytail.md](.agents/.rules/ponytail.md).
+- **Strict Commit Protocols**: Never perform git commits or push changes to the repository without explicit consent from the user. **You must ALWAYS explain your changes fully before asking for this consent.** Refer to and strictly follow the [git-commit](.agents/skills/git-commit/SKILL.md) skill.
+- **Quality Control**: Automated hooks via `prek` running `ruff` / `ruff-format` (scoped to `backend/`), `gitleaks`, `validate-pyproject`, and `commitizen` (commit-msg stage). Type checking with `ty` is not currently a hook.
 
 ---
 
 ## 2. Specialized Subagents & Orchestration
 
-To scale operations, the primary agent can invoke specialized subagents using the `/agent` command or the `invoke_subagent` tool.
+To scale operations, the primary agent can invoke specialized subagents via the Task tool (`subagent_type`) or the `/agents` interface. These are defined as real Claude Code subagents in [.claude/agents/](.claude/agents/).
 
-| Subagent Role | Model Tier | Purpose |
+| Subagent (`subagent_type`) | Model | Purpose |
 | :--- | :--- | :--- |
-| **`financial_expert`** | **Gemini 3.1 Pro** | Handles complex accounting calculations, tax rules, PnL equations, and Polars optimization logic. |
-| **`frontend_designer`** | **Gemini 3.5 Flash** (Low) | Focused on crafting functional Vue components, implementing Tailwind CSS v4 styling rules, and layout design strictly following the contracts and tokens defined by the architect. |
-| **`frontend_architect`** | **Claude Sonnet 4.6** | Responsible for the design system architecture, strict component contracts (API/Props definitions for the marketplace), and runtime theming engines. |
-| **`tester`** | **Gemini 3.5 Flash** (Low) | Responsible for writing comprehensive tests, setting up FactoryBoy mocks, and fixing test regressions. |
-| **`architect_critic`** | **Claude Opus 4.6** | Hyper-critically assesses code architecture, weighs pros/cons, validates security/performance, and ensures scalability and future-proofing. |
+| **`financial-expert`** | **Opus** | Handles complex accounting calculations, tax rules, PnL equations, and Polars optimization logic. Enforces `Decimal` and the `logic/` vs `services/` split. |
+| **`frontend-designer`** | **Haiku** | Crafts functional Vue components and Tailwind CSS v4 styling, strictly following the contracts and tokens defined by `frontend-architect`. |
+| **`frontend-architect`** | **Sonnet** | Owns the design system architecture, strict component contracts (props/emits APIs), store/resolver setup, and runtime theming engines. |
+| **`tester`** | **Haiku** | Writes pytest unit/integration tests, sets up `factory_boy` mocks, and fixes test regressions. |
+| **`architect-critic`** | **Opus** | Hyper-critically assesses architecture, weighs trade-offs, validates security/performance, and ensures scalability and future-proofing. |
 
 ### Mandatory Subagent Delegation Protocol
 To guarantee absolute code quality and robust division of labor, the primary agent must follow these delegation rules for any significant task:
-1. **Frontend Styling & Visuals**: Segment layout/styling code blocks and invoke `frontend_designer` to build them.
-2. **Frontend Interface Contracts**: Segment prop/emit declarations and store/resolver setups and invoke `frontend_architect` to review them.
-3. **Mathematical & Business Logic**: Segment Polars operations or Decimal math functions and invoke `financial_expert` to implement them.
+1. **Frontend Styling & Visuals**: Segment layout/styling code blocks and invoke `frontend-designer` to build them.
+2. **Frontend Interface Contracts**: Segment prop/emit declarations and store/resolver setups and invoke `frontend-architect` to review them.
+3. **Mathematical & Business Logic**: Segment Polars operations or Decimal math functions and invoke `financial-expert` to implement them.
 4. **Unit / Integration Testing**: Segment pytest or factory mock generation and invoke `tester` to build the test cases.
-5. **Architectural Evaluation & QA**: Before finalizing modifications, invoke `architect_critic` to review the full layout, imports, and security boundaries.
+5. **Architectural Evaluation & QA**: Before finalizing modifications, invoke `architect-critic` to review the full layout, imports, and security boundaries.
 
 ---
 
 ## 3. Active Skills Registry
 
-Skills are modular, on-demand instructions loaded only when required. They are stored in `.agents/skills/`.
+Skills are modular, on-demand instructions loaded only when required. They are stored in `.agents/skills/`, surfaced to Claude Code via the `.claude/skills` → `../.agents/skills` symlink.
 - **`backend-api`**: FastAPI router and endpoint design conventions.
 - **`database-models`**: SQLModel structures, schema validation, and bulk mutations.
 - **`development-workflow`**: Line budget checks, directory structures, and self-corrections.
@@ -75,7 +75,7 @@ Before writing code or asking for commit approval, you MUST explicitly answer an
 3. **Structure**: Are your components placed in logical subfolders instead of a flat folder? If a feature has >3 components, did you place them in a dedicated subdirectory?
 4. **Decoupled API**: Is all logic decoupled (frontend is representation/interaction only, business/financial logic is in the backend)?
 5. **Database Efficiency**: Did you avoid loop-based database commits and N+1 queries for batch operations?
-6. **Subagent Delegation**: Did you delegate task segments to the appropriate subagents (e.g. `tester` for tests, `frontend_designer` for layout/styles, `architect_critic` for final code reviews)?
+6. **Subagent Delegation**: Did you delegate task segments to the appropriate subagents (e.g. `tester` for tests, `frontend-designer` for layout/styles, `architect-critic` for final code reviews)?
 7. **Commit & Push Compliance**: Did you explain your changes fully before asking for explicit user approval? Did you verify that you only commit after this approval, using Conventional Commits format, and that pushes target only feature branches (never `main`)?
 8. **Stacked Branch Hygiene**: If the user is ready for the next feature, follow the `stacked-branches` skill — push current feature, scaffold next branch on top (not on main), and rebase onto main when the parent merges. The agent auto-detects whether to stack or branch from main by checking for pending feature branches after housekeeping.
 
