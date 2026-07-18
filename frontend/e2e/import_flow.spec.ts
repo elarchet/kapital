@@ -48,8 +48,9 @@ async function pickOption(page: Page, trigger: Locator, optionLabel: string) {
   await option.click();
 }
 
-// The wizard opens on an empty state (file dropzone + previously imported
-// files); its hidden file input is the upload entry point.
+// The wizard opens on the file selector (upload dropzone + tick-list of
+// previously loaded files); its hidden file input is the upload entry point.
+// Uploads join the list ticked; "Continue with N files" builds the batch.
 async function openImportWizard(page: Page) {
   await page.click('#btn-add-position-component');
   await page.click('button:has-text("Import File")');
@@ -84,6 +85,14 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
       await page.request.delete(`/api/v1/portfolios/${p.id}`, { headers: auth });
     }
   }
+  // Stored files from aborted runs share this run's filenames and would make
+  // the selector's list assertions ambiguous.
+  const staleFiles = await (await page.request.get('/api/v1/imported-files/', { headers: auth })).json();
+  for (const f of staleFiles) {
+    if (/^e2e_(broker_export|loaded_only)/.test(f.filename)) {
+      await page.request.delete(`/api/v1/imported-files/${f.id}`, { headers: auth });
+    }
+  }
   await page.reload();
   await expect(page.locator('h1')).toHaveText('Global Dashboard');
 
@@ -105,6 +114,7 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
     { name: 'e2e_broker_export.csv', mimeType: 'text/csv', buffer: Buffer.from(csvContent) },
     { name: 'e2e_broker_export_2.csv', mimeType: 'text/csv', buffer: Buffer.from(csvContent2) },
   ]);
+  await page.getByTestId('continue-with-files').click();
   await expect(page.getByText('2 files imported as one batch')).toBeVisible();
 
   // Force a fresh custom mapping even if an earlier run left a matching template.
@@ -331,13 +341,13 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await expect(nvdaRow).toBeVisible();
 
   // ---- 11. Stored-file round-trip: both files are listed and re-importable ----
-  // Every uploaded file was persisted server-side; the wizard's empty state
+  // Every uploaded file was persisted server-side; the wizard's file selector
   // lists them (most recently used first, so this run's files lead even on a
   // persistent dev DB carrying files from earlier runs).
   await openImportWizard(page);
-  const previousImports = page.getByTestId('previous-imports-list');
+  const previousImports = page.getByTestId('import-file-list');
   await expect(previousImports).toBeVisible();
-  const storedRows = previousImports.locator('[data-testid^="previous-import-row-"]');
+  const storedRows = previousImports.locator('[data-testid^="import-file-row-"]');
   await expect(storedRows.first()).toContainText(/e2e_broker_export(_2)?\.csv/);
   await expect(storedRows.nth(1)).toContainText(/e2e_broker_export(_2)?\.csv/);
   // File 1 produced 3 transactions (its BUY duplicated in file 2 counts on
@@ -346,9 +356,10 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   await expect(file1Row).toContainText('3 transactions');
   await expect(file1Row).toContainText('Imported');
 
-  // Re-importing a stored file feeds it back through the wizard; row-level
-  // dedup then skips everything, importing nothing twice.
-  await file1Row.locator('button:has-text("Re-import")').click();
+  // Ticking a stored file and continuing feeds it back through the wizard;
+  // row-level dedup then skips everything, importing nothing twice.
+  await file1Row.click();
+  await page.getByTestId('continue-with-files').click();
   await expect(page.getByText('✓ Autodetected format matching this file')).toBeVisible();
   await page.click('button:has-text("Import Transactions")');
   await expectToastAndDismiss(page, 'info', 'No new transactions imported', '3 duplicates skipped');
@@ -361,6 +372,7 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
     mimeType: 'text/csv',
     buffer: Buffer.from(csvContent),
   });
+  await page.getByTestId('continue-with-files').click();
   await expect(page.getByText('✓ Autodetected format matching this file')).toBeVisible();
   await expect(templateDropdown).toContainText(templateName);
 
@@ -383,11 +395,12 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
     mimeType: 'text/csv',
     buffer: Buffer.from(csvContent3),
   });
-  await expect(page.getByText('e2e_loaded_only.csv')).toBeVisible();
-  // Abandon the wizard without importing anything.
+  // The upload joins the list ticked and already stored, without starting a batch.
+  const loadedOnlyRow = page.getByTestId('import-file-row-e2e_loaded_only.csv');
+  await expect(loadedOnlyRow).toBeVisible();
+  await expect(loadedOnlyRow.locator('input[type="checkbox"]')).toBeChecked();
+  // Abandon without continuing: no batch was built, so no discard confirm.
   await page.click('button:has-text("Cancel")');
-  await expect(discardBtn).toBeVisible();
-  await discardBtn.click();
   await expect(importHeader).not.toBeVisible();
 
   // The abandoned file was still stored, flagged as never imported.
@@ -395,8 +408,8 @@ test('import wizard: full drag-and-drop mapping, formula, enums, auto-ID, templa
   const loadedRow = storedRows.filter({ hasText: 'e2e_loaded_only.csv' }).first();
   await expect(loadedRow).toContainText('Not imported');
   await expect(loadedRow).toContainText('transactions not imported yet');
-  await expect(loadedRow.locator('button', { hasText: 'Import' })).toBeVisible();
-  await page.click('button:has-text("Cancel")'); // empty state isn't dirty: closes directly
+  await expect(loadedRow.locator('input[type="checkbox"]')).toBeVisible();
+  await page.click('button:has-text("Cancel")'); // file selection isn't dirty: closes directly
   await expect(importHeader).not.toBeVisible();
 
   // ---- 14. Delete the stored copies (file-only delete; transactions stay) ----

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { Layers, Loader, Trash2, Pencil, Upload } from '@lucide/vue';
-import { api, type ImportedFileInfo } from '../../services/api';
+import { computed, ref } from 'vue';
+import { Loader, Trash2, Pencil } from '@lucide/vue';
+import { api } from '../../services/api';
+import type { MappingVariant } from './wizard/mapping/useFieldSlots';
 
 // Composables & services
 import { useImportWizard } from './useImportWizard';
+import { useSwipeNavGuard } from './useSwipeNavGuard';
 
 // Subcomponents - nested subdirectories & globals
 import Step1DelimiterMapping from './wizard/Step1DelimiterMapping.vue';
@@ -15,7 +17,8 @@ import OverwriteTemplateConfirmModal from './modals/OverwriteTemplateConfirmModa
 import DeleteTemplateConfirmModal from './modals/DeleteTemplateConfirmModal.vue';
 import DiscardChangesConfirmModal from './modals/DiscardChangesConfirmModal.vue';
 
-import PreviousImportsList from './PreviousImportsList.vue';
+import ImportFileSelector, { type SelectedImportFile } from './ImportFileSelector.vue';
+import ImportBatchFilesBar from './ImportBatchFilesBar.vue';
 
 import DynamicComponent from '../DynamicComponent.vue';
 
@@ -85,32 +88,47 @@ const {
   processFiles,
 } = useImportWizard(props, emit);
 
-// Empty-state file selection (when the modal opens without preselected files).
-const emptyStateFileInput = ref<HTMLInputElement | null>(null);
-const previousImportsList = ref<InstanceType<typeof PreviousImportsList> | null>(null);
+// The tick-based file selector is the single entry point for composing the
+// batch: it shows on open (nothing loaded yet) and again on "Add / change files".
+const showFileSelection = ref(false);
+const isLoadingSelection = ref(false);
 
-const onEmptyStateFilesSelected = (e: Event) => {
-  const target = e.target as HTMLInputElement;
-  if (target.files && target.files.length > 0) {
-    processFiles(Array.from(target.files));
-  }
-};
-
-// Re-import a stored file: fetch its original bytes and feed them through the
-// same wizard flow as a fresh upload (row dedup makes this idempotent).
-const loadStoredFile = async (stored: ImportedFileInfo) => {
+const onConfirmSelection = async (selection: SelectedImportFile[]) => {
+  isLoadingSelection.value = true;
   importError.value = '';
   try {
-    const blob = await api.downloadImportedFile(stored.id);
-    const file = new File([blob], stored.filename, { type: stored.content_type || 'text/csv' });
-    // Already persisted server-side — no need to round-trip it back to storage.
-    await processFiles([file], { alreadyStored: true });
+    // Session uploads carry their bytes; history entries are downloaded.
+    const files: File[] = [];
+    for (const sel of selection) {
+      if (sel.localFile) {
+        files.push(sel.localFile);
+      } else if (sel.stored) {
+        const blob = await api.downloadImportedFile(sel.stored.id);
+        files.push(new File([blob], sel.filename, { type: sel.stored.content_type || 'text/csv' }));
+      }
+    }
+    if (!files.length) return;
+    // Everything in the selection was already stored (at upload time), so the
+    // batch build never re-uploads. Growing the batch appends and preserves
+    // the mapping work; shrinking or replacing it rebuilds from scratch.
+    const currentNames = importFiles.value.map(f => f.name);
+    const keptWholeBatch = currentNames.length > 0 && currentNames.every(n => files.some(f => f.name === n));
+    if (keptWholeBatch) {
+      await processFiles(files.filter(f => !currentNames.includes(f.name)), { append: true, alreadyStored: true });
+    } else {
+      await processFiles(files, { alreadyStored: true });
+    }
+    showFileSelection.value = false;
   } catch (err: any) {
-    importError.value = err.message || 'Failed to load the stored file.';
+    importError.value = err.message || 'Failed to load the selected files.';
   } finally {
-    previousImportsList.value?.clearDownloading();
+    isLoadingSelection.value = false;
   }
 };
+
+// Variant(s) currently being mapped in Step 2, mirrored into the drawer header
+// so they stay visible while the mapping board scrolls.
+const mappingSelection = ref<MappingVariant[]>([]);
 
 const isSchemaIncomplete = (schema: any) => {
   return schema ? !!schema.is_incomplete : false;
@@ -167,48 +185,7 @@ const onConfirmOverwrite = () => {
   handleImport();
 };
 
-const preventSwipeNav = (e: WheelEvent) => {
-  // Only intercept if it's primarily a horizontal swipe
-  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-    let target = e.target as HTMLElement | null;
-    
-    // Find nearest horizontally scrollable container
-    while (target && target !== document.body && target !== document.documentElement) {
-      const style = window.getComputedStyle(target);
-      if ((style.overflowX === 'auto' || style.overflowX === 'scroll') && target.scrollWidth > target.clientWidth) {
-        break;
-      }
-      target = target.parentElement;
-    }
-    
-    if (target && target !== document.body && target !== document.documentElement) {
-      const isAtLeftEdge = target.scrollLeft <= 0;
-      const isAtRightEdge = target.scrollWidth - target.clientWidth <= target.scrollLeft + 1;
-      
-      // If we're at the edge and trying to scroll past it, aggressively prevent default
-      // to kill the Chrome swipe navigation.
-      if ((e.deltaX < 0 && isAtLeftEdge) || (e.deltaX > 0 && isAtRightEdge)) {
-        e.preventDefault();
-      }
-    } else {
-      // If we aren't even over a horizontal scroll container, ANY horizontal swipe is
-      // just going to trigger browser navigation. Block it.
-      e.preventDefault();
-    }
-  }
-};
-
-onMounted(() => {
-  document.documentElement.style.overscrollBehaviorX = 'none';
-  document.body.style.overscrollBehaviorX = 'none';
-  window.addEventListener('wheel', preventSwipeNav, { passive: false });
-});
-
-onUnmounted(() => {
-  document.documentElement.style.overscrollBehaviorX = '';
-  document.body.style.overscrollBehaviorX = '';
-  window.removeEventListener('wheel', preventSwipeNav);
-});
+useSwipeNavGuard();
 </script>
 
 <template>
@@ -221,7 +198,29 @@ onUnmounted(() => {
     @close="requestClose"
   >
     <template #header>
-      <h3 class="table-title !text-base !m-0">Import Transactions to "{{ portfolio.name }}"</h3>
+      <div class="flex items-center gap-2 min-w-0">
+        <h3 class="table-title !text-base !m-0 shrink-0">Import Transactions to "{{ portfolio.name }}"</h3>
+        <!-- The otherwise-empty header space shows what is being mapped, so it
+             stays visible while the Step 2 board scrolls. -->
+        <template v-if="isCustomMapping && currentStep === 2 && mappingSelection.length">
+          <span class="text-sm text-text-tertiary shrink-0">— mapping</span>
+          <div class="flex items-center gap-1.5 min-w-0 overflow-x-auto">
+            <span
+              v-for="variant in mappingSelection"
+              :key="variant.key"
+              class="flex items-center gap-1 shrink-0"
+              data-testid="header-mapping-variant"
+            >
+              <span class="badge" :class="`badge-${variant.opType}`">{{ variant.opType }}</span>
+              <span
+                v-if="variant.rawAction"
+                class="text-[0.68rem] font-mono text-text-secondary max-w-[140px] truncate"
+                :title="variant.rawAction"
+              >{{ variant.rawAction }}</span>
+            </span>
+          </div>
+        </template>
+      </div>
     </template>
 
     <template #body>
@@ -229,20 +228,13 @@ onUnmounted(() => {
           {{ importError }}
         </div>
 
-        <template v-if="importFiles.length">
-          <div v-if="!isCustomMapping || currentStep === 1" class="flex justify-between items-center gap-3 bg-bg-tertiary py-2 px-3 rounded-sm border border-border-color mb-3">
-            <div class="flex items-center gap-x-2 gap-y-0.5 min-w-0 flex-wrap">
-              <Layers class="w-4 h-4 text-accent shrink-0" />
-              <span v-for="f in importFiles" :key="f.name" class="flex items-baseline gap-1 min-w-0">
-                <span class="text-[0.9rem] font-semibold truncate">{{ f.name }}</span>
-                <span class="text-xs text-text-secondary">({{ (f.size / 1024).toFixed(1) }} KB)</span>
-              </span>
-              <span v-if="importFiles.length > 1" class="text-xs text-text-secondary">
-                — {{ importFiles.length }} files imported as one batch; rows appearing in several files are only imported once
-              </span>
-            </div>
-            <button @click="requestClose" class="bg-transparent border-none text-danger-color cursor-pointer text-[0.8rem] font-semibold shrink-0">Remove</button>
-          </div>
+        <template v-if="importFiles.length && !showFileSelection">
+          <ImportBatchFilesBar
+            v-if="!isCustomMapping || currentStep === 1"
+            :files="importFiles"
+            @change-files="showFileSelection = true"
+            @remove="requestClose"
+          />
 
           <div class="flex flex-col gap-3 w-full">
             <div>
@@ -334,6 +326,7 @@ onUnmounted(() => {
                   @update-optype-settings="updateOpTypeSettings"
                   @update-group-count="updateFeeTaxGroupCount"
                   @touch-config="touchColumnConfig"
+                  @selection-change="(variants: MappingVariant[]) => mappingSelection = variants"
                 />
               </div>
             </div>
@@ -346,29 +339,18 @@ onUnmounted(() => {
           </div>
         </template>
 
-        <!-- Empty state: pick new files or re-import a stored one -->
+        <!-- File selection: upload new files and/or tick previously loaded ones,
+             then continue with the ticked set as the batch. Shown on open and
+             again whenever the user changes the files of a loaded batch. -->
         <template v-else>
-          <div class="flex flex-col gap-4">
-            <div
-              class="flex flex-col items-center gap-2 border border-dashed border-border-color rounded-sm py-8 px-4 cursor-pointer hover:bg-bg-tertiary"
-              data-testid="import-file-dropzone"
-              @click="emptyStateFileInput?.click()"
-            >
-              <Upload class="w-6 h-6 text-accent" />
-              <span class="text-sm font-semibold">Choose CSV file(s) to import</span>
-              <span class="text-xs text-text-secondary">Several files are imported as one batch and deduplicated</span>
-              <input
-                type="file"
-                ref="emptyStateFileInput"
-                accept=".csv"
-                multiple
-                style="display: none;"
-                @change="onEmptyStateFilesSelected"
-              />
-            </div>
-
-            <PreviousImportsList ref="previousImportsList" @select="loadStoredFile" />
-          </div>
+          <ImportFileSelector
+            :preselectedNames="importFiles.map(f => f.name)"
+            :sessionFiles="importFiles"
+            :busy="isLoadingSelection"
+            :showBack="importFiles.length > 0"
+            @back="showFileSelection = false"
+            @confirm="onConfirmSelection"
+          />
         </template>
     </template>
 
@@ -378,7 +360,7 @@ onUnmounted(() => {
           v-if="isCustomMapping && saveMappingTemplate && !isValidCustomMapping"
           @click="handleImport"
           class="btn btn-sm btn-primary !bg-warning-color !border-warning-color !text-white"
-          :disabled="isImporting || !mappingTemplateName.trim()"
+          :disabled="isImporting || showFileSelection || !mappingTemplateName.trim()"
         >
           <Loader v-if="isImporting" class="w-3.5 h-3.5 animate-spin" />
           <span v-if="isImporting">Saving template...</span>
@@ -388,7 +370,7 @@ onUnmounted(() => {
           v-else
           @click="handleImport"
           class="btn btn-sm btn-primary"
-          :disabled="isImporting || !importFiles.length || (isCustomMapping && !isValidCustomMapping) || (isCustomMapping && saveMappingTemplate && !mappingTemplateName.trim())"
+          :disabled="isImporting || showFileSelection || !importFiles.length || (isCustomMapping && !isValidCustomMapping) || (isCustomMapping && saveMappingTemplate && !mappingTemplateName.trim())"
         >
           <Loader v-if="isImporting" class="w-3.5 h-3.5 animate-spin" />
           <span v-if="isImporting">Importing data...</span>
