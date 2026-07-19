@@ -36,7 +36,7 @@ export interface ImportedFileInfo {
   transaction_count: number;
 }
 
-async function request<T>(
+export async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
