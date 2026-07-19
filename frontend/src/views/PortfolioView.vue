@@ -2,17 +2,22 @@
 import { computed, onMounted, ref, watch, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useKapitalStore } from '../store';
+import { assetKey, useValuationStore } from '../store/valuation';
 import DynamicComponent from '../components/DynamicComponent.vue';
 import ImportTransactionsModal from '../components/import/ImportTransactionsModal.vue';
 import StrategyHoldingsTable from '../components/portfolio/StrategyHoldingsTable.vue';
-import PortfolioAllocationBar from '../components/portfolio/PortfolioAllocationBar.vue';
-import PortfolioKpisGrid from '../components/portfolio/PortfolioKpisGrid.vue';
+import PortfolioValueChart from '../components/portfolio/PortfolioValueChart.vue';
+import PortfolioAllocationDonut from '../components/portfolio/PortfolioAllocationDonut.vue';
+import PositionTransactionsDrawer from '../components/portfolio/PositionTransactionsDrawer.vue';
+import TransactionSplitModal from '../components/portfolio/TransactionSplitModal.vue';
 import { useConfirmModal } from '../composables/useConfirmModal';
-import { Loader, ArrowLeft } from '@lucide/vue';
+import { Loader, ArrowLeft, Grid, Trash2 } from '@lucide/vue';
+import type { PositionValuation, RangeKey, RawTransaction } from '../services/portfolioApi';
 
 const route = useRoute();
 const router = useRouter();
 const store = useKapitalStore();
+const valuationStore = useValuationStore();
 
 const showCreatePosModal = ref(false);
 const showImportModal = ref(false);
@@ -23,6 +28,11 @@ const isEditingTitle = ref(false);
 const editingTitleName = ref('');
 const titleInput = ref<HTMLInputElement | null>(null);
 
+// Drilldown / split tool states. "Position" here is an asset row: one asset,
+// possibly aggregating several underlying positions (position_ids).
+const selectedPosition = ref<PositionValuation | null>(null);
+const splitTransaction = ref<RawTransaction | null>(null);
+
 // Opens the import wizard on its empty state: the user picks new files there
 // or re-imports a previously stored one.
 const triggerImportFile = () => {
@@ -30,7 +40,7 @@ const triggerImportFile = () => {
   showImportModal.value = true;
 };
 
-const portfolioId = computed(() => {
+const portfolioId = computed<number | 'unassigned'>(() => {
   const params = route.params as Record<string, string>;
   const idParam = params.id;
   if (idParam === 'unassigned') return 'unassigned';
@@ -49,82 +59,94 @@ const portfolio = computed(() => {
   return store.portfolios.find(p => p.id === portfolioId.value);
 });
 
-const portfolioPositions = computed(() => {
-  if (portfolioId.value === 'unassigned') {
-    const activeIds = new Set(store.portfolios.map(p => p.id));
-    return store.computedPositions.filter(pos => !activeIds.has(pos.portfolio_id));
-  }
-  return store.computedPositions.filter(pos => pos.portfolio_id === portfolioId.value);
-});
+const valuation = computed(() => valuationStore.valuation);
+const positions = computed(() => valuation.value?.positions ?? []);
+const currency = computed(() => valuation.value?.currency ?? 'EUR');
 
-const portfolioValue = computed(() => {
-  return portfolioPositions.value.reduce((sum, pos) => sum + (pos.estimated_value || 0), 0);
-});
+const drawerTransactions = computed(() =>
+  selectedPosition.value
+    ? valuationStore.transactionsByAsset[assetKey(selectedPosition.value.position_ids)] ?? []
+    : []
+);
 
-// Allocations by asset class strictly for this portfolio
-const portfolioAllocations = computed(() => {
-  const totals: Record<string, number> = {};
-  let absoluteTotal = 0;
+const refreshValuation = async () => {
+  valuationStore.clearDrilldownCache();
+  await valuationStore.fetchValuation(portfolioId.value);
+};
 
-  const colors: Record<string, string> = {
-    stock: '#2563eb',
-    crypto: '#7c3aed',
-    etf: '#0891b2',
-    bond: '#0d9488',
-    cash: '#16a34a',
-    commodity: '#d97706',
-    fund: '#db2777',
-    other: '#4b5563'
-  };
-
-  portfolioPositions.value.forEach(pos => {
-    const val = pos.estimated_value || 0;
-    totals[pos.asset_type] = (totals[pos.asset_type] || 0) + val;
-    absoluteTotal += val;
-  });
-
-  if (absoluteTotal === 0) return [];
-
-  return Object.entries(totals).map(([type, value]) => ({
-    type,
-    value,
-    percentage: (value / absoluteTotal) * 100,
-    color: colors[type] || '#64748b'
-  })).sort((a, b) => b.value - a.value);
-});
+const handleRangeChange = async (range: RangeKey) => {
+  await valuationStore.fetchValuation(portfolioId.value, range);
+};
 
 onMounted(async () => {
-  await store.fetchAllData();
+  await Promise.all([store.fetchAllData(), valuationStore.fetchValuation(portfolioId.value)]);
 });
 
-watch(() => (route.params as Record<string, string>).id, () => {
-  // Clear modal states when changing portfolios
+watch(() => (route.params as Record<string, string>).id, async () => {
+  // Clear transient states when changing portfolios
   showCreatePosModal.value = false;
   showImportModal.value = false;
   isEditingTitle.value = false;
+  selectedPosition.value = null;
+  splitTransaction.value = null;
+  await refreshValuation();
 });
 
 const { popupState, triggerPopup, handlePopupConfirm, handlePopupCancel } = useConfirmModal();
 
 const handleManualSuccess = async () => {
   showCreatePosModal.value = false;
-  await store.fetchAllData();
+  await Promise.all([store.fetchAllData(), refreshValuation()]);
 };
 
-const positionToDelete = ref<number | null>(null);
+const handleImportSuccess = async () => {
+  await Promise.all([store.fetchAllData(), refreshValuation()]);
+};
 
-const handleDeletePosition = (id: number) => {
-  positionToDelete.value = id;
+// ---- Row drilldown -> transactions drawer -> split modal --------------------
+
+const handleSelectPosition = async (position: PositionValuation) => {
+  selectedPosition.value = position;
+  await valuationStore.fetchAssetTransactions(position.position_ids);
+};
+
+const handleOpenSplit = (transaction: RawTransaction) => {
+  splitTransaction.value = transaction;
+};
+
+const handleSplitSaved = async () => {
+  splitTransaction.value = null;
+  await store.fetchAllData();
+  // Keep the drawer in sync: after a split the asset rows may have regrouped,
+  // so re-find the row sharing a constituent position with the selected one.
+  const previous = selectedPosition.value;
+  if (previous) {
+    const refreshed = valuation.value?.positions.find(p =>
+      p.position_ids.some(id => previous.position_ids.includes(id))
+    );
+    selectedPosition.value = refreshed ?? null;
+    if (refreshed) await valuationStore.fetchAssetTransactions(refreshed.position_ids, true);
+  }
+};
+
+// ---- Existing header / position management flows ---------------------------
+
+const handleDeletePosition = (position: PositionValuation) => {
+  const count = position.position_ids.length;
   triggerPopup({
-    title: 'Delete Position?',
-    message: 'Are you sure you want to permanently delete this asset position from your strategy folder?',
-    confirmText: 'Delete Position',
+    title: 'Delete Asset?',
+    message: count > 1
+      ? `This asset aggregates ${count} positions — all of them will be permanently deleted from your strategy folders.`
+      : 'Are you sure you want to permanently delete this asset position from your strategy folder?',
+    confirmText: count > 1 ? `Delete ${count} Positions` : 'Delete Position',
     cancelText: 'Cancel',
     variant: 'danger',
     onConfirm: async () => {
-      if (positionToDelete.value === null) return;
       try {
-        await store.deletePosition(positionToDelete.value);
+        for (const id of position.position_ids) {
+          await store.deletePosition(id);
+        }
+        await refreshValuation();
       } catch (err: any) {
         triggerPopup({
           title: 'Error Deleting Position',
@@ -133,8 +155,6 @@ const handleDeletePosition = (id: number) => {
           variant: 'danger',
           hideCancel: true,
         });
-      } finally {
-        positionToDelete.value = null;
       }
     }
   });
@@ -168,10 +188,13 @@ const confirmDeletePortfolio = async () => {
   }
 };
 
-const handleMovePosition = async (posId: number, targetPortfolioId: number) => {
+const handleMovePosition = async (position: PositionValuation, targetPortfolioId: number) => {
   if (!targetPortfolioId) return;
   try {
-    await store.movePosition(posId, targetPortfolioId);
+    for (const id of position.position_ids) {
+      await store.movePosition(id, targetPortfolioId);
+    }
+    await refreshValuation();
   } catch (err: any) {
     triggerPopup({
       title: 'Error Moving Position',
@@ -218,20 +241,20 @@ const saveRenameTitle = async () => {
 
     <main class="main-content">
       <!-- Loading state if portfolios list is not populated yet -->
-      <div v-if="store.loading && !store.portfolios.length" class="empty-state" style="flex: 1;">
+      <div v-if="store.loading && !store.portfolios.length" class="empty-state flex-1">
         <Loader class="animate-spin w-10 h-10 text-accent" />
-        <p style="margin-top: 1rem; font-weight: 500;">Aggregating portfolios...</p>
+        <p class="mt-4 font-medium">Aggregating portfolios...</p>
       </div>
 
       <!-- Strategy not found fallback -->
-      <div v-else-if="!portfolio" class="empty-state" style="flex: 1; padding-top: 6rem;">
-        <Grid class="empty-icon" style="color: var(--color-danger);" />
+      <div v-else-if="!portfolio" class="empty-state flex-1 pt-24">
+        <Grid class="empty-icon text-color-danger" />
         <h3>Strategy Folder Not Found</h3>
-        <p style="font-size: 0.875rem; max-width: 340px; margin-top: 0.5rem; margin-bottom: 1.5rem;">
+        <p class="text-sm max-w-[340px] mt-2 mb-6">
           The requested portfolio folder has either been removed or you do not have sufficient authorization levels to view it.
         </p>
         <router-link to="/" class="btn btn-sm btn-primary">
-          <ArrowLeft style="width: 14px; height: 14px;" />
+          <ArrowLeft class="w-3.5 h-3.5" />
           <span>Back to Global View</span>
         </router-link>
       </div>
@@ -241,26 +264,26 @@ const saveRenameTitle = async () => {
         <!-- Page Header -->
         <header class="page-header">
           <div class="page-title-group">
-            <h1 style="display: flex; align-items: center; gap: 0.5rem;">
-              <router-link to="/" style="color: var(--text-tertiary); display: flex; align-items: center;" title="Back to Global Dashboard">
-                <ArrowLeft style="width: 20px; height: 20px;" />
+            <h1 class="flex items-center gap-2">
+              <router-link to="/" class="text-text-tertiary flex items-center" title="Back to Global Dashboard">
+                <ArrowLeft class="w-5 h-5" />
               </router-link>
-              
+
               <span v-if="portfolioId === 'unassigned'">{{ portfolio.name }}</span>
               <template v-else>
                 <input
                   v-if="isEditingTitle"
                   ref="titleInput"
                   v-model="editingTitleName"
-                  class="bg-bg-tertiary text-text-primary border-0 outline-none ring-0 px-2 py-0 rounded w-full font-bold tracking-tight leading-none"
+                  class="bg-bg-tertiary text-text-primary border-0 outline-none ring-0 px-2 py-0 rounded w-full font-bold tracking-tight leading-none text-[1.75rem]"
                   style="font: inherit; font-size: 1.75rem;"
                   @keydown.enter="saveRenameTitle"
                   @keydown.esc="isEditingTitle = false"
                   @blur="saveRenameTitle"
                 />
-                <span 
-                  v-else 
-                  @dblclick="startRenameTitle" 
+                <span
+                  v-else
+                  @dblclick="startRenameTitle"
                   class="cursor-pointer select-none"
                   title="Double click to rename"
                 >
@@ -270,54 +293,85 @@ const saveRenameTitle = async () => {
             </h1>
             <p>{{ portfolio.description || 'Custom asset strategy plan' }}</p>
           </div>
-          <div style="display: flex; gap: 0.75rem;">
+          <div class="flex gap-3">
             <button v-if="portfolioId !== 'unassigned'" @click="handleDeletePortfolio" class="btn btn-danger" title="Delete Portfolio">
-              <Trash2 style="width: 16px; height: 16px;" />
+              <Trash2 class="w-4 h-4" />
               <span>Delete Strategy</span>
             </button>
-            <DynamicComponent 
+            <DynamicComponent
               v-if="portfolioId !== 'unassigned'"
               componentKey="add-position-button"
-              @open-manual="showCreatePosModal = true" 
-              @open-import="triggerImportFile" 
+              @open-manual="showCreatePosModal = true"
+              @open-import="triggerImportFile"
             />
           </div>
         </header>
 
+        <!-- Bento layout: value hero (headline + chart) | allocation rail, then the asset table -->
+        <div class="dashboard-content mt-6 flex flex-col gap-5">
+          <div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+            <div class="xl:col-span-2 min-w-0">
+              <PortfolioValueChart
+                :series="valuation?.series ?? []"
+                :current="valuation?.current ?? null"
+                :currency="currency"
+                :loading="valuationStore.loading"
+                :range="valuationStore.range"
+                @update:range="handleRangeChange"
+              />
+            </div>
+            <div class="min-w-0">
+              <PortfolioAllocationDonut
+                :allocation="valuation?.allocation ?? []"
+                :currency="currency"
+              />
+            </div>
+          </div>
 
-        <div class="dashboard-content mt-6">
-          <!-- Metric Cards specific to this portfolio -->
-          <PortfolioKpisGrid 
-            :value="portfolioValue"
-            :positions-count="portfolioPositions.length"
-            :is-consolidated="false"
-            :yield-multiplier="0.091"
-          />
-
-          <!-- Visual Portfolio Allocation Bar -->
-          <PortfolioAllocationBar 
-            :allocations="portfolioAllocations"
-            :portfolioName="portfolio.name"
-          />
-
-          <!-- Local Filtered Positions Table -->
-          <StrategyHoldingsTable 
-            :positions="portfolioPositions"
+          <!-- Repartition table: one row per asset, click to inspect transactions -->
+          <StrategyHoldingsTable
+            :positions="positions"
             :portfolioId="portfolioId"
             :portfolios="store.portfolios"
+            :currency="currency"
+            @select-position="handleSelectPosition"
             @delete-position="handleDeletePosition"
-            @move-position="({ posId, targetPortfolioId }) => handleMovePosition(posId, targetPortfolioId)"
+            @move-position="({ position, targetPortfolioId }) => handleMovePosition(position, targetPortfolioId)"
             @open-add-modal="showCreatePosModal = true"
           />
         </div>
 
+        <!-- Transactions drawer for the clicked asset row -->
+        <PositionTransactionsDrawer
+          v-if="selectedPosition"
+          :position="selectedPosition"
+          :transactions="drawerTransactions"
+          :allocations-by-transaction="valuationStore.allocationsByTransaction"
+          :loading="valuationStore.transactionsLoading"
+          @close="selectedPosition = null"
+          @open-split="handleOpenSplit"
+        />
+
+        <!-- Split tool over the drawer -->
+        <TransactionSplitModal
+          v-if="splitTransaction && selectedPosition"
+          :transaction="splitTransaction"
+          :allocations="valuationStore.allocationsByTransaction[splitTransaction.id] ?? []"
+          :portfolios="store.portfolios"
+          :portfolio-id="portfolioId"
+          :position-id="selectedPosition.position_id"
+          :position-ids="selectedPosition.position_ids"
+          @close="splitTransaction = null"
+          @saved="handleSplitSaved"
+        />
+
         <!-- Add Position Modal -->
-        <DynamicComponent 
+        <DynamicComponent
           componentKey="create-position-modal"
-          v-if="showCreatePosModal" 
-          :portfolio="portfolio" 
-          @close="showCreatePosModal = false" 
-          @success="handleManualSuccess" 
+          v-if="showCreatePosModal"
+          :portfolio="portfolio"
+          @close="showCreatePosModal = false"
+          @success="handleManualSuccess"
         />
 
         <!-- Import Positions Modal. Stays open on success so the summary screen
@@ -327,7 +381,7 @@ const saveRenameTitle = async () => {
           :portfolio="portfolio"
           :initialFiles="initialImportFiles"
           @close="() => { showImportModal = false; initialImportFiles = null; }"
-          @success="store.fetchAllData()"
+          @success="handleImportSuccess"
         />
 
         <!-- Unified Premium Modal / Alert Popup -->
@@ -347,4 +401,3 @@ const saveRenameTitle = async () => {
     </main>
   </div>
 </template>
-

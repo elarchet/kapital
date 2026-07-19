@@ -61,11 +61,18 @@ def validate_split_totals(
     *,
     parent_quantity: Decimal | None,
     parent_amount: Decimal | None,
+    require_full: bool = False,
 ) -> None:
     """Ensure summed splits do not exceed the parent quantity or amount.
 
+    With ``require_full`` the splits must also cover the whole parent:
+    under-allocation would silently vaporize quantity/cost from every
+    downstream aggregate (valuation, position balances), so the split API
+    always demands a complete allocation.
+
     Raises:
-        ValueError: If the splits over-allocate the parent (beyond tolerance).
+        ValueError: If the splits over-allocate the parent (beyond tolerance),
+            or under-allocate it when ``require_full`` is set.
     """
     parent_qty = abs(parent_quantity) if parent_quantity is not None else Decimal(0)
     parent_amt = abs(parent_amount) if parent_amount is not None else Decimal(0)
@@ -79,3 +86,11 @@ def validate_split_totals(
     if parent_amt and total_amt - parent_amt > _TOLERANCE:
         msg = f"Split amount {total_amt} exceeds parent amount {parent_amt}."
         raise ValueError(msg)
+
+    if require_full:
+        if parent_qty and parent_qty - total_qty > _TOLERANCE:
+            msg = f"Split quantity {total_qty} does not cover parent quantity {parent_qty}."
+            raise ValueError(msg)
+        if not parent_qty and parent_amt and parent_amt - total_amt > _TOLERANCE:
+            msg = f"Split amount {total_amt} does not cover parent amount {parent_amt}."
+            raise ValueError(msg)

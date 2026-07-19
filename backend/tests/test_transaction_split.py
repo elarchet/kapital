@@ -171,6 +171,168 @@ def test_apply_split_rejects_over_allocation(session, portfolio):
         apply_split(session, raw.id, lines, pf.user_id)
 
 
+def _trade_with_default_allocation(session, pf, *, qty=40, amount=1000):
+    """A buy trade allocated 100% to a position in ``pf``."""
+    raw = RawTransaction(
+        operation_type="trade",
+        trade_side="buy",
+        dedup_key=f"TXN-{id(pf)}-{qty}-{amount}",
+        financial_account_id=_make_account(session),
+        quantity=Decimal(qty),
+        total_amount=Decimal(amount),
+        currency="EUR",
+        ticker="AAPL",
+        isin="US0378331005",
+        name="Apple Inc",
+        executed_at=_now(),
+    )
+    source_pos = Position(
+        portfolio_id=pf.id,
+        asset_type=AssetType.STOCK,
+        ticker="AAPL",
+        isin="US0378331005",
+        name="Apple Inc",
+        currency="EUR",
+        quantity=Decimal(qty),
+    )
+    session.add_all([raw, source_pos])
+    session.commit()
+    session.refresh(raw)
+    session.refresh(source_pos)
+    allocation = Allocation(
+        raw_transaction_id=raw.id,
+        position_id=source_pos.id,
+        method=AllocationMethod.PERCENTAGE,
+        value=Decimal(100),
+        quantity=Decimal(qty),
+        amount=Decimal(amount),
+        currency="EUR",
+        is_default=True,
+    )
+    session.add(allocation)
+    session.commit()
+    return raw, source_pos
+
+
+def test_split_by_portfolio_creates_position_in_target(session, portfolio):
+    pf, user = portfolio
+    other_pf = PortfolioFactory(user=user)
+    session.commit()
+    session.refresh(other_pf)
+    raw, source_pos = _trade_with_default_allocation(session, pf)
+
+    lines = [
+        AllocationLine(position_id=source_pos.id, method=AllocationMethod.PERCENTAGE, value=Decimal(60)),
+        AllocationLine(portfolio_id=other_pf.id, method=AllocationMethod.PERCENTAGE, value=Decimal(40)),
+    ]
+    allocations = apply_split(session, raw.id, lines, user.id)
+
+    assert len(allocations) == 2
+    created = session.exec(
+        select(Position).where(Position.portfolio_id == other_pf.id, Position.ticker == "AAPL"),
+    ).first()
+    assert created is not None
+    assert created.asset_type == AssetType.STOCK
+    session.refresh(source_pos)
+    assert source_pos.quantity == Decimal(24)
+    assert created.quantity == Decimal(16)
+
+
+def test_split_by_portfolio_reuses_existing_matching_position(session, portfolio):
+    pf, user = portfolio
+    other_pf = PortfolioFactory(user=user)
+    session.commit()
+    session.refresh(other_pf)
+    existing = Position(
+        portfolio_id=other_pf.id,
+        asset_type=AssetType.STOCK,
+        ticker="AAPL",
+        isin="US0378331005",
+        name="Apple Inc",
+        currency="EUR",
+        quantity=Decimal(0),
+    )
+    session.add(existing)
+    session.commit()
+    session.refresh(existing)
+    raw, source_pos = _trade_with_default_allocation(session, pf)
+
+    lines = [
+        AllocationLine(position_id=source_pos.id, method=AllocationMethod.QUANTITY, value=Decimal(30)),
+        AllocationLine(portfolio_id=other_pf.id, method=AllocationMethod.QUANTITY, value=Decimal(10)),
+    ]
+    apply_split(session, raw.id, lines, user.id)
+
+    positions_in_other = session.exec(select(Position).where(Position.portfolio_id == other_pf.id)).all()
+    assert len(positions_in_other) == 1
+    session.refresh(existing)
+    assert existing.quantity == Decimal(10)
+
+
+def test_apply_split_rejects_under_allocation(session, portfolio):
+    pf, user = portfolio
+    raw, source_pos = _trade_with_default_allocation(session, pf)
+
+    lines = [AllocationLine(position_id=source_pos.id, method=AllocationMethod.PERCENTAGE, value=Decimal(50))]
+    with pytest.raises(ValueError, match="does not cover parent quantity"):
+        apply_split(session, raw.id, lines, user.id)
+
+
+def test_recombine_restores_single_allocation_and_quantity(session, portfolio):
+    pf, user = portfolio
+    other_pf = PortfolioFactory(user=user)
+    session.commit()
+    session.refresh(other_pf)
+    raw, source_pos = _trade_with_default_allocation(session, pf)
+
+    from src.services.allocation_service import recombine  # noqa: PLC0415
+
+    apply_split(
+        session,
+        raw.id,
+        [
+            AllocationLine(position_id=source_pos.id, method=AllocationMethod.PERCENTAGE, value=Decimal(60)),
+            AllocationLine(portfolio_id=other_pf.id, method=AllocationMethod.PERCENTAGE, value=Decimal(40)),
+        ],
+        user.id,
+    )
+    target = session.exec(select(Position).where(Position.portfolio_id == other_pf.id)).first()
+    assert target.quantity == Decimal(16)
+
+    allocations = recombine(session, raw.id, source_pos.id, user.id)
+
+    assert len(allocations) == 1
+    assert allocations[0].position_id == source_pos.id
+    assert allocations[0].quantity == Decimal(40)
+    session.refresh(source_pos)
+    session.refresh(target)
+    assert source_pos.quantity == Decimal(40)  # original balance restored
+    assert target.quantity == Decimal(0)  # emptied but kept, not deleted
+    assert target.is_active
+
+
+def test_split_rejects_unowned_target_portfolio(session, portfolio):
+    pf, user = portfolio
+    stranger_pf = PortfolioFactory()  # different user
+    session.commit()
+    session.refresh(stranger_pf)
+    raw, source_pos = _trade_with_default_allocation(session, pf)
+
+    lines = [
+        AllocationLine(position_id=source_pos.id, method=AllocationMethod.PERCENTAGE, value=Decimal(50)),
+        AllocationLine(portfolio_id=stranger_pf.id, method=AllocationMethod.PERCENTAGE, value=Decimal(50)),
+    ]
+    with pytest.raises(ValueError, match="not found or not owned"):
+        apply_split(session, raw.id, lines, user.id)
+
+
+def test_allocation_line_requires_exactly_one_target():
+    with pytest.raises(ValueError, match="Exactly one of"):
+        AllocationLine(position_id=1, portfolio_id=2, method=AllocationMethod.PERCENTAGE, value=Decimal(50))
+    with pytest.raises(ValueError, match="Exactly one of"):
+        AllocationLine(method=AllocationMethod.PERCENTAGE, value=Decimal(50))
+
+
 def _make_account(session) -> int:
     from tests.factories import FinancialAccountFactory  # noqa: PLC0415
 

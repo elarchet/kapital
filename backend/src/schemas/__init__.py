@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.schemas.allocation import (
     AllocationLine,
     AllocationRead,
+    AllocationRecombineRequest,
     AllocationSplitRequest,
 )
 from src.schemas.fee import (
@@ -47,11 +48,22 @@ from src.schemas.user import (
     UserRead,
     UserUpdate,
 )
+from src.schemas.valuation import (
+    AssetTypeSlice,
+    CurrentTotals,
+    PortfolioValuation,
+    PositionValuation,
+    PriceStatus,
+    ValuationPoint,
+)
 
 __all__ = [
     "AllocationLine",
     "AllocationRead",
+    "AllocationRecombineRequest",
     "AllocationSplitRequest",
+    "AssetTypeSlice",
+    "CurrentTotals",
     "FeeCreate",
     "FeeRead",
     "FinancialAccountCreate",
@@ -67,9 +79,12 @@ __all__ = [
     "PortfolioCreate",
     "PortfolioRead",
     "PortfolioUpdate",
+    "PortfolioValuation",
     "PositionCreate",
     "PositionRead",
     "PositionUpdate",
+    "PositionValuation",
+    "PriceStatus",
     "RawTransactionBase",
     "RawTransactionCreate",
     "RawTransactionRead",
@@ -78,4 +93,5 @@ __all__ = [
     "UserPreferencesRead",
     "UserRead",
     "UserUpdate",
+    "ValuationPoint",
 ]

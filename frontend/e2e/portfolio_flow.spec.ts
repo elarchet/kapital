@@ -61,13 +61,32 @@ test('verify full portfolio and position lifecycle flow with custom modals', asy
   await expect(nvdaRow).toBeVisible();
   await expect(nvdaRow).toContainText('NVDA');
 
-  // 5. Delete Position (Verifying our new base-confirm-modal)
-  const deleteBtn = nvdaRow.locator('button[title="Remove Position"]');
+  // 4b. Valuation widgets render: KPI pill, value-over-time chart, donut
+  await expect(page.locator('[data-testid="kpi-market-value"]')).toBeVisible();
+  const chartCard = page.locator('section', { hasText: 'Portfolio value' }).first();
+  await expect(chartCard).toBeVisible();
+  for (const label of ['1M', '3M', '6M', '1Y', 'YTD', 'ALL']) {
+    await expect(chartCard.locator('button', { hasText: label }).first()).toBeVisible();
+  }
+  await expect(page.locator('section', { hasText: 'Allocation by Asset Type' }).first()).toBeVisible();
+
+  // 4c. Row click opens the transactions drawer (manual position: empty state)
+  await nvdaRow.click();
+  const drawer = page.locator('.z-\\[100\\]');
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toContainText('NVIDIA Corporation');
+  await expect(drawer).toContainText('No transactions');
+  // Close via backdrop click (left of the right-aligned panel)
+  await drawer.click({ position: { x: 8, y: 8 } });
+  await expect(drawer).not.toBeVisible();
+
+  // 5. Delete Asset (Verifying our new base-confirm-modal)
+  const deleteBtn = nvdaRow.locator('button[title="Remove Asset"]');
   await expect(deleteBtn).toBeVisible();
   await deleteBtn.click();
 
   // Confirm delete modal is visible and verify details
-  const confirmModal = page.locator('.fixed.inset-0', { hasText: 'Delete Position?' });
+  const confirmModal = page.locator('.fixed.inset-0', { hasText: 'Delete Asset?' });
   await expect(confirmModal).toBeVisible();
   await expect(confirmModal).toContainText('Are you sure you want to permanently delete this asset position');
 

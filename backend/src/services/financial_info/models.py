@@ -54,6 +54,16 @@ class HistoricalPrice(BaseModel):
     volume: int
 
 
+class DailyCloseSeries(BaseModel):
+    """Daily closing prices over a date range, with the quote currency."""
+
+    model_config = ConfigDict(strict=True)
+
+    symbol: str
+    currency: str | None = None
+    prices: list[HistoricalPrice]
+
+
 class FinancialStatementRow(BaseModel):
     """Single row of a financial statement for a specific date."""
 
