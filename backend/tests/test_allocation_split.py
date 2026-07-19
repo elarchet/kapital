@@ -71,6 +71,43 @@ def test_validate_split_totals_rejects_over_allocation_amount():
         validate_split_totals(resolved, parent_quantity=Decimal(100), parent_amount=Decimal(1000))
 
 
+def test_validate_split_totals_allows_under_allocation_by_default():
+    resolved = [(Decimal(10), Decimal(250))]
+    validate_split_totals(resolved, parent_quantity=Decimal(40), parent_amount=Decimal(1000))
+
+
+def test_require_full_rejects_under_allocation_quantity():
+    resolved = [(Decimal(10), Decimal(250))]
+    with pytest.raises(ValueError, match="does not cover parent quantity"):
+        validate_split_totals(
+            resolved,
+            parent_quantity=Decimal(40),
+            parent_amount=Decimal(1000),
+            require_full=True,
+        )
+
+
+def test_require_full_rejects_under_allocation_amount_when_no_quantity():
+    resolved = [(Decimal(0), Decimal(300))]
+    with pytest.raises(ValueError, match="does not cover parent amount"):
+        validate_split_totals(
+            resolved,
+            parent_quantity=None,
+            parent_amount=Decimal(500),
+            require_full=True,
+        )
+
+
+def test_require_full_accepts_exact_fill():
+    resolved = [(Decimal(10), Decimal(250)), (Decimal(30), Decimal(750))]
+    validate_split_totals(
+        resolved,
+        parent_quantity=Decimal(40),
+        parent_amount=Decimal(1000),
+        require_full=True,
+    )
+
+
 def test_unsupported_method_raises():
     with pytest.raises(ValueError, match="Unsupported allocation method"):
         resolve_allocation("bogus", Decimal(1), parent_quantity=Decimal(1), parent_amount=Decimal(1))  # type: ignore[arg-type]

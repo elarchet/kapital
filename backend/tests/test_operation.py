@@ -82,6 +82,23 @@ def test_read_and_delete_transactions(client: TestClient, session: Session):
     assert resp.status_code == status.HTTP_404_NOT_FOUND
 
 
+def test_read_transactions_filters_by_several_positions(client: TestClient, session: Session):
+    user = UserFactory(email="multi@example.com")
+    session.commit()
+    headers = get_auth_headers(client, "multi@example.com")
+
+    txn_a, position_a = _make_transaction(session, user=user)
+    txn_b, position_b = _make_transaction(session, user=user)
+    _make_transaction(session, user=user)  # third position, excluded from filter
+
+    resp = client.get(
+        f"/api/v1/transactions/?position_id={position_a.id}&position_id={position_b.id}",
+        headers=headers,
+    )
+    assert resp.status_code == status.HTTP_200_OK
+    assert sorted(t["id"] for t in resp.json()) == sorted([txn_a.id, txn_b.id])
+
+
 def test_split_transaction_across_positions(client: TestClient, session: Session):
     user = UserFactory(email="split@example.com")
     session.commit()

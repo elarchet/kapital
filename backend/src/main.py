@@ -21,6 +21,7 @@ from src.routers import (
     portfolio,
     position,
     transaction,
+    valuation,
 )
 
 
@@ -61,6 +62,7 @@ app.include_router(transaction.router, prefix="/api/v1")
 app.include_router(import_file_schema.router, prefix="/api/v1")
 app.include_router(imported_file.router, prefix="/api/v1")
 app.include_router(financial_info.router, prefix="/api/v1")
+app.include_router(valuation.router, prefix="/api/v1")
 
 # Mount Static Files for component uploads
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)

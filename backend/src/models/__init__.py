@@ -8,6 +8,7 @@ Import everything from here for convenience::
 from __future__ import annotations
 
 from src.models.allocation import Allocation, AllocationMethod
+from src.models.asset_price import AssetPrice
 from src.models.base import SABase, SoftDeleteMixin, TimestampMixin
 from src.models.fee import Fee, FeeType
 from src.models.financial_account import FinancialAccount
@@ -31,6 +32,7 @@ from src.models.user import User
 __all__ = [
     "Allocation",
     "AllocationMethod",
+    "AssetPrice",
     "AssetType",
     "ExpenseCategory",
     "Fee",

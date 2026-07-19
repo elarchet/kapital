@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 import yfinance as yf
 
 from .models import (
+    DailyCloseSeries,
     FinancialsReport,
     FinancialStatementRow,
     HistoricalPrice,
@@ -16,6 +17,8 @@ from .models import (
 )
 
 if TYPE_CHECKING:
+    from datetime import date
+
     import pandas as pd
 
 
@@ -176,6 +179,49 @@ class FinancialInfoService:
                 ),
             )
         return prices
+
+    async def get_daily_closes(
+        self,
+        ticker: str,
+        start: date,
+        end: date | None = None,
+    ) -> DailyCloseSeries:
+        """Fetch daily closing prices for an explicit date range.
+
+        ``end`` is exclusive per yfinance semantics; ``None`` means "through
+        today". The quote currency is fetched in the same thread hop so
+        callers persisting closes don't need a second network round-trip.
+        """
+
+        def _fetch() -> tuple[pd.DataFrame, str | None]:
+            t = yf.Ticker(ticker)
+            df = t.history(start=start, end=end, interval="1d")
+            currency = None
+            with contextlib.suppress(Exception):
+                currency = _get_fast_info_attr(t.fast_info, ["currency"])
+            return df, currency
+
+        df, currency = await asyncio.to_thread(_fetch)
+
+        prices: list[HistoricalPrice] = []
+        if df is not None and not df.empty:
+            for index, row in df.iterrows():
+                point_date = index.to_pydatetime() if hasattr(index, "to_pydatetime") else index
+                prices.append(
+                    HistoricalPrice(
+                        date=point_date,
+                        open=Decimal(str(row["Open"])),
+                        high=Decimal(str(row["High"])),
+                        low=Decimal(str(row["Low"])),
+                        close=Decimal(str(row["Close"])),
+                        volume=int(row["Volume"]),
+                    ),
+                )
+        return DailyCloseSeries(
+            symbol=ticker,
+            currency=str(currency) if currency is not None else None,
+            prices=prices,
+        )
 
     async def get_financials(self, ticker: str) -> FinancialsReport:
         """Fetch fundamental financial statements."""
